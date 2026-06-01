@@ -1,7 +1,7 @@
-import io
+import re
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app.services.r2 import (
@@ -16,6 +16,16 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 class SaveTranscriptRequest(BaseModel):
     transcript_json: dict
+
+
+def _media_type(voice_key: str) -> str:
+    if voice_key.endswith(".m4a"):
+        return "audio/mp4"
+    if voice_key.endswith(".mp3"):
+        return "audio/mpeg"
+    if voice_key.endswith(".wav"):
+        return "audio/wav"
+    return "application/octet-stream"
 
 
 @router.get("/{job_id}")
@@ -38,7 +48,7 @@ def get_job(job_id: str) -> dict:
 
 
 @router.get("/{job_id}/audio")
-def stream_audio(job_id: str) -> StreamingResponse:
+def stream_audio(job_id: str, request: Request) -> Response:
     voice_key = get_voice_object_key(job_id)
     if not voice_key:
         raise HTTPException(status_code=404, detail="Voice file not found")
@@ -48,8 +58,39 @@ def stream_audio(job_id: str) -> StreamingResponse:
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Failed to load audio: {exc}") from exc
 
-    media_type = "audio/mp4" if voice_key.endswith(".m4a") else "application/octet-stream"
-    return StreamingResponse(io.BytesIO(content), media_type=media_type)
+    media_type = _media_type(voice_key)
+    file_size = len(content)
+    range_header = request.headers.get("range")
+
+    if range_header:
+        match = re.match(r"bytes=(\d+)-(\d*)", range_header)
+        if match:
+            start = int(match.group(1))
+            end = int(match.group(2)) if match.group(2) else file_size - 1
+            end = min(end, file_size - 1)
+            if start <= end:
+                return Response(
+                    content=content[start : end + 1],
+                    status_code=206,
+                    media_type=media_type,
+                    headers={
+                        "Accept-Ranges": "bytes",
+                        "Content-Range": f"bytes {start}-{end}/{file_size}",
+                        "Content-Length": str(end - start + 1),
+                        "Cache-Control": "no-cache",
+                    },
+                )
+
+    return Response(
+        content=content,
+        status_code=200,
+        media_type=media_type,
+        headers={
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(file_size),
+            "Cache-Control": "no-cache",
+        },
+    )
 
 
 @router.put("/{job_id}/transcript")
