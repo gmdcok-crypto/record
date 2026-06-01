@@ -3,7 +3,15 @@ from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
-from app.services.r2 import create_voice_upload_url, upload_voice_bytes
+from app.config import settings
+from app.services.r2 import (
+    create_voice_upload_url,
+    get_object_bytes,
+    get_voice_object_key,
+    save_transcript_json,
+    upload_voice_bytes,
+)
+from app.services.soniox import transcribe_upload
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
 
@@ -42,6 +50,17 @@ def is_allowed_upload(content_type: str, filename: str) -> bool:
     return ext in ALLOWED_EXTENSIONS
 
 
+def run_transcription(job_id: str, content: bytes, filename: str) -> dict:
+    transcript_json = transcribe_upload(content, filename)
+    transcript_key = save_transcript_json(job_id, transcript_json)
+    return {
+        "status": "AI_DONE",
+        "transcript_text": transcript_json.get("text", ""),
+        "transcript_key": transcript_key,
+        "transcript_json": transcript_json,
+    }
+
+
 class PresignRequest(BaseModel):
     filename: str = Field(..., min_length=1, max_length=255)
     content_type: str = Field(default="application/octet-stream")
@@ -59,6 +78,11 @@ class VoiceUploadResponse(BaseModel):
     job_id: str
     object_key: str
     bucket: str
+    status: str
+    transcript_text: str | None = None
+    transcript_key: str | None = None
+    transcript_json: dict | None = None
+    error: str | None = None
 
 
 @router.post("/voice", response_model=VoiceUploadResponse)
@@ -78,13 +102,37 @@ async def upload_voice(file: UploadFile = File(...)) -> VoiceUploadResponse:
         raise HTTPException(status_code=400, detail="Empty file")
 
     try:
-        result = upload_voice_bytes(content, file.filename, content_type)
+        upload_result = upload_voice_bytes(content, file.filename, content_type)
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"R2 upload failed: {exc}") from exc
 
-    return VoiceUploadResponse(**result)
+    response = VoiceUploadResponse(
+        job_id=upload_result["job_id"],
+        object_key=upload_result["object_key"],
+        bucket=upload_result["bucket"],
+        status="UPLOADED",
+    )
+
+    if not settings.soniox_api_key:
+        response.error = "SONIOX_API_KEY is not configured"
+        return response
+
+    try:
+        transcription = run_transcription(upload_result["job_id"], content, file.filename)
+        response.status = transcription["status"]
+        response.transcript_text = transcription["transcript_text"]
+        response.transcript_key = transcription["transcript_key"]
+        response.transcript_json = transcription["transcript_json"]
+    except ValueError as exc:
+        response.status = "AI_FAILED"
+        response.error = str(exc)
+    except Exception as exc:
+        response.status = "AI_FAILED"
+        response.error = f"Transcription failed: {exc}"
+
+    return response
 
 
 @router.post("/presign", response_model=PresignResponse)

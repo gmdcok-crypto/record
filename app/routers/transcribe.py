@@ -1,5 +1,7 @@
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
+from app.config import settings
+from app.services.r2 import get_object_bytes, get_voice_object_key, save_transcript_json
 from app.services.soniox import transcribe_upload
 
 router = APIRouter(prefix="/api", tags=["transcribe"])
@@ -33,4 +35,40 @@ async def test_transcribe(file: UploadFile = File(...)) -> dict:
     return {
         "status": "AI_DONE",
         "transcript_json": result,
+    }
+
+
+@router.post("/transcribe/job/{job_id}")
+def transcribe_job(job_id: str) -> dict:
+    if not settings.soniox_api_key:
+        raise HTTPException(status_code=503, detail="SONIOX_API_KEY is not configured")
+
+    try:
+        voice_key = get_voice_object_key(job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"R2 lookup failed: {exc}") from exc
+
+    if not voice_key:
+        raise HTTPException(status_code=404, detail=f"Voice file not found for job: {job_id}")
+
+    filename = voice_key.rsplit("/", 1)[-1]
+
+    try:
+        content = get_object_bytes(voice_key)
+        transcript_json = transcribe_upload(content, filename)
+        transcript_key = save_transcript_json(job_id, transcript_json)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Transcription failed: {exc}") from exc
+
+    return {
+        "status": "AI_DONE",
+        "job_id": job_id,
+        "voice_key": voice_key,
+        "transcript_key": transcript_key,
+        "transcript_text": transcript_json.get("text", ""),
+        "transcript_json": transcript_json,
     }

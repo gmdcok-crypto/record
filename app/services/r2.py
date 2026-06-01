@@ -1,3 +1,4 @@
+import json
 import re
 import uuid
 
@@ -73,3 +74,46 @@ def upload_voice_bytes(data: bytes, filename: str, content_type: str) -> dict:
         "object_key": object_key,
         "bucket": settings.r2_bucket_name,
     }
+
+
+def get_object_bytes(object_key: str) -> bytes:
+    if not settings.r2_configured:
+        raise ValueError("R2 is not configured")
+
+    client = _client()
+    response = client.get_object(Bucket=settings.r2_bucket_name, Key=object_key)
+    return response["Body"].read()
+
+
+def get_voice_object_key(job_id: str) -> str | None:
+    if not settings.r2_configured:
+        raise ValueError("R2 is not configured")
+
+    prefix = f"{settings.r2_voice_prefix}{job_id}/"
+    client = _client()
+    response = client.list_objects_v2(Bucket=settings.r2_bucket_name, Prefix=prefix)
+
+    for item in response.get("Contents", []):
+        key = item["Key"]
+        if not key.endswith("/"):
+            return key
+
+    return None
+
+
+def save_transcript_json(job_id: str, transcript: dict) -> str:
+    if not settings.r2_configured:
+        raise ValueError("R2 is not configured")
+
+    object_key = f"{settings.r2_text_prefix}{job_id}/transcript.json"
+    body = json.dumps(transcript, ensure_ascii=False, indent=2).encode("utf-8")
+
+    client = _client()
+    client.put_object(
+        Bucket=settings.r2_bucket_name,
+        Key=object_key,
+        Body=body,
+        ContentType="application/json; charset=utf-8",
+    )
+
+    return object_key
