@@ -17,11 +17,20 @@ body {
 }
 
 .ProseMirror h3 {
-  @apply mb-1 mt-4 text-sm font-bold text-violet-700;
+  @apply mb-1 mt-4 cursor-pointer text-sm font-bold text-violet-700;
 }
 
 .ProseMirror h3:first-child {
   margin-top: 0;
+}
+
+.ProseMirror p {
+  @apply cursor-pointer rounded-md px-1 py-0.5;
+}
+
+.ProseMirror h3[data-segment-active],
+.ProseMirror p[data-segment-active] {
+  @apply bg-violet-100 ring-1 ring-violet-300;
 }
 
 .ProseMirror p.is-editor-empty:first-child::before {

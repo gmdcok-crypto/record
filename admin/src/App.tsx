@@ -14,6 +14,7 @@ import {
   type JobResponse,
   type Segment,
 } from "./api";
+import { findSegmentIndexAtPos, highlightActiveSegment } from "./editorUtils";
 
 const DEFAULT_JOB_ID = "26fa09fd-798f-4a3c-b2a3-453c49003de5";
 
@@ -24,6 +25,9 @@ function getJobIdFromUrl(): string {
 
 export default function App() {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const editorWrapperRef = useRef<HTMLDivElement>(null);
+  const segmentsRef = useRef<Segment[]>([]);
+  const seekToRef = useRef<(ms: number | null | undefined, index?: number) => void>(() => {});
   const [jobIdInput, setJobIdInput] = useState(getJobIdFromUrl());
   const [job, setJob] = useState<JobResponse | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
@@ -35,15 +39,35 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  const seekTo = useCallback((ms: number | null | undefined, index?: number) => {
+    if (ms == null) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = ms / 1000;
+    void audio.play();
+    if (index != null) setActiveIndex(index);
+  }, []);
+
+  seekToRef.current = seekTo;
+  segmentsRef.current = segments;
+
   const editor = useEditor({
     extensions: [
       StarterKit,
-      Placeholder.configure({ placeholder: "녹취 내용을 수정하세요..." }),
+      Placeholder.configure({ placeholder: "녹취 내용을 수정하세요. 클릭하면 해당 구간으로 이동합니다." }),
     ],
     content: "",
     editorProps: {
       attributes: {
         class: "prose prose-sm max-w-none px-4 py-3",
+      },
+      handleClick(view, pos) {
+        const index = findSegmentIndexAtPos(view.state.doc, pos);
+        const seg = segmentsRef.current[index];
+        if (seg?.start_ms != null) {
+          seekToRef.current(seg.start_ms, index);
+        }
+        return false;
       },
     },
   });
@@ -75,17 +99,14 @@ export default function App() {
 
   useEffect(() => {
     if (!editor) return;
+    const root = editorWrapperRef.current?.querySelector(".ProseMirror") as HTMLElement | null;
+    highlightActiveSegment(root, activeIndex);
+  }, [activeIndex, editor, segments, job]);
+
+  useEffect(() => {
+    if (!editor) return;
     void loadJob(getJobIdFromUrl());
   }, [editor]);
-
-  const seekTo = useCallback((ms: number | null | undefined, index?: number) => {
-    if (ms == null) return;
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.currentTime = ms / 1000;
-    void audio.play();
-    if (index != null) setActiveIndex(index);
-  }, []);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -250,9 +271,11 @@ export default function App() {
             <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-100 px-4 py-3">
                 <h2 className="text-sm font-semibold text-slate-700">Tiptap 편집</h2>
-                <p className="text-xs text-slate-500">화자 제목(h3) + 본문(p) 구조로 수정</p>
+                <p className="text-xs text-slate-500">텍스트 클릭 → 해당 구간으로 이동 · 화자 제목 + 본문 수정 가능</p>
               </div>
-              <EditorContent editor={editor} />
+              <div ref={editorWrapperRef}>
+                <EditorContent editor={editor} />
+              </div>
             </div>
           </section>
 
