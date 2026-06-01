@@ -21,3 +21,8 @@ Thumbs.db
 *.m4a
 *.mp4
 uploads/
+client/node_modules/
+client/dist/
+client/dev-dist/
+client/.env
+client/tsconfig.tsbuildinfo

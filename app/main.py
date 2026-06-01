@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import transcribe
+from app.routers import transcribe, upload
 
 app = FastAPI(
     title="Bluecom AI Record API",
@@ -19,6 +19,7 @@ app.add_middleware(
 )
 
 app.include_router(transcribe.router)
+app.include_router(upload.router)
 
 
 @app.get("/health")
@@ -26,5 +27,7 @@ def health() -> dict:
     return {
         "status": "ok",
         "soniox_configured": bool(settings.soniox_api_key),
+        "r2_configured": settings.r2_configured,
         "model": settings.soniox_model,
+        "bucket": settings.r2_bucket_name,
     }
