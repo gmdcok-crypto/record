@@ -1,10 +1,8 @@
 const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
 
-export type PresignResponse = {
+export type UploadResponse = {
   job_id: string;
   object_key: string;
-  upload_url: string;
-  expires_in: number;
   bucket: string;
 };
 
@@ -14,39 +12,35 @@ export type HealthResponse = {
   bucket: string;
 };
 
+function apiBase(): string {
+  return API_URL || window.location.origin;
+}
+
+function parseErrorDetail(body: unknown): string {
+  if (typeof body === "object" && body !== null && "detail" in body) {
+    const detail = (body as { detail: unknown }).detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) return detail.map(String).join(", ");
+  }
+  return "업로드 실패";
+}
+
 export async function checkHealth(): Promise<HealthResponse> {
-  const res = await fetch(`${API_URL}/health`);
+  const res = await fetch(`${apiBase()}/health`);
   if (!res.ok) throw new Error("서버 연결 실패");
   return res.json();
 }
 
-export async function requestPresign(
-  filename: string,
-  contentType: string,
-): Promise<PresignResponse> {
-  const res = await fetch(`${API_URL}/api/upload/presign`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ filename, content_type: contentType }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "업로드 URL 발급 실패");
-  }
-
-  return res.json();
-}
-
-export async function uploadToR2(
-  uploadUrl: string,
+export async function uploadVoice(
   file: File,
   onProgress?: (percent: number) => void,
-): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
+): Promise<UploadResponse> {
+  const form = new FormData();
+  form.append("file", file);
+
+  return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("PUT", uploadUrl);
-    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+    xhr.open("POST", `${apiBase()}/api/upload/voice`);
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && onProgress) {
@@ -55,15 +49,22 @@ export async function uploadToR2(
     };
 
     xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error(`R2 업로드 실패 (${xhr.status})`));
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText) as UploadResponse);
+        return;
+      }
+      try {
+        reject(new Error(parseErrorDetail(JSON.parse(xhr.responseText))));
+      } catch {
+        reject(new Error(`업로드 실패 (${xhr.status})`));
+      }
     };
 
-    xhr.onerror = () => reject(new Error("네트워크 오류"));
-    xhr.send(file);
+    xhr.onerror = () => reject(new Error("서버 연결 오류"));
+    xhr.send(form);
   });
 }
 
 export function getApiUrl(): string {
-  return API_URL || window.location.origin;
+  return apiBase();
 }

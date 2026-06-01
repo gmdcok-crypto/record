@@ -2,9 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   checkHealth,
   getApiUrl,
-  requestPresign,
-  uploadToR2,
-  type PresignResponse,
+  uploadVoice,
+  type UploadResponse,
 } from "./api";
 
 type Step = "idle" | "uploading" | "done" | "error";
@@ -22,7 +21,7 @@ export default function App() {
   const [file, setFile] = useState<File | null>(null);
   const [step, setStep] = useState<Step>("idle");
   const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState<PresignResponse | null>(null);
+  const [result, setResult] = useState<UploadResponse | null>(null);
   const [error, setError] = useState("");
   const [r2Ready, setR2Ready] = useState<boolean | null>(null);
 
@@ -48,9 +47,8 @@ export default function App() {
     setError("");
 
     try {
-      const presign = await requestPresign(file.name, file.type || "application/octet-stream");
-      await uploadToR2(presign.upload_url, file, setProgress);
-      setResult(presign);
+      const uploaded = await uploadVoice(file, setProgress);
+      setResult(uploaded);
       setStep("done");
     } catch (err) {
       setError(err instanceof Error ? err.message : "업로드 실패");
@@ -148,7 +146,7 @@ export default function App() {
       </section>
 
       <p className="mt-6 text-center text-xs text-slate-400">
-        테스트용 PWA · Pre-signed URL 직접 업로드
+        테스트용 PWA · 서버 경유 R2 업로드
       </p>
     </div>
   );

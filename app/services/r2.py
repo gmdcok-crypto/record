@@ -50,3 +50,26 @@ def create_voice_upload_url(filename: str, content_type: str) -> dict:
         "expires_in": settings.r2_presign_expires,
         "bucket": settings.r2_bucket_name,
     }
+
+
+def upload_voice_bytes(data: bytes, filename: str, content_type: str) -> dict:
+    if not settings.r2_configured:
+        raise ValueError("R2 is not configured")
+
+    job_id = str(uuid.uuid4())
+    safe_name = _safe_filename(filename)
+    object_key = f"{settings.r2_voice_prefix}{job_id}/{safe_name}"
+
+    client = _client()
+    client.put_object(
+        Bucket=settings.r2_bucket_name,
+        Key=object_key,
+        Body=data,
+        ContentType=content_type,
+    )
+
+    return {
+        "job_id": job_id,
+        "object_key": object_key,
+        "bucket": settings.r2_bucket_name,
+    }

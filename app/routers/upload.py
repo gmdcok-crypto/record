@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
-from app.services.r2 import create_voice_upload_url
+from app.services.r2 import create_voice_upload_url, upload_voice_bytes
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
 
@@ -53,6 +53,38 @@ class PresignResponse(BaseModel):
     upload_url: str
     expires_in: int
     bucket: str
+
+
+class VoiceUploadResponse(BaseModel):
+    job_id: str
+    object_key: str
+    bucket: str
+
+
+@router.post("/voice", response_model=VoiceUploadResponse)
+async def upload_voice(file: UploadFile = File(...)) -> VoiceUploadResponse:
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+
+    content_type = (file.content_type or "application/octet-stream").split(";")[0].strip().lower()
+    if not is_allowed_upload(content_type, file.filename):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported content type: {content_type}",
+        )
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    try:
+        result = upload_voice_bytes(content, file.filename, content_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"R2 upload failed: {exc}") from exc
+
+    return VoiceUploadResponse(**result)
 
 
 @router.post("/presign", response_model=PresignResponse)
