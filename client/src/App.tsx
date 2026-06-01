@@ -18,6 +18,10 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function speakerLabel(speaker: string): string {
+  return /^\d+$/.test(speaker) ? `화자 ${speaker}` : speaker;
+}
+
 export default function App() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -98,7 +102,7 @@ export default function App() {
         <p className="text-sm font-medium text-blue-700">Bluecom AI</p>
         <h1 className="mt-1 text-2xl font-bold tracking-tight">음성 업로드 · 녹취 테스트</h1>
         <p className="mt-2 text-sm text-slate-600">
-          업로드 → Soniox AI 변환 → R2 <code className="rounded bg-slate-200 px-1">text/</code> 저장
+          업로드 → Soniox AI 변환(화자분리) → R2 <code className="rounded bg-slate-200 px-1">text/</code> 저장
         </p>
       </header>
 
@@ -178,7 +182,27 @@ export default function App() {
               )}
             </div>
 
-            {result.transcript_text && (
+            {(result.transcript_json?.segments?.length
+              ? result.transcript_json.segments
+              : null) && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm">
+                <p className="mb-2 font-semibold text-slate-700">화자별 녹취</p>
+                <div className="space-y-3">
+                  {result.transcript_json!.segments!.map((segment, index) => (
+                    <div key={index} className="rounded-lg bg-white px-3 py-2 shadow-sm">
+                      <p className="mb-1 text-xs font-semibold text-violet-700">
+                        {speakerLabel(segment.speaker)}
+                      </p>
+                      <p className="whitespace-pre-wrap leading-relaxed text-slate-800">
+                        {segment.text}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {result.transcript_text && !result.transcript_json?.segments?.length && (
               <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm">
                 <p className="mb-2 font-semibold text-slate-700">녹취 내용</p>
                 <p className="whitespace-pre-wrap leading-relaxed text-slate-800">

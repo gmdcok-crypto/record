@@ -34,6 +34,7 @@ def health() -> dict:
         "soniox_configured": bool(settings.soniox_api_key),
         "r2_configured": settings.r2_configured,
         "model": settings.soniox_model,
+        "speaker_diarization": settings.soniox_enable_speaker_diarization,
         "bucket": settings.r2_bucket_name,
     }
 

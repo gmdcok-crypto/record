@@ -7,10 +7,19 @@ export type TranscriptToken = {
   speaker: string | null;
 };
 
+export type TranscriptSegment = {
+  speaker: string;
+  text: string;
+  start_ms: number | null;
+  end_ms: number | null;
+};
+
 export type TranscriptJson = {
   transcription_id: string;
   filename: string;
   text: string;
+  plain_text?: string;
+  segments?: TranscriptSegment[];
   tokens: TranscriptToken[];
 };
 

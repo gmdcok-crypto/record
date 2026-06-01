@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     soniox_api_key: str = ""
     soniox_model: str = "stt-async-v4"
+    soniox_enable_speaker_diarization: bool = True
     language_hints: str = "ko"
 
     r2_account_id: str = ""
