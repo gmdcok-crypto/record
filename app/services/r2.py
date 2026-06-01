@@ -1,11 +1,33 @@
 import json
 import re
 import uuid
+from pathlib import Path
 
 import boto3
 from botocore.config import Config
 
 from app.config import settings
+
+CONTENT_TYPE_TO_EXT = {
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/wave": ".wav",
+    "audio/vnd.wave": ".wav",
+    "audio/mpeg": ".mp3",
+    "audio/mp3": ".mp3",
+    "audio/mp4": ".m4a",
+    "audio/m4a": ".m4a",
+    "audio/x-m4a": ".m4a",
+    "audio/aac": ".aac",
+    "audio/x-aac": ".aac",
+    "audio/flac": ".flac",
+    "audio/x-flac": ".flac",
+    "audio/ogg": ".ogg",
+    "audio/webm": ".webm",
+    "video/mp4": ".mp4",
+    "video/webm": ".webm",
+    "video/quicktime": ".mov",
+}
 
 
 def _client():
@@ -22,7 +44,17 @@ def _client():
 def _safe_filename(filename: str) -> str:
     name = filename.strip().replace("\\", "/").split("/")[-1]
     name = re.sub(r"[^\w.\-]", "_", name)
-    return name or "audio.wav"
+    return name or "audio"
+
+
+def ensure_filename_with_extension(filename: str, content_type: str = "") -> str:
+    safe_name = _safe_filename(filename)
+    if Path(safe_name).suffix:
+        return safe_name
+
+    ct = content_type.split(";")[0].strip().lower()
+    ext = CONTENT_TYPE_TO_EXT.get(ct, ".m4a")
+    return f"{safe_name}{ext}"
 
 
 def create_voice_upload_url(filename: str, content_type: str) -> dict:
@@ -30,7 +62,7 @@ def create_voice_upload_url(filename: str, content_type: str) -> dict:
         raise ValueError("R2 is not configured")
 
     job_id = str(uuid.uuid4())
-    safe_name = _safe_filename(filename)
+    safe_name = ensure_filename_with_extension(filename, content_type)
     object_key = f"{settings.r2_voice_prefix}{job_id}/{safe_name}"
 
     client = _client()
@@ -58,7 +90,7 @@ def upload_voice_bytes(data: bytes, filename: str, content_type: str) -> dict:
         raise ValueError("R2 is not configured")
 
     job_id = str(uuid.uuid4())
-    safe_name = _safe_filename(filename)
+    safe_name = ensure_filename_with_extension(filename, content_type)
     object_key = f"{settings.r2_voice_prefix}{job_id}/{safe_name}"
 
     client = _client()
@@ -73,6 +105,8 @@ def upload_voice_bytes(data: bytes, filename: str, content_type: str) -> dict:
         "job_id": job_id,
         "object_key": object_key,
         "bucket": settings.r2_bucket_name,
+        "filename": safe_name,
+        "content_type": content_type,
     }
 
 
@@ -83,6 +117,18 @@ def get_object_bytes(object_key: str) -> bytes:
     client = _client()
     response = client.get_object(Bucket=settings.r2_bucket_name, Key=object_key)
     return response["Body"].read()
+
+
+def get_object_metadata(object_key: str) -> dict:
+    if not settings.r2_configured:
+        raise ValueError("R2 is not configured")
+
+    client = _client()
+    response = client.head_object(Bucket=settings.r2_bucket_name, Key=object_key)
+    return {
+        "content_type": response.get("ContentType", "application/octet-stream"),
+        "size": response.get("ContentLength", 0),
+    }
 
 
 def get_voice_object_key(job_id: str) -> str | None:

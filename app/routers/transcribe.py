@@ -1,7 +1,12 @@
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.config import settings
-from app.services.r2 import get_object_bytes, get_voice_object_key, save_transcript_json
+from app.services.r2 import (
+    get_object_bytes,
+    get_object_metadata,
+    get_voice_object_key,
+    save_transcript_json,
+)
 from app.services.soniox import transcribe_upload
 
 router = APIRouter(prefix="/api", tags=["transcribe"])
@@ -26,7 +31,11 @@ async def test_transcribe(file: UploadFile = File(...)) -> dict:
         raise HTTPException(status_code=400, detail="Empty file")
 
     try:
-        result = transcribe_upload(content, file.filename)
+        result = transcribe_upload(
+            content,
+            file.filename,
+            (file.content_type or "application/octet-stream").split(";")[0].strip().lower(),
+        )
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
@@ -56,8 +65,13 @@ def transcribe_job(job_id: str) -> dict:
     filename = voice_key.rsplit("/", 1)[-1]
 
     try:
+        metadata = get_object_metadata(voice_key)
         content = get_object_bytes(voice_key)
-        transcript_json = transcribe_upload(content, filename)
+        transcript_json = transcribe_upload(
+            content,
+            filename,
+            metadata.get("content_type", "audio/x-m4a"),
+        )
         transcript_key = save_transcript_json(job_id, transcript_json)
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

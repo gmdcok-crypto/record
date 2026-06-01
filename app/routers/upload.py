@@ -50,8 +50,8 @@ def is_allowed_upload(content_type: str, filename: str) -> bool:
     return ext in ALLOWED_EXTENSIONS
 
 
-def run_transcription(job_id: str, content: bytes, filename: str) -> dict:
-    transcript_json = transcribe_upload(content, filename)
+def run_transcription(job_id: str, content: bytes, filename: str, content_type: str) -> dict:
+    transcript_json = transcribe_upload(content, filename, content_type)
     transcript_key = save_transcript_json(job_id, transcript_json)
     return {
         "status": "AI_DONE",
@@ -120,7 +120,12 @@ async def upload_voice(file: UploadFile = File(...)) -> VoiceUploadResponse:
         return response
 
     try:
-        transcription = run_transcription(upload_result["job_id"], content, file.filename)
+        transcription = run_transcription(
+            upload_result["job_id"],
+            content,
+            upload_result.get("filename", file.filename),
+            content_type,
+        )
         response.status = transcription["status"]
         response.transcript_text = transcription["transcript_text"]
         response.transcript_key = transcription["transcript_key"]
