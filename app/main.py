@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
@@ -39,6 +40,11 @@ def health() -> dict:
         "speaker_diarization": settings.soniox_enable_speaker_diarization,
         "bucket": settings.r2_bucket_name,
     }
+
+
+@app.get("/admin")
+def admin_root_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/admin/")
 
 
 if ADMIN_DIR.is_dir():

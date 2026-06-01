@@ -238,6 +238,10 @@ export default function App() {
 
       <p className="mt-6 text-center text-xs text-slate-400">
         voice/ 업로드 → Soniox 변환 → text/ 저장
+        <br />
+        <a href="/admin/" className="text-blue-600 underline">
+          관리자 편집 화면 (/admin/)
+        </a>
       </p>
     </div>
   );
