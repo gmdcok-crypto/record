@@ -1,8 +1,13 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.routers import transcribe, upload
+
+STATIC_DIR = Path(__file__).resolve().parent.parent / "client" / "dist"
 
 app = FastAPI(
     title="Bluecom AI Record API",
@@ -31,3 +36,7 @@ def health() -> dict:
         "model": settings.soniox_model,
         "bucket": settings.r2_bucket_name,
     }
+
+
+if STATIC_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="frontend")

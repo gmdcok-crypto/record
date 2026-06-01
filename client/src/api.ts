@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "";
+const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
 
 export type PresignResponse = {
   job_id: string;
@@ -65,5 +65,5 @@ export async function uploadToR2(
 }
 
 export function getApiUrl(): string {
-  return API_URL || "(VITE_API_URL 미설정)";
+  return API_URL || window.location.origin;
 }
