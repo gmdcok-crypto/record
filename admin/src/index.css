@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-slate-100 text-slate-900 antialiased;
+  margin: 0;
+}
+
+.ProseMirror {
+  outline: none;
+  min-height: 320px;
+}
+
+.ProseMirror p {
+  margin: 0.5rem 0;
+}
+
+.ProseMirror h3 {
+  @apply mb-1 mt-4 text-sm font-bold text-violet-700;
+}
+
+.ProseMirror h3:first-child {
+  margin-top: 0;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  color: #94a3b8;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}

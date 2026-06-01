@@ -26,3 +26,7 @@ client/dist/
 client/dev-dist/
 client/.env
 client/tsconfig.tsbuildinfo
+admin/node_modules/
+admin/dist/
+admin/.env
+admin/tsconfig.tsbuildinfo

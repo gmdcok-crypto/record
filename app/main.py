@@ -5,9 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.routers import transcribe, upload
+from app.routers import jobs, transcribe, upload
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "client" / "dist"
+ADMIN_DIR = Path(__file__).resolve().parent.parent / "admin" / "dist"
 
 app = FastAPI(
     title="Bluecom AI Record API",
@@ -25,6 +26,7 @@ app.add_middleware(
 
 app.include_router(transcribe.router)
 app.include_router(upload.router)
+app.include_router(jobs.router)
 
 
 @app.get("/health")
@@ -38,6 +40,9 @@ def health() -> dict:
         "bucket": settings.r2_bucket_name,
     }
 
+
+if ADMIN_DIR.is_dir():
+    app.mount("/admin", StaticFiles(directory=ADMIN_DIR, html=True), name="admin")
 
 if STATIC_DIR.is_dir():
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="frontend")

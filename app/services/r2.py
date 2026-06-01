@@ -163,3 +163,23 @@ def save_transcript_json(job_id: str, transcript: dict) -> str:
     )
 
     return object_key
+
+
+def get_transcript_json(job_id: str) -> dict | None:
+    object_key = f"{settings.r2_text_prefix}{job_id}/transcript.json"
+    try:
+        return json.loads(get_object_bytes(object_key).decode("utf-8"))
+    except Exception:
+        return None
+
+
+def create_download_url(object_key: str, expires_in: int | None = None) -> str:
+    if not settings.r2_configured:
+        raise ValueError("R2 is not configured")
+
+    client = _client()
+    return client.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": settings.r2_bucket_name, "Key": object_key},
+        ExpiresIn=expires_in or settings.r2_presign_expires,
+    )
