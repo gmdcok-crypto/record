@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Placeholder from "@tiptap/extension-placeholder";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { SegmentHeading } from "./extensions/SegmentHeading";
 import {
   fetchJob,
   formatMs,
@@ -14,7 +15,7 @@ import {
   type JobResponse,
   type Segment,
 } from "./api";
-import { findSegmentIndexAtPos, highlightActiveSegment } from "./editorUtils";
+import { highlightActiveSegment, resolveSegmentFromClick, seekAudio } from "./editorUtils";
 
 const DEFAULT_JOB_ID = "26fa09fd-798f-4a3c-b2a3-453c49003de5";
 
@@ -39,13 +40,13 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const seekTo = useCallback((ms: number | null | undefined, index?: number) => {
+  const seekTo = useCallback(async (ms: number | null | undefined, index?: number) => {
     if (ms == null) return;
     const audio = audioRef.current;
     if (!audio) return;
-    audio.currentTime = ms / 1000;
-    void audio.play();
+    await seekAudio(audio, ms);
     if (index != null) setActiveIndex(index);
+    await audio.play();
   }, []);
 
   seekToRef.current = seekTo;
@@ -53,7 +54,8 @@ export default function App() {
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ heading: false }),
+      SegmentHeading,
       Placeholder.configure({ placeholder: "녹취 내용을 수정하세요. 클릭하면 해당 구간으로 이동합니다." }),
     ],
     content: "",
@@ -61,11 +63,11 @@ export default function App() {
       attributes: {
         class: "prose prose-sm max-w-none px-4 py-3",
       },
-      handleClick(view, pos) {
-        const index = findSegmentIndexAtPos(view.state.doc, pos);
-        const seg = segmentsRef.current[index];
-        if (seg?.start_ms != null) {
-          seekToRef.current(seg.start_ms, index);
+      handleClick(_view, _pos, event) {
+        const root = editorWrapperRef.current?.querySelector(".ProseMirror") as HTMLElement | null;
+        const resolved = resolveSegmentFromClick(root, event.target, segmentsRef.current);
+        if (resolved?.startMs != null) {
+          void seekToRef.current(resolved.startMs, resolved.index);
         }
         return false;
       },

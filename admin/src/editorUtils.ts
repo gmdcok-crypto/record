@@ -1,25 +1,56 @@
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import type { Segment } from "./api";
 
-export function findSegmentIndexAtPos(doc: ProseMirrorNode, pos: number): number {
-  let headingIndex = -1;
-  let result = 0;
+export function parseMsFromHeadingText(text: string | null | undefined): number | null {
+  if (!text) return null;
+  const match = text.match(/(\d{2}):(\d{2})/);
+  if (!match) return null;
+  return (Number(match[1]) * 60 + Number(match[2])) * 1000;
+}
 
-  doc.nodesBetween(0, doc.content.size, (node, nodePos) => {
-    if (node.type.name === "heading") {
-      headingIndex += 1;
-    }
+export function resolveSegmentFromClick(
+  root: HTMLElement | null,
+  target: EventTarget | null,
+  segments: Segment[],
+): { index: number; startMs: number | null } | null {
+  if (!root || !(target instanceof HTMLElement)) return null;
 
-    const inside = pos >= nodePos && pos <= nodePos + node.nodeSize;
-    if (!inside) return;
+  const clickedHeading = target.closest("h3");
+  const clickedParagraph = target.closest("p");
 
-    if (node.type.name === "heading" && headingIndex >= 0) {
-      result = headingIndex;
-    } else if (node.type.name === "paragraph") {
-      result = Math.max(headingIndex, 0);
-    }
+  let heading: HTMLHeadingElement | null = null;
+  if (clickedHeading) {
+    heading = clickedHeading;
+  } else if (clickedParagraph?.previousElementSibling?.tagName === "H3") {
+    heading = clickedParagraph.previousElementSibling as HTMLHeadingElement;
+  }
+
+  if (!heading) return null;
+
+  const headings = Array.from(root.querySelectorAll("h3"));
+  const index = headings.indexOf(heading);
+  if (index < 0) return null;
+
+  const attrMs = heading.getAttribute("data-start-ms");
+  const startMs =
+    attrMs != null && attrMs !== ""
+      ? Number(attrMs)
+      : segments[index]?.start_ms ?? parseMsFromHeadingText(heading.textContent);
+
+  return { index, startMs: Number.isFinite(startMs) ? startMs : null };
+}
+
+export async function seekAudio(audio: HTMLAudioElement, ms: number): Promise<void> {
+  const seconds = Math.max(0, ms / 1000);
+  if (Math.abs(audio.currentTime - seconds) < 0.05) return;
+
+  await new Promise<void>((resolve) => {
+    const onSeeked = () => {
+      audio.removeEventListener("seeked", onSeeked);
+      resolve();
+    };
+    audio.addEventListener("seeked", onSeeked);
+    audio.currentTime = seconds;
   });
-
-  return result;
 }
 
 export function highlightActiveSegment(root: HTMLElement | null, activeIndex: number): void {
@@ -29,8 +60,7 @@ export function highlightActiveSegment(root: HTMLElement | null, activeIndex: nu
     el.removeAttribute("data-segment-active");
   });
 
-  const headings = root.querySelectorAll("h3");
-  const heading = headings.item(activeIndex);
+  const heading = root.querySelectorAll("h3").item(activeIndex);
   if (!heading) return;
 
   heading.setAttribute("data-segment-active", "true");

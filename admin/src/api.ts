@@ -68,8 +68,8 @@ export function speakerLabel(speaker: string): string {
 export function segmentsToHtml(segments: Segment[]): string {
   return segments
     .map(
-      (seg) =>
-        `<h3>${speakerLabel(seg.speaker)} · ${formatMs(seg.start_ms)}</h3><p>${escapeHtml(seg.text)}</p>`,
+      (seg, index) =>
+        `<h3 data-segment-index="${index}" data-start-ms="${seg.start_ms ?? ""}">${speakerLabel(seg.speaker)} · ${formatMs(seg.start_ms)}</h3><p>${escapeHtml(seg.text)}</p>`,
     )
     .join("");
 }
@@ -91,10 +91,12 @@ export function htmlToSegments(html: string, original: Segment[]): Segment[] {
     const text = paragraph?.textContent?.trim() || "";
     const fallback = original[index];
     const speakerMatch = heading.textContent?.match(/화자\s*(\S+)/);
+    const attrStartMs = heading.getAttribute("data-start-ms");
+    const parsedStartMs = attrStartMs ? Number(attrStartMs) : NaN;
     segments.push({
       speaker: speakerMatch?.[1] || fallback?.speaker || String(index + 1),
       text,
-      start_ms: fallback?.start_ms ?? null,
+      start_ms: Number.isFinite(parsedStartMs) ? parsedStartMs : fallback?.start_ms ?? null,
       end_ms: fallback?.end_ms ?? null,
     });
   });
