@@ -119,6 +119,19 @@ def get_object_bytes(object_key: str) -> bytes:
     return response["Body"].read()
 
 
+def put_object_bytes(object_key: str, data: bytes, content_type: str) -> None:
+    if not settings.r2_configured:
+        raise ValueError("R2 is not configured")
+
+    client = _client()
+    client.put_object(
+        Bucket=settings.r2_bucket_name,
+        Key=object_key,
+        Body=data,
+        ContentType=content_type,
+    )
+
+
 def get_object_metadata(object_key: str) -> dict:
     if not settings.r2_configured:
         raise ValueError("R2 is not configured")

@@ -4,8 +4,10 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from app.config import settings
+from app.services.audio import remux_faststart, should_faststart
 from app.services.r2 import (
     create_voice_upload_url,
+    ensure_filename_with_extension,
     get_object_bytes,
     get_voice_object_key,
     save_transcript_json,
@@ -100,6 +102,12 @@ async def upload_voice(file: UploadFile = File(...)) -> VoiceUploadResponse:
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
+
+    safe_name = ensure_filename_with_extension(file.filename, content_type)
+    if should_faststart(content, safe_name):
+        remuxed = remux_faststart(content)
+        if remuxed:
+            content = remuxed
 
     try:
         upload_result = upload_voice_bytes(content, file.filename, content_type)

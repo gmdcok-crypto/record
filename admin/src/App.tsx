@@ -39,14 +39,20 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [audioReady, setAudioReady] = useState(false);
 
   const seekTo = useCallback(async (ms: number | null | undefined, index?: number) => {
     if (ms == null) return;
     const audio = audioRef.current;
     if (!audio) return;
     await seekAudio(audio, ms);
+    setCurrentMs(ms);
     if (index != null) setActiveIndex(index);
-    await audio.play();
+    try {
+      await audio.play();
+    } catch {
+      /* autoplay policy */
+    }
   }, []);
 
   seekToRef.current = seekTo;
@@ -127,15 +133,24 @@ export default function App() {
       if (index >= 0) setActiveIndex(index);
     };
 
-    const onLoaded = () => setDurationMs(audio.duration * 1000);
+    const onLoaded = () => {
+      setDurationMs(audio.duration * 1000);
+      setAudioReady(Number.isFinite(audio.duration) && audio.duration > 0);
+    };
 
     audio.addEventListener("timeupdate", onTimeUpdate);
     audio.addEventListener("loadedmetadata", onLoaded);
+    audio.addEventListener("canplay", onLoaded);
     return () => {
       audio.removeEventListener("timeupdate", onTimeUpdate);
       audio.removeEventListener("loadedmetadata", onLoaded);
+      audio.removeEventListener("canplay", onLoaded);
     };
   }, [segments, job]);
+
+  useEffect(() => {
+    setAudioReady(false);
+  }, [job?.audio_url]);
 
   const progress = durationMs > 0 ? (currentMs / durationMs) * 100 : 0;
 
@@ -249,7 +264,18 @@ export default function App() {
                 </span>
               </div>
 
-              <audio ref={audioRef} controls className="mb-3 w-full" src={resolveUrl(job.audio_url)} />
+              <audio
+                ref={audioRef}
+                controls
+                preload="auto"
+                crossOrigin="anonymous"
+                className="mb-3 w-full"
+                src={resolveUrl(job.audio_url)}
+              />
+
+              {!audioReady && (
+                <p className="mb-2 text-xs text-amber-700">오디오 메타데이터 로딩 중… (첫 재생 시 잠시 걸릴 수 있습니다)</p>
+              )}
 
               <div className="relative mb-2 h-3 overflow-hidden rounded-full bg-slate-200">
                 <div

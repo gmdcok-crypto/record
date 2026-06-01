@@ -4,10 +4,12 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from app.services.audio import remux_faststart, should_faststart
 from app.services.r2 import (
     get_object_bytes,
     get_transcript_json,
     get_voice_object_key,
+    put_object_bytes,
     save_transcript_json,
 )
 
@@ -57,6 +59,15 @@ def stream_audio(job_id: str, request: Request) -> Response:
         content = get_object_bytes(voice_key)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Failed to load audio: {exc}") from exc
+
+    if should_faststart(content, voice_key):
+        remuxed = remux_faststart(content)
+        if remuxed:
+            content = remuxed
+            try:
+                put_object_bytes(voice_key, content, _media_type(voice_key))
+            except Exception:
+                pass
 
     media_type = _media_type(voice_key)
     file_size = len(content)
