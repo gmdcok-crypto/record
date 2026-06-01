@@ -7,6 +7,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      workbox: {
+        navigateFallbackDenylist: [/^\/admin/, /^\/api/, /^\/health/],
+      },
       includeAssets: ["favicon.svg"],
       manifest: {
         name: "Bluecom Record",

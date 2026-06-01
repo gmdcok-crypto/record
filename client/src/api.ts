@@ -119,3 +119,10 @@ export async function transcribeJob(jobId: string): Promise<UploadResponse> {
 export function getApiUrl(): string {
   return apiBase();
 }
+
+export function getAdminUrl(jobId = "26fa09fd-798f-4a3c-b2a3-453c49003de5"): string {
+  if (import.meta.env.DEV && !API_URL) {
+    return `http://localhost:5174/admin/?job_id=${jobId}`;
+  }
+  return `${apiBase()}/admin/?job_id=${jobId}`;
+}
