@@ -13,8 +13,8 @@ import {
   type UploadResponse,
 } from "./api";
 
-type Step = "idle" | "uploading" | "transcribing" | "ready" | "error";
-type ArchiveStatus = "초안 작성 중" | "속기사 검수 대기" | "속기사 검수 완료";
+type Step = "idle" | "uploading" | "ready" | "error";
+type ArchiveStatus = "속기사 1차 초벌 대기" | "의뢰인 수정 중" | "속기사 재검수 대기";
 
 type ArchiveItem = {
   jobId: string;
@@ -133,7 +133,7 @@ export default function App() {
     setArchive(readArchive());
   }, []);
 
-  const busy = step === "uploading" || step === "transcribing" || loadingJob || saving || downloadingPdf;
+  const busy = step === "uploading" || loadingJob || saving || downloadingPdf;
   const currentTranscript = useMemo(() => draftToTranscript(job?.transcript_json ?? null, draft), [job, draft]);
   const currentTitle = useMemo(() => {
     return jobTitle.trim() || job?.transcript_json.filename || selectedFile?.name || "새 녹취 작업";
@@ -174,8 +174,8 @@ export default function App() {
       setDraft(buildDraftFromTranscript(data.transcript_json));
       setJobTitle(data.transcript_json.filename || "");
       setStep("ready");
-      pushArchive("속기사 검수 완료", data.transcript_json.filename);
-      setMessage("보관함에서 작업을 불러왔습니다.");
+      pushArchive("의뢰인 수정 중", data.transcript_json.filename);
+      setMessage("속기사가 작성한 1차 초벌 문서를 불러왔습니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "작업을 불러오지 못했습니다.");
     } finally {
@@ -194,26 +194,22 @@ export default function App() {
       const uploaded: UploadResponse = await uploadVoice(
         selectedFile,
         setProgress,
-        () => setStep("transcribing"),
       );
-
-      const loadedJob = await fetchJob(uploaded.job_id);
-      setJob(loadedJob);
-      setJobIdInput(loadedJob.job_id);
-      setDraft(buildDraftFromTranscript(loadedJob.transcript_json));
-      setJobTitle(loadedJob.transcript_json.filename || selectedFile.name);
-      setStep("ready");
+      setJob(null);
+      setDraft("");
+      setJobIdInput(uploaded.job_id);
+      setStep("idle");
 
       const nextArchive = upsertArchiveItem(readArchive(), {
-        jobId: loadedJob.job_id,
-        title: loadedJob.transcript_json.filename || selectedFile.name,
+        jobId: uploaded.job_id,
+        title: currentTitle,
         filename: selectedFile.name,
-        status: "초안 작성 중",
+        status: "속기사 1차 초벌 대기",
         updatedAt: new Date().toISOString(),
       });
       saveArchive(nextArchive);
       setArchive(nextArchive);
-      setMessage("업로드가 완료되었습니다. 아래에서 직접 수정 후 검수 요청하세요.");
+      setMessage("업로드가 완료되었습니다. 속기사 1차 초벌 후 보관함 또는 작업번호로 문서를 열어 수정할 수 있습니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "업로드 실패");
       setStep("error");
@@ -234,7 +230,7 @@ export default function App() {
         ...job,
         transcript_json: currentTranscript,
       });
-      pushArchive("초안 작성 중");
+      pushArchive("의뢰인 수정 중");
       setMessage("의뢰인 수정본이 저장되었습니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "저장 실패");
@@ -257,7 +253,7 @@ export default function App() {
         ...job,
         transcript_json: currentTranscript,
       });
-      pushArchive("속기사 검수 대기");
+      pushArchive("속기사 재검수 대기");
       setMessage("속기사 검수 요청이 저장되었습니다. 보관함에서 상태를 확인하세요.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "검수 요청 실패");
@@ -284,14 +280,11 @@ export default function App() {
   return (
     <div className="min-h-dvh bg-slate-950 text-slate-100">
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
-        <div className="grid gap-6 xl:grid-cols-[1.05fr_1.35fr_1fr]">
+        <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr] lg:gap-6">
           <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
             <div className="mb-5">
               <p className="text-sm font-semibold text-blue-300">1. 파일 업로드</p>
               <h2 className="mt-1 text-xl font-bold text-white">새 녹취 작업 만들기</h2>
-              <p className="mt-1 text-sm text-slate-400">
-                업로드 후 AI 초안이 생성되면 아래 편집 영역에서 의뢰인이 직접 문장을 고칠 수 있습니다.
-              </p>
             </div>
 
             <div className="space-y-4">
@@ -338,18 +331,16 @@ export default function App() {
                 </span>
               </button>
 
-              {(step === "uploading" || step === "transcribing") && (
+              {step === "uploading" && (
                 <div>
                   <div className="mb-1 flex justify-between text-sm text-slate-400">
-                    <span>{step === "uploading" ? "업로드 중..." : "AI 초안 생성 중..."}</span>
-                    {step === "uploading" && <span>{progress}%</span>}
+                    <span>업로드 중...</span>
+                    <span>{progress}%</span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-slate-800">
                     <div
-                      className={`h-full rounded-full transition-all ${
-                        step === "transcribing" ? "w-full animate-pulse bg-violet-600" : "bg-blue-600"
-                      }`}
-                      style={step === "uploading" ? { width: `${progress}%` } : undefined}
+                      className="h-full rounded-full bg-blue-600 transition-all"
+                      style={{ width: `${progress}%` }}
                     />
                   </div>
                 </div>
@@ -361,7 +352,7 @@ export default function App() {
                 disabled={!selectedFile || busy || r2Ready === false}
                 className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-slate-700"
               >
-                업로드 후 초안 생성
+                업로드
               </button>
 
               <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 text-sm text-slate-400">
@@ -384,7 +375,7 @@ export default function App() {
                   {currentTitle || "녹취 초안 편집"}
                 </h2>
                 <p className="mt-1 text-sm text-slate-400">
-                  의뢰인이 직접 문장을 수정한 뒤 저장하거나 속기사 검수를 요청할 수 있습니다.
+                  의뢰인은 속기사가 작성한 1차 초벌 문서만 열어 수정하고 재검수를 요청할 수 있습니다.
                 </p>
               </div>
               {job && (
@@ -414,7 +405,7 @@ export default function App() {
                   <textarea
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
-                    placeholder="AI 초안이 여기에 표시됩니다. 화자명: 내용 형식으로 수정해도 됩니다."
+                    placeholder="속기사가 작성한 1차 초벌 문서가 여기에 표시됩니다. 화자명: 내용 형식으로 수정해도 됩니다."
                     className="min-h-[420px] w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm leading-7 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-blue-500"
                   />
                   <p className="mt-2 text-xs text-slate-400">
@@ -437,7 +428,7 @@ export default function App() {
                     disabled={busy}
                     className="rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
                   >
-                    속기사 검수 요청
+                    속기사 재검수 요청
                   </button>
                   <button
                     type="button"
@@ -451,12 +442,12 @@ export default function App() {
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-6 py-14 text-center text-sm text-slate-400">
-                새 파일을 업로드하거나 보관함에서 기존 작업을 열면 편집을 시작할 수 있습니다.
+                업로드만 먼저 진행하고, 속기사 1차 초벌이 준비된 작업을 보관함 또는 작업번호로 열어 수정하세요.
               </div>
             )}
           </section>
 
-          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
+          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20 lg:col-span-2">
             <div className="mb-5">
               <p className="text-sm font-semibold text-emerald-300">3. 보관함</p>
               <h2 className="mt-1 text-xl font-bold text-white">업로드 파일 확인</h2>
@@ -503,11 +494,11 @@ export default function App() {
                       </div>
                       <span
                         className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                          item.status === "속기사 검수 완료"
-                            ? "bg-emerald-500/15 text-emerald-300"
-                            : item.status === "속기사 검수 대기"
+                          item.status === "속기사 재검수 대기"
                               ? "bg-violet-500/15 text-violet-300"
-                              : "bg-amber-500/15 text-amber-300"
+                              : item.status === "의뢰인 수정 중"
+                                ? "bg-cyan-500/15 text-cyan-300"
+                                : "bg-amber-500/15 text-amber-300"
                         }`}
                       >
                         {item.status}
