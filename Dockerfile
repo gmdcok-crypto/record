@@ -33,6 +33,8 @@ COPY --from=admin-build /app/admin/dist ./admin/dist
 
 RUN mkdir -p /app/app/assets/fonts \
     && curl -fsSL -o /app/app/assets/fonts/NotoSansKR-Regular.ttf \
-        "https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-kr@5.2.9/korean-400-normal.ttf"
+        "https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-kr@5.2.9/korean-400-normal.ttf" \
+    && curl -fsSL -o /app/app/assets/fonts/NotoSansKR-Bold.ttf \
+        "https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-kr@5.2.9/korean-700-normal.ttf"
 
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
