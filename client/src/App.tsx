@@ -286,54 +286,36 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-dvh bg-slate-100">
+    <div className="min-h-dvh bg-slate-950 text-slate-100">
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
-        <header className="rounded-3xl bg-slate-950 px-6 py-6 text-white shadow-xl">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-blue-300">의뢰인용 PWA</p>
-              <h1 className="mt-1 text-3xl font-bold tracking-tight">업로드 · 직접 수정 · 검수 요청</h1>
-              <p className="mt-2 max-w-3xl text-sm text-slate-300">
-                의뢰인이 음성 파일을 업로드하고 직접 초안을 수정한 뒤 속기사 검수를 요청할 수 있는 작업 페이지입니다.
-                보관함에서 진행 상태와 완료된 파일도 다시 확인할 수 있습니다.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2 text-xs">
-              <span className="rounded-full bg-white/10 px-3 py-1">API: {getApiUrl()}</span>
-              <span className={`rounded-full px-3 py-1 ${r2Ready ? "bg-emerald-500/20 text-emerald-200" : "bg-white/10 text-slate-300"}`}>R2 {r2Ready ? "연결됨" : "확인 필요"}</span>
-              <span className={`rounded-full px-3 py-1 ${sonioxReady ? "bg-cyan-500/20 text-cyan-200" : "bg-white/10 text-slate-300"}`}>AI {sonioxReady ? "준비됨" : "확인 필요"}</span>
-            </div>
-          </div>
-        </header>
-
         <div className="grid gap-6 xl:grid-cols-[1.05fr_1.35fr_1fr]">
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
             <div className="mb-5">
-              <p className="text-sm font-semibold text-blue-700">1. 파일 업로드</p>
-              <h2 className="mt-1 text-xl font-bold text-slate-900">새 녹취 작업 만들기</h2>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="text-sm font-semibold text-blue-300">1. 파일 업로드</p>
+              <h2 className="mt-1 text-xl font-bold text-white">새 녹취 작업 만들기</h2>
+              <p className="mt-1 text-sm text-slate-400">
                 업로드 후 AI 초안이 생성되면 아래 편집 영역에서 의뢰인이 직접 문장을 고칠 수 있습니다.
               </p>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">의뢰자명</label>
+                <label className="mb-1 block text-sm font-medium text-slate-300">의뢰자명</label>
                 <input
                   value={clientName}
                   onChange={(e) => setClientName(e.target.value)}
                   placeholder="예: 홍길동"
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none ring-0 transition focus:border-blue-500"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none ring-0 transition placeholder:text-slate-500 focus:border-blue-500"
                 />
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">표시명 / 사건명</label>
+                <label className="mb-1 block text-sm font-medium text-slate-300">표시명 / 사건명</label>
                 <input
                   value={jobTitle}
                   onChange={(e) => setJobTitle(e.target.value)}
                   placeholder="예: 홍길동_민사녹취_20260602"
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none ring-0 transition focus:border-blue-500"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none ring-0 transition placeholder:text-slate-500 focus:border-blue-500"
                 />
               </div>
 
@@ -349,24 +331,24 @@ export default function App() {
                 type="button"
                 onClick={() => inputRef.current?.click()}
                 disabled={busy}
-                className="flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center transition hover:border-blue-400 hover:bg-blue-50 disabled:opacity-60"
+                className="flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-700 bg-slate-950/80 px-4 py-10 text-center transition hover:border-blue-400 hover:bg-slate-900 disabled:opacity-60"
               >
                 <span className="text-4xl">🎙️</span>
-                <span className="mt-3 font-semibold text-slate-800">
+                <span className="mt-3 font-semibold text-slate-100">
                   {selectedFile ? selectedFile.name : "음성/영상 파일 선택"}
                 </span>
-                <span className="mt-1 text-sm text-slate-500">
+                <span className="mt-1 text-sm text-slate-400">
                   {selectedFile ? formatSize(selectedFile.size) : "wav, mp3, m4a, mp4 등 지원"}
                 </span>
               </button>
 
               {(step === "uploading" || step === "transcribing") && (
                 <div>
-                  <div className="mb-1 flex justify-between text-sm text-slate-600">
+                  <div className="mb-1 flex justify-between text-sm text-slate-400">
                     <span>{step === "uploading" ? "업로드 중..." : "AI 초안 생성 중..."}</span>
                     {step === "uploading" && <span>{progress}%</span>}
                   </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-800">
                     <div
                       className={`h-full rounded-full transition-all ${
                         step === "transcribing" ? "w-full animate-pulse bg-violet-600" : "bg-blue-600"
@@ -381,13 +363,13 @@ export default function App() {
                 type="button"
                 onClick={onUpload}
                 disabled={!selectedFile || busy || r2Ready === false}
-                className="w-full rounded-xl bg-blue-700 py-3 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-slate-700"
               >
                 업로드 후 초안 생성
               </button>
 
-              <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-                <p className="font-semibold text-slate-800">추가 제안 기능</p>
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 text-sm text-slate-400">
+                <p className="font-semibold text-slate-100">추가 제안 기능</p>
                 <ul className="mt-2 list-disc space-y-1 pl-5">
                   <li>다중 파일을 하나의 사건으로 묶는 업로드</li>
                   <li>의뢰인 표시명 자동 생성 규칙</li>
@@ -398,21 +380,21 @@ export default function App() {
             </div>
           </section>
 
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
             <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-violet-700">2. 직접 편집</p>
-                <h2 className="mt-1 text-xl font-bold text-slate-900">
+                <p className="text-sm font-semibold text-violet-300">2. 직접 편집</p>
+                <h2 className="mt-1 text-xl font-bold text-white">
                   {currentTitle || "녹취 초안 편집"}
                 </h2>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="mt-1 text-sm text-slate-400">
                   의뢰인이 직접 문장을 수정한 뒤 저장하거나 속기사 검수를 요청할 수 있습니다.
                 </p>
               </div>
               {job && (
-                <div className="rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                <div className="rounded-2xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-400">
                   <div>작업 ID</div>
-                  <div className="mt-1 font-mono text-[11px] text-slate-900">{job.job_id}</div>
+                  <div className="mt-1 font-mono text-[11px] text-slate-100">{job.job_id}</div>
                 </div>
               )}
             </div>
@@ -420,7 +402,7 @@ export default function App() {
             {job ? (
               <div className="space-y-4">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">원본 음성</label>
+                  <label className="mb-1 block text-sm font-medium text-slate-300">원본 음성</label>
                   <audio
                     controls
                     preload="metadata"
@@ -430,17 +412,17 @@ export default function App() {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                  <label className="mb-1 block text-sm font-medium text-slate-300">
                     녹취 초안 / 의뢰인 수정본
                   </label>
                   <textarea
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                     placeholder="AI 초안이 여기에 표시됩니다. 화자명: 내용 형식으로 수정해도 됩니다."
-                    className="min-h-[420px] w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm leading-7 text-slate-800 outline-none transition focus:border-blue-500"
+                    className="min-h-[420px] w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm leading-7 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-blue-500"
                   />
-                  <p className="mt-2 text-xs text-slate-500">
-                    권장 형식: <code className="rounded bg-slate-100 px-1">화자명: 발언 내용</code>
+                  <p className="mt-2 text-xs text-slate-400">
+                    권장 형식: <code className="rounded bg-slate-800 px-1 text-slate-200">화자명: 발언 내용</code>
                   </p>
                 </div>
 
@@ -449,7 +431,7 @@ export default function App() {
                     type="button"
                     onClick={onSaveDraft}
                     disabled={busy}
-                    className="rounded-xl border border-slate-300 bg-white py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                    className="rounded-xl border border-slate-700 bg-slate-950 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
                   >
                     임시 저장
                   </button>
@@ -457,7 +439,7 @@ export default function App() {
                     type="button"
                     onClick={onSubmitForReview}
                     disabled={busy}
-                    className="rounded-xl bg-violet-700 py-3 text-sm font-semibold text-white transition hover:bg-violet-800 disabled:opacity-50"
+                    className="rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
                   >
                     속기사 검수 요청
                   </button>
@@ -465,29 +447,29 @@ export default function App() {
                     type="button"
                     onClick={onDownloadPdf}
                     disabled={busy}
-                    className="rounded-xl bg-slate-900 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
+                    className="rounded-xl bg-slate-200 py-3 text-sm font-semibold text-slate-950 transition hover:bg-white disabled:opacity-50"
                   >
                     PDF 다운로드
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-14 text-center text-sm text-slate-500">
+              <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-6 py-14 text-center text-sm text-slate-400">
                 새 파일을 업로드하거나 보관함에서 기존 작업을 열면 편집을 시작할 수 있습니다.
               </div>
             )}
           </section>
 
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
             <div className="mb-5">
-              <p className="text-sm font-semibold text-emerald-700">3. 보관함</p>
-              <h2 className="mt-1 text-xl font-bold text-slate-900">업로드 파일 확인</h2>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="text-sm font-semibold text-emerald-300">3. 보관함</p>
+              <h2 className="mt-1 text-xl font-bold text-white">업로드 파일 확인</h2>
+              <p className="mt-1 text-sm text-slate-400">
                 속기사 검수 대기, 완료 여부를 확인하고 이전 작업을 다시 열 수 있습니다.
               </p>
             </div>
 
-            <div className="mb-4 rounded-2xl bg-slate-50 p-3">
+            <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-950/80 p-3">
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 작업번호로 불러오기
               </label>
@@ -496,13 +478,13 @@ export default function App() {
                   value={jobIdInput}
                   onChange={(e) => setJobIdInput(e.target.value)}
                   placeholder="job_id 입력"
-                  className="min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                  className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
                 />
                 <button
                   type="button"
                   onClick={() => void loadJobById(jobIdInput)}
                   disabled={busy || !jobIdInput.trim()}
-                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  className="rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50"
                 >
                   열기
                 </button>
@@ -516,33 +498,33 @@ export default function App() {
                     key={item.jobId}
                     type="button"
                     onClick={() => void loadJobById(item.jobId)}
-                    className="block w-full rounded-2xl border border-slate-200 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
+                    className="block w-full rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-left transition hover:border-blue-500 hover:bg-slate-900"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-900">{item.title}</p>
-                        <p className="mt-1 truncate text-sm text-slate-500">{item.filename}</p>
+                        <p className="truncate font-semibold text-slate-100">{item.title}</p>
+                        <p className="mt-1 truncate text-sm text-slate-400">{item.filename}</p>
                       </div>
                       <span
                         className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                           item.status === "속기사 검수 완료"
-                            ? "bg-emerald-100 text-emerald-700"
+                            ? "bg-emerald-500/15 text-emerald-300"
                             : item.status === "속기사 검수 대기"
-                              ? "bg-violet-100 text-violet-700"
-                              : "bg-amber-100 text-amber-700"
+                              ? "bg-violet-500/15 text-violet-300"
+                              : "bg-amber-500/15 text-amber-300"
                         }`}
                       >
                         {item.status}
                       </span>
                     </div>
-                    <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
+                    <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
                       <span className="font-mono">{item.jobId}</span>
                       <span>{formatDateTime(item.updatedAt)}</span>
                     </div>
                   </button>
                 ))
               ) : (
-                <div className="rounded-2xl border border-dashed border-slate-300 px-5 py-10 text-center text-sm text-slate-500">
+                <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-5 py-10 text-center text-sm text-slate-400">
                   아직 보관함에 저장된 작업이 없습니다.
                 </div>
               )}
@@ -551,7 +533,7 @@ export default function App() {
             <button
               type="button"
               onClick={refreshArchive}
-              className="mt-4 w-full rounded-xl border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="mt-4 w-full rounded-xl border border-slate-700 bg-slate-950 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-800"
             >
               보관함 새로고침
             </button>
@@ -562,8 +544,8 @@ export default function App() {
           <div
             className={`rounded-2xl px-4 py-3 text-sm ${
               error
-                ? "border border-red-200 bg-red-50 text-red-700"
-                : "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                ? "border border-red-500/30 bg-red-500/10 text-red-300"
+                : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
             }`}
           >
             {error || message}
