@@ -3,8 +3,10 @@ from pathlib import Path
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
-FONT_PATH = (
-    Path(__file__).resolve().parent.parent / "assets" / "fonts" / "NotoSansCJKkr-Regular.otf"
+FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
+FONT_CANDIDATES = (
+    FONT_DIR / "NotoSansKR-Regular.ttf",
+    FONT_DIR / "NotoSansCJKkr-Regular.otf",
 )
 FONT_FAMILY = "NotoKR"
 
@@ -24,11 +26,17 @@ def _safe_filename(name: str) -> str:
     return cleaned or "transcript"
 
 
+def _resolve_font_path() -> Path:
+    for path in FONT_CANDIDATES:
+        if path.is_file() and path.stat().st_size > 10_000:
+            return path
+    searched = ", ".join(str(path) for path in FONT_CANDIDATES)
+    raise RuntimeError(f"Korean PDF font not found (checked: {searched})")
+
+
 def _register_font(pdf: FPDF) -> str:
-    if FONT_PATH.is_file():
-        pdf.add_font(FONT_FAMILY, "", str(FONT_PATH))
-        return FONT_FAMILY
-    return "Helvetica"
+    pdf.add_font(FONT_FAMILY, "", str(_resolve_font_path()))
+    return FONT_FAMILY
 
 
 def build_transcript_pdf(transcript: dict) -> tuple[bytes, str]:
