@@ -1,9 +1,15 @@
+from io import BytesIO
 from pathlib import Path
 
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
+from pypdf import PdfReader, PdfWriter
 
 FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
+COVERS_DIR = Path(__file__).resolve().parent.parent / "assets" / "covers"
+COVER_FRONT = COVERS_DIR / "cover_front.pdf"
+COVER_BACK = COVERS_DIR / "cover_back.pdf"
+STAMP_PATH = Path(__file__).resolve().parent.parent / "assets" / "stamp.png"
 FONT_CANDIDATES = (
     FONT_DIR / "NotoSansKR-Regular.ttf",
     FONT_DIR / "NotoSansCJKkr-Regular.otf",
@@ -15,8 +21,9 @@ FONT_FAMILY = "NotoKR"
 CONFIRMATION_NOTE = "※대화자는 의뢰인이 확인함."
 END_MARKER = "*****************************************〔끝〕****************************************"
 FOOTER_OFFICE = "통합증거센터 녹취사무소 010-8271-4970"
-FOOTER_HEIGHT = 24
+FOOTER_HEIGHT = 26
 FOOTER_TEXT_H = 8
+STAMP_SIZE_MM = 13
 
 
 class TranscriptPDF(FPDF):
@@ -24,27 +31,40 @@ class TranscriptPDF(FPDF):
         super().__init__()
         self._font_family = font_family
         self._bold_available = False
+        self._stamp_path: Path | None = STAMP_PATH if STAMP_PATH.is_file() else None
 
     def footer(self) -> None:
         footer_top = self.h - FOOTER_HEIGHT
         line_y = footer_top + 2
+        content_w = self.w - self.l_margin - self.r_margin
 
         self.set_draw_color(0, 0, 0)
         self.set_line_width(0.2)
         self.line(self.l_margin, line_y, self.w - self.r_margin, line_y)
 
-        self.set_y(footer_top + 5)
-        content_w = self.w - self.l_margin - self.r_margin
-        y = self.get_y()
+        text_y = footer_top + 6
+        self.set_y(text_y)
         self.set_font(
             self._font_family,
             style="B" if self._bold_available else "",
             size=10,
         )
+        left_w = content_w - STAMP_SIZE_MM - 2
         self.set_x(self.l_margin)
-        self.cell(content_w, FOOTER_TEXT_H, FOOTER_OFFICE, align="L")
-        self.set_xy(self.l_margin, y)
+        self.cell(left_w, FOOTER_TEXT_H, FOOTER_OFFICE, align="L")
+        self.set_xy(self.l_margin, text_y)
         self.cell(content_w, FOOTER_TEXT_H, str(self.page_no()), align="C")
+
+        if self._stamp_path:
+            stamp_x = self.w - self.r_margin - STAMP_SIZE_MM
+            stamp_y = footer_top + 4
+            self.image(
+                str(self._stamp_path),
+                x=stamp_x,
+                y=stamp_y,
+                w=STAMP_SIZE_MM,
+                h=STAMP_SIZE_MM,
+            )
 
 
 def _speaker_label(speaker: str, labels: dict) -> str:
@@ -99,7 +119,28 @@ def _append_document_end(pdf: FPDF, font: str, bold_available: bool) -> None:
     )
 
 
-def build_transcript_pdf(transcript: dict) -> tuple[bytes, str]:
+def _append_pdf_pages(writer: PdfWriter, path: Path) -> None:
+    if not path.is_file():
+        return
+    reader = PdfReader(str(path))
+    for page in reader.pages:
+        writer.add_page(page)
+
+
+def _merge_with_covers(body_bytes: bytes) -> bytes:
+    writer = PdfWriter()
+    _append_pdf_pages(writer, COVER_FRONT)
+    body_reader = PdfReader(BytesIO(body_bytes))
+    for page in body_reader.pages:
+        writer.add_page(page)
+    _append_pdf_pages(writer, COVER_BACK)
+
+    output = BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
+def _build_transcript_body_pdf(transcript: dict) -> bytes:
     pdf = TranscriptPDF(FONT_FAMILY)
     pdf.set_margins(20, 20, 20)
     pdf.set_auto_page_break(auto=True, margin=20 + FOOTER_HEIGHT)
@@ -136,6 +177,12 @@ def build_transcript_pdf(transcript: dict) -> tuple[bytes, str]:
 
     _append_document_end(pdf, font, bold_available)
 
-    pdf_bytes = pdf.output()
+    return bytes(pdf.output())
+
+
+def build_transcript_pdf(transcript: dict) -> tuple[bytes, str]:
+    title = transcript.get("filename") or "녹취록"
+    body_bytes = _build_transcript_body_pdf(transcript)
+    pdf_bytes = _merge_with_covers(body_bytes)
     download_name = f"{_safe_filename(title)}_녹취록.pdf"
-    return bytes(pdf_bytes), download_name
+    return pdf_bytes, download_name
