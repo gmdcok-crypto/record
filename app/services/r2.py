@@ -178,6 +178,28 @@ def save_transcript_json(job_id: str, transcript: dict) -> str:
     return object_key
 
 
+def save_transcript_history_snapshot(job_id: str, revision_id: str, transcript: dict) -> str:
+    if not settings.r2_configured:
+        raise ValueError("R2 is not configured")
+
+    object_key = f"{settings.r2_text_prefix}{job_id}/history/{revision_id}.json"
+    body = json.dumps(transcript, ensure_ascii=False, indent=2).encode("utf-8")
+
+    client = _client()
+    client.put_object(
+        Bucket=settings.r2_bucket_name,
+        Key=object_key,
+        Body=body,
+        ContentType="application/json; charset=utf-8",
+    )
+
+    return object_key
+
+
+def get_transcript_history_json(object_key: str) -> dict:
+    return json.loads(get_object_bytes(object_key).decode("utf-8"))
+
+
 def get_transcript_json(job_id: str) -> dict | None:
     object_key = f"{settings.r2_text_prefix}{job_id}/transcript.json"
     try:

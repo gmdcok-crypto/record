@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     r2_text_prefix: str = "text/"
     r2_presign_expires: int = 3600
 
+    database_url: str = ""
+    mysql_url: str = ""
+
     @property
     def language_hint_list(self) -> list[str]:
         return [lang.strip() for lang in self.language_hints.split(",") if lang.strip()]
@@ -24,6 +27,19 @@ class Settings(BaseSettings):
     @property
     def r2_configured(self) -> bool:
         return bool(self.r2_account_id and self.r2_access_key_id and self.r2_secret_access_key)
+
+    @property
+    def database_configured(self) -> bool:
+        return bool(self.resolved_database_url)
+
+    @property
+    def resolved_database_url(self) -> str:
+        url = (self.database_url or self.mysql_url).strip()
+        if not url:
+            return ""
+        if url.startswith("mysql://"):
+            return url.replace("mysql://", "mysql+pymysql://", 1)
+        return url
 
 
 settings = Settings()

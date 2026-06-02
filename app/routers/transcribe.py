@@ -1,14 +1,13 @@
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.services.r2 import (
-    get_object_bytes,
-    get_object_metadata,
-    get_voice_object_key,
-    save_transcript_json,
-)
+from app.db import get_optional_db
+from app.services.r2 import get_object_bytes, get_object_metadata, get_voice_object_key
+from app.services.transcript_history import save_transcript_with_optional_history
 from app.services.soniox import transcribe_upload
-
 router = APIRouter(prefix="/api", tags=["transcribe"])
 
 ALLOWED_EXTENSIONS = {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".webm", ".mp4"}
@@ -48,7 +47,10 @@ async def test_transcribe(file: UploadFile = File(...)) -> dict:
 
 
 @router.post("/transcribe/job/{job_id}")
-def transcribe_job(job_id: str) -> dict:
+def transcribe_job(
+    job_id: str,
+    db: Annotated[Session | None, Depends(get_optional_db)],
+) -> dict:
     if not settings.soniox_api_key:
         raise HTTPException(status_code=503, detail="SONIOX_API_KEY is not configured")
 
@@ -72,7 +74,13 @@ def transcribe_job(job_id: str) -> dict:
             filename,
             metadata.get("content_type", "audio/x-m4a"),
         )
-        transcript_key = save_transcript_json(job_id, transcript_json)
+        saved = save_transcript_with_optional_history(
+            db,
+            job_id,
+            transcript_json,
+            change_summary="AI transcription",
+        )
+        transcript_key = saved["transcript_key"]
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:

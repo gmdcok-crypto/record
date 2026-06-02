@@ -1,18 +1,21 @@
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+from typing import Annotated
 
 from app.config import settings
+from app.db import get_optional_db
 from app.services.audio import remux_faststart, should_faststart
 from app.services.r2 import (
     create_voice_upload_url,
     ensure_filename_with_extension,
     get_object_bytes,
     get_voice_object_key,
-    save_transcript_json,
     upload_voice_bytes,
 )
+from app.services.transcript_history import save_transcript_with_optional_history
 from app.services.soniox import transcribe_upload
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
@@ -52,14 +55,27 @@ def is_allowed_upload(content_type: str, filename: str) -> bool:
     return ext in ALLOWED_EXTENSIONS
 
 
-def run_transcription(job_id: str, content: bytes, filename: str, content_type: str) -> dict:
+def run_transcription(
+    job_id: str,
+    content: bytes,
+    filename: str,
+    content_type: str,
+    db: Session | None = None,
+) -> dict:
     transcript_json = transcribe_upload(content, filename, content_type)
-    transcript_key = save_transcript_json(job_id, transcript_json)
+    saved = save_transcript_with_optional_history(
+        db,
+        job_id,
+        transcript_json,
+        change_summary="AI transcription",
+    )
     return {
         "status": "AI_DONE",
         "transcript_text": transcript_json.get("text", ""),
-        "transcript_key": transcript_key,
+        "transcript_key": saved["transcript_key"],
         "transcript_json": transcript_json,
+        "revision_id": saved.get("revision_id"),
+        "version": saved.get("version"),
     }
 
 
@@ -88,7 +104,10 @@ class VoiceUploadResponse(BaseModel):
 
 
 @router.post("/voice", response_model=VoiceUploadResponse)
-async def upload_voice(file: UploadFile = File(...)) -> VoiceUploadResponse:
+async def upload_voice(
+    file: UploadFile = File(...),
+    db: Annotated[Session | None, Depends(get_optional_db)] = None,
+) -> VoiceUploadResponse:
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required")
 
@@ -133,6 +152,7 @@ async def upload_voice(file: UploadFile = File(...)) -> VoiceUploadResponse:
             content,
             upload_result.get("filename", file.filename),
             content_type,
+            db,
         )
         response.status = transcription["status"]
         response.transcript_text = transcription["transcript_text"]
