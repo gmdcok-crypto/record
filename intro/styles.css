@@ -154,6 +154,10 @@ img {
   position: relative;
   padding: 4.5rem 0 5rem;
   overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(12, 21, 36, 0.78) 0%, rgba(12, 21, 36, 0.58) 34%, rgba(12, 21, 36, 0.22) 68%, rgba(12, 21, 36, 0.12) 100%),
+    url("./assets/hero-main.png") center center / cover no-repeat;
+  color: #fff;
 }
 
 .hero::before {
@@ -163,9 +167,18 @@ img {
   height: 70%;
   background: radial-gradient(
     ellipse 80% 60% at 70% 0%,
-    rgba(30, 74, 122, 0.14),
+    rgba(148, 210, 255, 0.16),
     transparent 70%
   );
+  pointer-events: none;
+}
+
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(12, 21, 36, 0.15) 0%, rgba(12, 21, 36, 0.36) 100%);
   pointer-events: none;
 }
 
@@ -173,6 +186,8 @@ img {
   display: grid;
   gap: 3rem;
   align-items: center;
+  position: relative;
+  z-index: 1;
 }
 
 .hero-eyebrow {
@@ -181,11 +196,13 @@ img {
   gap: 0.5rem;
   padding: 0.35rem 0.85rem;
   border-radius: 999px;
-  background: var(--blue-light);
-  color: var(--blue);
+  background: rgba(255, 255, 255, 0.12);
+  color: #e7f2ff;
   font-size: 0.8rem;
   font-weight: 600;
   margin-bottom: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
 }
 
 .hero-eyebrow span {
@@ -202,13 +219,15 @@ img {
   line-height: 1.2;
   letter-spacing: -0.05em;
   margin: 0 0 1.25rem;
+  text-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
 }
 
 .hero-lead {
   font-size: clamp(1.05rem, 2vw, 1.2rem);
-  color: var(--ink-soft);
+  color: rgba(255, 255, 255, 0.86);
   max-width: 34rem;
   margin: 0 0 2rem;
+  text-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
 }
 
 .hero-cta {
@@ -223,22 +242,23 @@ img {
   flex-wrap: wrap;
   gap: 1.5rem 2rem;
   font-size: 0.88rem;
-  color: var(--ink-soft);
+  color: rgba(255, 255, 255, 0.74);
 }
 
 .hero-meta strong {
   display: block;
-  color: var(--ink);
+  color: #fff;
   font-size: 1rem;
 }
 
 .hero-visual {
   position: relative;
   border-radius: calc(var(--radius) + 4px);
-  background: var(--paper-elevated);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow);
+  background: rgba(255, 253, 248, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
   padding: 1.5rem;
+  backdrop-filter: blur(10px);
 }
 
 .flow-card {
