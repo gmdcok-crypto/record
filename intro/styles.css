@@ -1,3 +1,5 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css");
+
 :root {
   --ink: #0c1524;
   --ink-soft: #2a3d5c;
@@ -11,9 +13,10 @@
   --gold: #c4a35a;
   --shadow: 0 24px 60px rgba(12, 21, 36, 0.12);
   --radius: 16px;
-  --font: "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont,
-    system-ui, sans-serif;
-  --font-serif: "Noto Serif KR", "Batang", serif;
+  --font: "Pretendard", "Pretendard Variable", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", system-ui, sans-serif;
+  --font-display: "Pretendard", "Pretendard Variable", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", system-ui, sans-serif;
 }
 
 *,
@@ -193,11 +196,11 @@ img {
 }
 
 .hero h1 {
-  font-family: var(--font-serif);
+  font-family: var(--font-display);
   font-size: clamp(2.2rem, 5vw, 3.35rem);
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1.2;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.05em;
   margin: 0 0 1.25rem;
 }
 
@@ -302,10 +305,10 @@ section {
 }
 
 .section-title {
-  font-family: var(--font-serif);
+  font-family: var(--font-display);
   font-size: clamp(1.75rem, 3.5vw, 2.35rem);
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 800;
+  letter-spacing: -0.04em;
   margin: 0 0 1rem;
   line-height: 1.25;
 }
@@ -456,9 +459,9 @@ section {
 }
 
 .pdf-mock-header {
-  font-family: var(--font-serif);
+  font-family: var(--font-display);
   font-size: 1.1rem;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--ink);
   margin-bottom: 1.25rem;
   padding-bottom: 0.75rem;
@@ -517,8 +520,10 @@ section {
 }
 
 .cta-box h2 {
-  font-family: var(--font-serif);
+  font-family: var(--font-display);
   font-size: clamp(1.6rem, 3vw, 2.1rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
   margin: 0 0 0.75rem;
 }
 
