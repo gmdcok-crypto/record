@@ -229,32 +229,7 @@ export default function App() {
       )}
 
       {!loading && job && (
-        <main className="mx-auto grid max-w-7xl gap-4 px-4 py-4 lg:grid-cols-[280px_1fr_240px]">
-          <aside className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="mb-3 text-sm font-semibold text-slate-700">구간 목록</h2>
-            <p className="mb-3 text-xs text-slate-500">클릭하면 해당 시점으로 이동합니다.</p>
-            <div className="max-h-[70vh] space-y-2 overflow-y-auto">
-              {segments.map((seg, index) => (
-                <button
-                  key={index}
-                  type="button"
-                  onClick={() => seekTo(seg.start_ms, index)}
-                  className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
-                    activeIndex === index
-                      ? "border-violet-400 bg-violet-50"
-                      : "border-slate-200 hover:border-violet-200"
-                  }`}
-                >
-                  <p className="font-semibold text-violet-700">{speakerLabel(seg.speaker)}</p>
-                  <p className="text-xs text-slate-500">
-                    {formatMs(seg.start_ms)} – {formatMs(seg.end_ms)}
-                  </p>
-                  <p className="mt-1 line-clamp-2 text-slate-700">{seg.text}</p>
-                </button>
-              ))}
-            </div>
-          </aside>
-
+        <main className="mx-auto grid max-w-7xl gap-4 px-4 py-4 lg:grid-cols-[1fr_240px]">
           <section className="space-y-4">
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="mb-3 flex items-center justify-between text-sm text-slate-600">
