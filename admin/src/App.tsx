@@ -4,6 +4,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { SegmentHeading } from "./extensions/SegmentHeading";
 import {
+  collectSpeakerIds,
   fetchJob,
   formatMs,
   htmlToSegments,
@@ -16,6 +17,7 @@ import {
   type Segment,
 } from "./api";
 import { highlightActiveSegment, resolveSegmentFromClick, seekAudio } from "./editorUtils";
+import SpeakerSettingsModal from "./SpeakerSettingsModal";
 
 const DEFAULT_JOB_ID = "26fa09fd-798f-4a3c-b2a3-453c49003de5";
 
@@ -40,6 +42,8 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [audioReady, setAudioReady] = useState(false);
+  const [speakerLabels, setSpeakerLabels] = useState<Record<string, string>>({});
+  const [speakerSettingsOpen, setSpeakerSettingsOpen] = useState(false);
 
   const seekTo = useCallback(async (ms: number | null | undefined, index?: number) => {
     if (ms == null) return;
@@ -87,11 +91,13 @@ export default function App() {
     try {
       const data = await fetchJob(jobId);
       const loadedSegments = data.transcript_json.segments || [];
+      const loadedLabels = data.transcript_json.speaker_labels || {};
       setJob(data);
       setSegments(loadedSegments);
+      setSpeakerLabels(loadedLabels);
       setActiveIndex(0);
       const html = loadedSegments.length
-        ? segmentsToHtml(loadedSegments)
+        ? segmentsToHtml(loadedSegments, loadedLabels)
         : `<p>${data.transcript_json.text || ""}</p>`;
       editor?.commands.setContent(html);
       const url = new URL(window.location.href);
@@ -165,6 +171,23 @@ export default function App() {
     [segments, durationMs],
   );
 
+  const speakerIds = useMemo(() => collectSpeakerIds(segments), [segments]);
+
+  const applySpeakerLabels = useCallback(
+    (labels: Record<string, string>) => {
+      const cleaned: Record<string, string> = {};
+      for (const [id, name] of Object.entries(labels)) {
+        if (name.trim()) cleaned[id] = name.trim();
+      }
+      setSpeakerLabels(cleaned);
+      if (editor && segments.length) {
+        editor.commands.setContent(segmentsToHtml(segments, cleaned));
+      }
+      setSpeakerSettingsOpen(false);
+    },
+    [editor, segments],
+  );
+
   const onSave = async () => {
     if (!job || !editor) return;
     setSaving(true);
@@ -173,8 +196,9 @@ export default function App() {
       const updatedSegments = htmlToSegments(editor.getHTML(), segments);
       const transcript_json = {
         ...job.transcript_json,
+        speaker_labels: speakerLabels,
         segments: updatedSegments,
-        text: segmentsToPlainText(updatedSegments),
+        text: segmentsToPlainText(updatedSegments, speakerLabels),
       };
       await saveTranscript(job.job_id, transcript_json);
       setSegments(updatedSegments);
@@ -207,6 +231,14 @@ export default function App() {
               className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white"
             >
               불러오기
+            </button>
+            <button
+              type="button"
+              onClick={() => setSpeakerSettingsOpen(true)}
+              disabled={!job || !speakerIds.length}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+            >
+              화자 설정
             </button>
             <button
               type="button"
@@ -301,7 +333,7 @@ export default function App() {
                 <dt className="text-slate-500">현재 구간</dt>
                 <dd className="font-medium">
                   {segments[activeIndex]
-                    ? `${speakerLabel(segments[activeIndex].speaker)} · ${formatMs(segments[activeIndex].start_ms)}`
+                    ? `${speakerLabel(segments[activeIndex].speaker, speakerLabels)} · ${formatMs(segments[activeIndex].start_ms)}`
                     : "-"}
                 </dd>
               </div>
@@ -313,6 +345,14 @@ export default function App() {
           </aside>
         </main>
       )}
+
+      <SpeakerSettingsModal
+        open={speakerSettingsOpen}
+        speakerIds={speakerIds}
+        labels={speakerLabels}
+        onClose={() => setSpeakerSettingsOpen(false)}
+        onApply={applySpeakerLabels}
+      />
     </div>
   );
 }

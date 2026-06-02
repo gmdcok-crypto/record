@@ -20,6 +20,14 @@ export const SegmentHeading = Heading.extend({
           return { "data-start-ms": String(attributes.startMs) };
         },
       },
+      speakerId: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-speaker-id"),
+        renderHTML: (attributes) => {
+          if (attributes.speakerId == null) return {};
+          return { "data-speaker-id": String(attributes.speakerId) };
+        },
+      },
     };
   },
 }).configure({ levels: [3] });

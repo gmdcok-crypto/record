@@ -12,6 +12,7 @@ export type TranscriptJson = {
   plain_text?: string;
   segments?: Segment[];
   tokens?: unknown[];
+  speaker_labels?: Record<string, string>;
 };
 
 export type JobResponse = {
@@ -61,15 +62,30 @@ export function formatMs(ms: number | null | undefined): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-export function speakerLabel(speaker: string): string {
+export function speakerLabel(speaker: string, labels?: Record<string, string>): string {
+  const custom = labels?.[speaker]?.trim();
+  if (custom) return custom;
   return /^\d+$/.test(speaker) ? `화자 ${speaker}` : speaker;
 }
 
-export function segmentsToHtml(segments: Segment[]): string {
+export function collectSpeakerIds(segments: Segment[]): string[] {
+  const ids = new Set<string>();
+  for (const seg of segments) {
+    if (seg.speaker) ids.add(seg.speaker);
+  }
+  return Array.from(ids).sort((a, b) => {
+    const na = Number(a);
+    const nb = Number(b);
+    if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+    return a.localeCompare(b);
+  });
+}
+
+export function segmentsToHtml(segments: Segment[], labels?: Record<string, string>): string {
   return segments
     .map(
       (seg, index) =>
-        `<h3 data-segment-index="${index}" data-start-ms="${seg.start_ms ?? ""}">${speakerLabel(seg.speaker)} · ${formatMs(seg.start_ms)}</h3><p>${escapeHtml(seg.text)}</p>`,
+        `<h3 data-segment-index="${index}" data-start-ms="${seg.start_ms ?? ""}" data-speaker-id="${escapeHtml(seg.speaker)}">${speakerLabel(seg.speaker, labels)} · ${formatMs(seg.start_ms)}</h3><p>${escapeHtml(seg.text)}</p>`,
     )
     .join("");
 }
@@ -90,11 +106,12 @@ export function htmlToSegments(html: string, original: Segment[]): Segment[] {
     const paragraph = heading.nextElementSibling;
     const text = paragraph?.textContent?.trim() || "";
     const fallback = original[index];
+    const attrSpeakerId = heading.getAttribute("data-speaker-id");
     const speakerMatch = heading.textContent?.match(/화자\s*(\S+)/);
     const attrStartMs = heading.getAttribute("data-start-ms");
     const parsedStartMs = attrStartMs ? Number(attrStartMs) : NaN;
     segments.push({
-      speaker: speakerMatch?.[1] || fallback?.speaker || String(index + 1),
+      speaker: attrSpeakerId || speakerMatch?.[1] || fallback?.speaker || String(index + 1),
       text,
       start_ms: Number.isFinite(parsedStartMs) ? parsedStartMs : fallback?.start_ms ?? null,
       end_ms: fallback?.end_ms ?? null,
@@ -104,8 +121,8 @@ export function htmlToSegments(html: string, original: Segment[]): Segment[] {
   return segments.length ? segments : original;
 }
 
-export function segmentsToPlainText(segments: Segment[]): string {
+export function segmentsToPlainText(segments: Segment[], labels?: Record<string, string>): string {
   return segments
-    .map((seg) => `[${speakerLabel(seg.speaker)}] ${seg.text}`)
+    .map((seg) => `[${speakerLabel(seg.speaker, labels)}] ${seg.text}`)
     .join("\n\n");
 }
