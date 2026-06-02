@@ -230,30 +230,13 @@ img {
   text-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
 }
 
-.hero-cta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-bottom: 2.5rem;
-}
-
-.hero-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.5rem 2rem;
-  font-size: 0.88rem;
-  color: rgba(255, 255, 255, 0.74);
-}
-
-.hero-meta strong {
-  display: block;
-  color: #fff;
-  font-size: 1rem;
+.hero-process {
+  margin-top: 2.3rem;
 }
 
 .hero-visual {
   position: relative;
-  padding-top: 5cm;
+  min-height: 1px;
 }
 
 .flow-card {
@@ -261,7 +244,7 @@ img {
   flex-direction: column;
   gap: 0.2rem;
   max-width: 31rem;
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .flow-step {
@@ -627,7 +610,7 @@ section {
 
 @media (max-width: 719px) {
   .hero-visual {
-    padding-top: 2rem;
+    display: none;
   }
 
   .flow-card {
