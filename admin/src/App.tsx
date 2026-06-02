@@ -247,6 +247,7 @@ export default function App() {
       };
       await saveTranscript(job.job_id, transcript_json);
       setSegments(updatedSegments);
+      editor.commands.setContent(segmentsToHtml(updatedSegments, speakerLabels));
       setMessage("저장되었습니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "저장 실패");

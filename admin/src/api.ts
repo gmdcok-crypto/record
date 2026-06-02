@@ -85,7 +85,7 @@ export function segmentsToHtml(segments: Segment[], labels?: Record<string, stri
   return segments
     .map(
       (seg, index) =>
-        `<h3 data-segment-index="${index}" data-start-ms="${seg.start_ms ?? ""}" data-speaker-id="${escapeHtml(seg.speaker)}">${speakerLabel(seg.speaker, labels)} · ${formatMs(seg.start_ms)}</h3><p>${escapeHtml(seg.text)}</p>`,
+        `<h3 data-segment-index="${index}" data-start-ms="${seg.start_ms ?? ""}" data-speaker-id="${escapeHtml(seg.speaker)}">${escapeHtml(speakerLabel(seg.speaker, labels))}</h3><p>${escapeHtml(seg.text)}</p>`,
     )
     .join("");
 }
@@ -107,7 +107,8 @@ export function htmlToSegments(html: string, original: Segment[]): Segment[] {
     const text = paragraph?.textContent?.trim() || "";
     const fallback = original[index];
     const attrSpeakerId = heading.getAttribute("data-speaker-id");
-    const speakerMatch = heading.textContent?.match(/화자\s*(\S+)/);
+    const headingText = heading.textContent?.replace(/\s*·\s*\d{2}:\d{2}\s*$/, "").trim() ?? "";
+    const speakerMatch = headingText.match(/화자\s*(\S+)/);
     const attrStartMs = heading.getAttribute("data-start-ms");
     const parsedStartMs = attrStartMs ? Number(attrStartMs) : NaN;
     segments.push({
