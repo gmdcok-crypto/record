@@ -15,12 +15,13 @@ export type TranscriptSegment = {
 };
 
 export type TranscriptJson = {
-  transcription_id: string;
-  filename: string;
-  text: string;
+  transcription_id?: string | null;
+  filename?: string;
+  text?: string;
   plain_text?: string;
   segments?: TranscriptSegment[];
-  tokens: TranscriptToken[];
+  tokens?: TranscriptToken[];
+  speaker_labels?: Record<string, string>;
 };
 
 export type UploadResponse = {
@@ -34,11 +35,25 @@ export type UploadResponse = {
   error?: string | null;
 };
 
+export type JobResponse = {
+  job_id: string;
+  voice_key: string;
+  transcript_key: string;
+  audio_url: string;
+  transcript_json: TranscriptJson;
+  history_enabled?: boolean;
+};
+
 export type HealthResponse = {
   status: string;
   soniox_configured?: boolean;
   r2_configured: boolean;
   bucket: string;
+};
+
+export type SaveTranscriptOptions = {
+  editor?: string;
+  changeSummary?: string;
 };
 
 function apiBase(): string {
@@ -51,7 +66,26 @@ function parseErrorDetail(body: unknown): string {
     if (typeof detail === "string") return detail;
     if (Array.isArray(detail)) return detail.map(String).join(", ");
   }
-  return "업로드 실패";
+  return "요청 처리 중 오류가 발생했습니다";
+}
+
+function parseFilenameFromDisposition(header: string | null, fallback: string): string {
+  if (!header) return fallback;
+  const utf8Match = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return fallback;
+    }
+  }
+  const plainMatch = header.match(/filename="([^"]+)"/i);
+  return plainMatch?.[1] || fallback;
+}
+
+export function resolveUrl(path: string): string {
+  if (path.startsWith("http")) return path;
+  return `${apiBase()}${path}`;
 }
 
 export async function checkHealth(): Promise<HealthResponse> {
@@ -98,31 +132,65 @@ export async function uploadVoice(
   });
 }
 
-export async function transcribeJob(jobId: string): Promise<UploadResponse> {
-  const res = await fetch(`${apiBase()}/api/transcribe/job/${jobId}`, { method: "POST" });
+export async function fetchJob(jobId: string): Promise<JobResponse> {
+  const res = await fetch(`${apiBase()}/api/jobs/${jobId}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(parseErrorDetail(err));
   }
-  const data = await res.json();
-  return {
-    job_id: data.job_id,
-    object_key: data.voice_key,
-    bucket: "",
-    status: data.status,
-    transcript_text: data.transcript_text,
-    transcript_key: data.transcript_key,
-    transcript_json: data.transcript_json,
-  };
+  return res.json();
+}
+
+export async function saveTranscript(
+  jobId: string,
+  transcript: TranscriptJson,
+  options?: SaveTranscriptOptions,
+): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/transcript`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      transcript_json: transcript,
+      editor: options?.editor,
+      change_summary: options?.changeSummary,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err));
+  }
+}
+
+export async function downloadTranscriptPdf(jobId: string, transcript: TranscriptJson): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/transcript.pdf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transcript_json: transcript }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err));
+  }
+
+  const blob = await res.blob();
+  const filename = parseFilenameFromDisposition(
+    res.headers.get("Content-Disposition"),
+    "transcript.pdf",
+  );
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+export function speakerLabel(speaker: string, labels?: Record<string, string>): string {
+  const custom = labels?.[speaker]?.trim();
+  if (custom) return custom;
+  return /^\d+$/.test(speaker) ? `화자 ${speaker}` : speaker;
 }
 
 export function getApiUrl(): string {
   return apiBase();
-}
-
-export function getAdminUrl(jobId = "26fa09fd-798f-4a3c-b2a3-453c49003de5"): string {
-  if (import.meta.env.DEV && !API_URL) {
-    return `http://localhost:5174/admin/?job_id=${jobId}`;
-  }
-  return `${apiBase()}/admin/?job_id=${jobId}`;
 }
