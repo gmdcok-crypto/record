@@ -14,25 +14,37 @@ FONT_BOLD_CANDIDATES = (
 FONT_FAMILY = "NotoKR"
 CONFIRMATION_NOTE = "※대화자는 의뢰인이 확인함."
 END_MARKER = "*****************************************〔끝〕****************************************"
-FOOTER_MARGIN = 18
+FOOTER_OFFICE = "통합증거센터 녹취사무소 010-8271-4970"
+FOOTER_HEIGHT = 24
+FOOTER_TEXT_H = 8
 
 
 class TranscriptPDF(FPDF):
     def __init__(self, font_family: str):
         super().__init__()
         self._font_family = font_family
+        self._bold_available = False
 
     def footer(self) -> None:
-        self.set_y(-FOOTER_MARGIN)
-        self.set_font(self._font_family, size=10)
-        self.cell(
-            0,
-            10,
-            str(self.page_no()),
-            align="C",
-            new_x=XPos.LMARGIN,
-            new_y=YPos.TOP,
+        footer_top = self.h - FOOTER_HEIGHT
+        line_y = footer_top + 2
+
+        self.set_draw_color(0, 0, 0)
+        self.set_line_width(0.2)
+        self.line(self.l_margin, line_y, self.w - self.r_margin, line_y)
+
+        self.set_y(footer_top + 5)
+        content_w = self.w - self.l_margin - self.r_margin
+        y = self.get_y()
+        self.set_font(
+            self._font_family,
+            style="B" if self._bold_available else "",
+            size=10,
         )
+        self.set_x(self.l_margin)
+        self.cell(content_w, FOOTER_TEXT_H, FOOTER_OFFICE, align="L")
+        self.set_xy(self.l_margin, y)
+        self.cell(content_w, FOOTER_TEXT_H, str(self.page_no()), align="C")
 
 
 def _speaker_label(speaker: str, labels: dict) -> str:
@@ -90,11 +102,12 @@ def _append_document_end(pdf: FPDF, font: str, bold_available: bool) -> None:
 def build_transcript_pdf(transcript: dict) -> tuple[bytes, str]:
     pdf = TranscriptPDF(FONT_FAMILY)
     pdf.set_margins(20, 20, 20)
-    pdf.set_auto_page_break(auto=True, margin=20 + FOOTER_MARGIN)
+    pdf.set_auto_page_break(auto=True, margin=20 + FOOTER_HEIGHT)
     pdf.add_page()
 
     font, bold_available = _register_fonts(pdf)
     pdf._font_family = font
+    pdf._bold_available = bold_available
 
     title = transcript.get("filename") or "녹취록"
     segments = transcript.get("segments") or []
