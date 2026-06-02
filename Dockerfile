@@ -20,8 +20,8 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg wget ca-certificates \
     && mkdir -p /app/app/assets/fonts \
-    && wget -qO /app/app/assets/fonts/NotoSansCJKkr-Regular.otf \
-        "https://github.com/notofonts/noto-cjk/raw/main/Sans/SubsetOTF/KR/NotoSansCJKkr-Regular.otf" \
+    && wget --fail -qO /app/app/assets/fonts/NotoSansCJKkr-Regular.otf \
+        "https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/Korean/NotoSansCJKkr-Regular.otf" \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONDONTWRITEBYTECODE=1
