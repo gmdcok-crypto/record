@@ -94,6 +94,14 @@ export async function seekAudio(audio: HTMLAudioElement, ms: number): Promise<vo
   }
 }
 
+export function getSegmentEndMs(segments: Segment[], index: number): number | null {
+  const seg = segments[index];
+  if (seg?.end_ms != null) return seg.end_ms;
+  const next = segments[index + 1];
+  if (next?.start_ms != null) return Math.max(next.start_ms - 1, seg?.start_ms ?? 0);
+  return null;
+}
+
 export function highlightActiveSegment(root: HTMLElement | null, activeIndex: number): void {
   if (!root) return;
 

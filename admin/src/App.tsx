@@ -16,7 +16,12 @@ import {
   type JobResponse,
   type Segment,
 } from "./api";
-import { highlightActiveSegment, resolveSegmentFromClick, seekAudio } from "./editorUtils";
+import {
+  getSegmentEndMs,
+  highlightActiveSegment,
+  resolveSegmentFromClick,
+  seekAudio,
+} from "./editorUtils";
 import SpeakerSettingsModal from "./SpeakerSettingsModal";
 
 const DEFAULT_JOB_ID = "26fa09fd-798f-4a3c-b2a3-453c49003de5";
@@ -30,7 +35,11 @@ export default function App() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const editorWrapperRef = useRef<HTMLDivElement>(null);
   const segmentsRef = useRef<Segment[]>([]);
-  const seekToRef = useRef<(ms: number | null | undefined, index?: number) => void>(() => {});
+  const segmentStopAtMsRef = useRef<number | null>(null);
+  const programmaticSeekRef = useRef(false);
+  const seekToRef = useRef<
+    (ms: number | null | undefined, index?: number, segmentOnly?: boolean) => void
+  >(() => {});
   const [jobIdInput, setJobIdInput] = useState(getJobIdFromUrl());
   const [job, setJob] = useState<JobResponse | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
@@ -45,19 +54,32 @@ export default function App() {
   const [speakerLabels, setSpeakerLabels] = useState<Record<string, string>>({});
   const [speakerSettingsOpen, setSpeakerSettingsOpen] = useState(false);
 
-  const seekTo = useCallback(async (ms: number | null | undefined, index?: number) => {
-    if (ms == null) return;
-    const audio = audioRef.current;
-    if (!audio) return;
-    await seekAudio(audio, ms);
-    setCurrentMs(ms);
-    if (index != null) setActiveIndex(index);
-    try {
-      await audio.play();
-    } catch {
-      /* autoplay policy */
-    }
-  }, []);
+  const seekTo = useCallback(
+    async (ms: number | null | undefined, index?: number, segmentOnly = false) => {
+      if (ms == null) return;
+      const audio = audioRef.current;
+      if (!audio) return;
+
+      if (segmentOnly && index != null) {
+        segmentStopAtMsRef.current = getSegmentEndMs(segmentsRef.current, index);
+      } else {
+        segmentStopAtMsRef.current = null;
+      }
+
+      programmaticSeekRef.current = true;
+      await seekAudio(audio, ms);
+      programmaticSeekRef.current = false;
+
+      setCurrentMs(ms);
+      if (index != null) setActiveIndex(index);
+      try {
+        await audio.play();
+      } catch {
+        /* autoplay policy */
+      }
+    },
+    [],
+  );
 
   seekToRef.current = seekTo;
   segmentsRef.current = segments;
@@ -66,7 +88,9 @@ export default function App() {
     extensions: [
       StarterKit.configure({ heading: false }),
       SegmentHeading,
-      Placeholder.configure({ placeholder: "녹취 내용을 수정하세요. 클릭하면 해당 구간으로 이동합니다." }),
+      Placeholder.configure({
+        placeholder: "녹취 내용을 수정하세요. 클릭하면 해당 구간만 재생됩니다.",
+      }),
     ],
     content: "",
     editorProps: {
@@ -77,7 +101,7 @@ export default function App() {
         const root = editorWrapperRef.current?.querySelector(".ProseMirror") as HTMLElement | null;
         const resolved = resolveSegmentFromClick(root, event.target, segmentsRef.current);
         if (resolved?.startMs != null) {
-          void seekToRef.current(resolved.startMs, resolved.index);
+          void seekToRef.current(resolved.startMs, resolved.index, true);
         }
         return false;
       },
@@ -129,6 +153,18 @@ export default function App() {
     const onTimeUpdate = () => {
       const ms = audio.currentTime * 1000;
       setCurrentMs(ms);
+
+      const stopAt = segmentStopAtMsRef.current;
+      if (stopAt != null && ms >= stopAt) {
+        programmaticSeekRef.current = true;
+        audio.pause();
+        audio.currentTime = stopAt / 1000;
+        programmaticSeekRef.current = false;
+        segmentStopAtMsRef.current = null;
+        setCurrentMs(stopAt);
+        return;
+      }
+
       const index = segments.findIndex(
         (seg) =>
           seg.start_ms != null &&
@@ -139,16 +175,24 @@ export default function App() {
       if (index >= 0) setActiveIndex(index);
     };
 
+    const onSeeked = () => {
+      if (!programmaticSeekRef.current) {
+        segmentStopAtMsRef.current = null;
+      }
+    };
+
     const onLoaded = () => {
       setDurationMs(audio.duration * 1000);
       setAudioReady(Number.isFinite(audio.duration) && audio.duration > 0);
     };
 
     audio.addEventListener("timeupdate", onTimeUpdate);
+    audio.addEventListener("seeked", onSeeked);
     audio.addEventListener("loadedmetadata", onLoaded);
     audio.addEventListener("canplay", onLoaded);
     return () => {
       audio.removeEventListener("timeupdate", onTimeUpdate);
+      audio.removeEventListener("seeked", onSeeked);
       audio.removeEventListener("loadedmetadata", onLoaded);
       audio.removeEventListener("canplay", onLoaded);
     };
@@ -156,6 +200,7 @@ export default function App() {
 
   useEffect(() => {
     setAudioReady(false);
+    segmentStopAtMsRef.current = null;
   }, [job?.audio_url]);
 
   const progress = durationMs > 0 ? (currentMs / durationMs) * 100 : 0;
@@ -294,7 +339,7 @@ export default function App() {
                     key={marker.index}
                     type="button"
                     title={`구간 ${marker.index + 1}`}
-                    onClick={() => seekTo(segments[marker.index]?.start_ms, marker.index)}
+                    onClick={() => seekTo(segments[marker.index]?.start_ms, marker.index, true)}
                     className="absolute top-0 h-full w-1 -translate-x-1/2 bg-violet-500/80"
                     style={{ left: `${marker.left}%` }}
                   />
@@ -306,7 +351,7 @@ export default function App() {
             <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-100 px-4 py-3">
                 <h2 className="text-sm font-semibold text-slate-700">Tiptap 편집</h2>
-                <p className="text-xs text-slate-500">텍스트 클릭 → 해당 구간으로 이동 · 화자 제목 + 본문 수정 가능</p>
+                <p className="text-xs text-slate-500">텍스트 클릭 → 해당 구간만 재생 · 화자 제목 + 본문 수정 가능</p>
               </div>
               <div ref={editorWrapperRef}>
                 <EditorContent editor={editor} />
