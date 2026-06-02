@@ -5,6 +5,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { SegmentHeading } from "./extensions/SegmentHeading";
 import {
   collectSpeakerIds,
+  downloadTranscriptPdf,
   fetchJob,
   formatMs,
   htmlToSegments,
@@ -48,6 +49,7 @@ export default function App() {
   const [durationMs, setDurationMs] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [audioReady, setAudioReady] = useState(false);
@@ -256,6 +258,34 @@ export default function App() {
     }
   };
 
+  const buildTranscriptFromEditor = () => {
+    if (!job || !editor) return null;
+    const updatedSegments = htmlToSegments(editor.getHTML(), segments);
+    return {
+      ...job.transcript_json,
+      speaker_labels: speakerLabels,
+      segments: updatedSegments,
+      text: segmentsToPlainText(updatedSegments, speakerLabels),
+    };
+  };
+
+  const onDownloadPdf = async () => {
+    if (!job || !editor) return;
+    const transcript_json = buildTranscriptFromEditor();
+    if (!transcript_json) return;
+
+    setExportingPdf(true);
+    setError("");
+    try {
+      await downloadTranscriptPdf(job.job_id, transcript_json);
+      setMessage("PDF가 저장되었습니다.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "PDF 저장 실패");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   return (
     <div className="min-h-screen">
       <header className="border-b border-slate-200 bg-white px-6 py-4">
@@ -285,6 +315,14 @@ export default function App() {
               className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
             >
               화자 설정
+            </button>
+            <button
+              type="button"
+              onClick={onDownloadPdf}
+              disabled={!job || exportingPdf}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+            >
+              {exportingPdf ? "PDF 생성 중..." : "PDF 저장"}
             </button>
             <button
               type="button"

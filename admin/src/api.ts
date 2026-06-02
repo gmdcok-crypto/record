@@ -54,6 +54,44 @@ export async function saveTranscript(jobId: string, transcript: TranscriptJson):
   }
 }
 
+function parseFilenameFromDisposition(header: string | null, fallback: string): string {
+  if (!header) return fallback;
+  const utf8Match = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return fallback;
+    }
+  }
+  const plainMatch = header.match(/filename="([^"]+)"/i);
+  return plainMatch?.[1] || fallback;
+}
+
+export async function downloadTranscriptPdf(jobId: string, transcript: TranscriptJson): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/transcript.pdf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transcript_json: transcript }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "PDF 저장 실패");
+  }
+
+  const blob = await res.blob();
+  const filename = parseFilenameFromDisposition(
+    res.headers.get("Content-Disposition"),
+    "transcript.pdf",
+  );
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export function formatMs(ms: number | null | undefined): string {
   if (ms == null) return "--:--";
   const total = Math.floor(ms / 1000);

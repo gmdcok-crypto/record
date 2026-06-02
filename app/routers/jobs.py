@@ -1,6 +1,8 @@
 import re
 from typing import Annotated
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -9,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_optional_db
 from app.services.audio import remux_faststart, should_faststart
+from app.services.pdf_export import build_transcript_pdf
 from app.services.r2 import (
     get_object_bytes,
     get_transcript_json,
@@ -118,6 +121,51 @@ def stream_audio(job_id: str, request: Request) -> Response:
             "Cache-Control": "no-cache",
         },
     )
+
+
+class ExportTranscriptPdfRequest(BaseModel):
+    transcript_json: dict | None = None
+
+
+def _pdf_response(transcript: dict) -> Response:
+    try:
+        pdf_bytes, filename = build_transcript_pdf(transcript)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"PDF export failed: {exc}") from exc
+
+    encoded = quote(filename)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"transcript.pdf\"; filename*=UTF-8''{encoded}",
+            "Cache-Control": "no-cache",
+        },
+    )
+
+
+def _ensure_job_exists(job_id: str) -> None:
+    voice_key = get_voice_object_key(job_id)
+    if not voice_key:
+        raise HTTPException(status_code=404, detail="Voice file not found")
+
+
+@router.get("/{job_id}/transcript.pdf")
+def export_transcript_pdf_get(job_id: str) -> Response:
+    _ensure_job_exists(job_id)
+    transcript = get_transcript_json(job_id)
+    if not transcript:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+    return _pdf_response(transcript)
+
+
+@router.post("/{job_id}/transcript.pdf")
+def export_transcript_pdf_post(job_id: str, body: ExportTranscriptPdfRequest) -> Response:
+    _ensure_job_exists(job_id)
+    transcript = body.transcript_json or get_transcript_json(job_id)
+    if not transcript:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+    return _pdf_response(transcript)
 
 
 @router.put("/{job_id}/transcript")
