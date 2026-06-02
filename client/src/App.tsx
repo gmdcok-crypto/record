@@ -3,7 +3,6 @@ import {
   checkHealth,
   downloadTranscriptPdf,
   fetchJob,
-  getApiUrl,
   resolveUrl,
   saveTranscript,
   speakerLabel,
@@ -113,7 +112,6 @@ export default function App() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [r2Ready, setR2Ready] = useState<boolean | null>(null);
-  const [sonioxReady, setSonioxReady] = useState<boolean | null>(null);
   const [job, setJob] = useState<JobResponse | null>(null);
   const [draft, setDraft] = useState("");
   const [clientName, setClientName] = useState("");
@@ -128,11 +126,9 @@ export default function App() {
     checkHealth()
       .then((h) => {
         setR2Ready(h.r2_configured);
-        setSonioxReady(Boolean(h.soniox_configured));
       })
       .catch(() => {
         setR2Ready(false);
-        setSonioxReady(false);
       });
     setArchive(readArchive());
   }, []);
