@@ -190,19 +190,19 @@ img {
   z-index: 1;
 }
 
-.hero-copy {
-  padding-top: 5cm;
-}
-
 .hero-eyebrow {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
   color: #e7f2ff;
   font-size: 0.8rem;
   font-weight: 600;
   margin-bottom: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
 }
 
 .hero-eyebrow span {
@@ -624,10 +624,6 @@ section {
 }
 
 @media (max-width: 719px) {
-  .hero-copy {
-    padding-top: 2.2rem;
-  }
-
   .nav-actions .btn-ghost {
     display: none;
   }
