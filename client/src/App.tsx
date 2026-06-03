@@ -281,7 +281,7 @@ export default function App() {
     <div className="min-h-dvh bg-slate-950 text-slate-100">
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
         <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr] lg:gap-6">
-          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
+          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20 lg:order-1">
             <div className="mb-5">
               <p className="text-sm font-semibold text-blue-300">1. 파일 업로드</p>
               <h2 className="mt-1 text-xl font-bold text-white">새 녹취 작업 만들기</h2>
@@ -367,7 +367,86 @@ export default function App() {
             </div>
           </section>
 
-          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
+          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20 lg:order-3 lg:col-span-2">
+            <div className="mb-5">
+              <p className="text-sm font-semibold text-emerald-300">3. 보관함</p>
+              <h2 className="mt-1 text-xl font-bold text-white">업로드 파일 확인</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                모바일에서는 여기서 파일을 선택한 뒤 아래 편집 영역으로 내려가 수정하는 흐름이 가장 편합니다.
+              </p>
+            </div>
+
+            <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-950/80 p-3">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                작업번호로 불러오기
+              </label>
+              <div className="flex gap-2">
+                <input
+                  value={jobIdInput}
+                  onChange={(e) => setJobIdInput(e.target.value)}
+                  placeholder="job_id 입력"
+                  className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => void loadJobById(jobIdInput)}
+                  disabled={busy || !jobIdInput.trim()}
+                  className="rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50"
+                >
+                  열기
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {archive.length ? (
+                archive.map((item) => (
+                  <button
+                    key={item.jobId}
+                    type="button"
+                    onClick={() => void loadJobById(item.jobId)}
+                    className="block w-full rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-left transition hover:border-blue-500 hover:bg-slate-900"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-slate-100">{item.title}</p>
+                        <p className="mt-1 truncate text-sm text-slate-400">{item.filename}</p>
+                      </div>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                          item.status === "속기사 재검수 대기"
+                              ? "bg-violet-500/15 text-violet-300"
+                              : item.status === "의뢰인 수정 중"
+                                ? "bg-cyan-500/15 text-cyan-300"
+                                : "bg-amber-500/15 text-amber-300"
+                        }`}
+                      >
+                        {item.status}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+                      <span className="font-mono">{item.jobId}</span>
+                      <span>{formatDateTime(item.updatedAt)}</span>
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-5 py-10 text-center text-sm text-slate-400">
+                  아직 보관함에 저장된 작업이 없습니다.
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={refreshArchive}
+              className="mt-4 w-full rounded-xl border border-slate-700 bg-slate-950 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-800"
+            >
+              보관함 새로고침
+            </button>
+          </section>
+
+          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20 lg:order-2">
             <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-violet-300">2. 직접 편집</p>
@@ -442,88 +521,9 @@ export default function App() {
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-6 py-14 text-center text-sm text-slate-400">
-                업로드만 먼저 진행하고, 속기사 1차 초벌이 준비된 작업을 보관함 또는 작업번호로 열어 수정하세요.
+                업로드만 먼저 진행하고, 보관함에서 초벌 완료 파일을 선택한 뒤 여기서 수정하세요.
               </div>
             )}
-          </section>
-
-          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20 lg:col-span-2">
-            <div className="mb-5">
-              <p className="text-sm font-semibold text-emerald-300">3. 보관함</p>
-              <h2 className="mt-1 text-xl font-bold text-white">업로드 파일 확인</h2>
-              <p className="mt-1 text-sm text-slate-400">
-                속기사 검수 대기, 완료 여부를 확인하고 이전 작업을 다시 열 수 있습니다.
-              </p>
-            </div>
-
-            <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-950/80 p-3">
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                작업번호로 불러오기
-              </label>
-              <div className="flex gap-2">
-                <input
-                  value={jobIdInput}
-                  onChange={(e) => setJobIdInput(e.target.value)}
-                  placeholder="job_id 입력"
-                  className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
-                />
-                <button
-                  type="button"
-                  onClick={() => void loadJobById(jobIdInput)}
-                  disabled={busy || !jobIdInput.trim()}
-                  className="rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50"
-                >
-                  열기
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {archive.length ? (
-                archive.map((item) => (
-                  <button
-                    key={item.jobId}
-                    type="button"
-                    onClick={() => void loadJobById(item.jobId)}
-                    className="block w-full rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-left transition hover:border-blue-500 hover:bg-slate-900"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-100">{item.title}</p>
-                        <p className="mt-1 truncate text-sm text-slate-400">{item.filename}</p>
-                      </div>
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                          item.status === "속기사 재검수 대기"
-                              ? "bg-violet-500/15 text-violet-300"
-                              : item.status === "의뢰인 수정 중"
-                                ? "bg-cyan-500/15 text-cyan-300"
-                                : "bg-amber-500/15 text-amber-300"
-                        }`}
-                      >
-                        {item.status}
-                      </span>
-                    </div>
-                    <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-                      <span className="font-mono">{item.jobId}</span>
-                      <span>{formatDateTime(item.updatedAt)}</span>
-                    </div>
-                  </button>
-                ))
-              ) : (
-                <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-5 py-10 text-center text-sm text-slate-400">
-                  아직 보관함에 저장된 작업이 없습니다.
-                </div>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={refreshArchive}
-              className="mt-4 w-full rounded-xl border border-slate-700 bg-slate-950 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-800"
-            >
-              보관함 새로고침
-            </button>
           </section>
         </div>
 
