@@ -26,6 +26,7 @@ type ArchiveItem = {
 
 const ACCEPT = "audio/*,video/mp4,video/webm,.wav,.mp3,.m4a,.flac,.ogg";
 const STORAGE_KEY = "client-record-archive";
+const TEST_CLIENT_NAME = "홍길동";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -45,6 +46,13 @@ function formatDateTime(value: string): string {
   } catch {
     return value;
   }
+}
+
+function formatDateCode(value = new Date()): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}${month}${day}`;
 }
 
 function readArchive(): ArchiveItem[] {
@@ -104,6 +112,14 @@ function upsertArchiveItem(current: ArchiveItem[], next: ArchiveItem): ArchiveIt
   return [next, ...filtered].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
+function buildAutoDisplayName(items: ArchiveItem[], dateCode: string): string {
+  const countForToday = items.filter((item) =>
+    item.title.startsWith(`${TEST_CLIENT_NAME}_녹취_${dateCode}_`),
+  ).length;
+  const sequence = String(countForToday + 1).padStart(2, "0");
+  return `${TEST_CLIENT_NAME}_녹취_${dateCode}_${sequence}`;
+}
+
 export default function App() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -114,8 +130,6 @@ export default function App() {
   const [r2Ready, setR2Ready] = useState<boolean | null>(null);
   const [job, setJob] = useState<JobResponse | null>(null);
   const [draft, setDraft] = useState("");
-  const [clientName, setClientName] = useState("");
-  const [jobTitle, setJobTitle] = useState("");
   const [jobIdInput, setJobIdInput] = useState("");
   const [archive, setArchive] = useState<ArchiveItem[]>([]);
   const [saving, setSaving] = useState(false);
@@ -135,9 +149,11 @@ export default function App() {
 
   const busy = step === "uploading" || loadingJob || saving || downloadingPdf;
   const currentTranscript = useMemo(() => draftToTranscript(job?.transcript_json ?? null, draft), [job, draft]);
+  const dateCode = useMemo(() => formatDateCode(), []);
+  const autoDisplayName = useMemo(() => buildAutoDisplayName(archive, dateCode), [archive, dateCode]);
   const currentTitle = useMemo(() => {
-    return jobTitle.trim() || job?.transcript_json.filename || selectedFile?.name || "새 녹취 작업";
-  }, [jobTitle, job, selectedFile]);
+    return job?.transcript_json.filename || autoDisplayName || selectedFile?.name || "새 녹취 작업";
+  }, [job, selectedFile, autoDisplayName]);
 
   const refreshArchive = () => setArchive(readArchive());
 
@@ -172,7 +188,6 @@ export default function App() {
       setJob(data);
       setJobIdInput(data.job_id);
       setDraft(buildDraftFromTranscript(data.transcript_json));
-      setJobTitle(data.transcript_json.filename || "");
       setStep("ready");
       pushArchive("의뢰인 수정 중", data.transcript_json.filename);
       setMessage("속기사가 작성한 1차 초벌 문서를 불러왔습니다.");
@@ -223,7 +238,7 @@ export default function App() {
     setMessage("");
     try {
       await saveTranscript(job.job_id, currentTranscript, {
-        editor: clientName.trim() || "client",
+        editor: TEST_CLIENT_NAME,
         changeSummary: "의뢰인 초안 저장",
       });
       setJob({
@@ -246,7 +261,7 @@ export default function App() {
     setMessage("");
     try {
       await saveTranscript(job.job_id, currentTranscript, {
-        editor: clientName.trim() || "client",
+        editor: TEST_CLIENT_NAME,
         changeSummary: "의뢰인 수정 후 속기사 검수 요청",
       });
       setJob({
@@ -285,27 +300,16 @@ export default function App() {
             <div className="mb-5">
               <p className="text-sm font-semibold text-blue-300">1. 파일 업로드</p>
               <h2 className="mt-1 text-xl font-bold text-white">새 녹취 작업 만들기</h2>
+              <p className="mt-2 text-sm text-slate-400">
+                테스트 단계에서는 의뢰자명을 <span className="font-semibold text-slate-100">{TEST_CLIENT_NAME}</span>으로 고정하고,
+                표시명은 자동 생성합니다.
+              </p>
             </div>
 
             <div className="space-y-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-300">의뢰자명</label>
-                <input
-                  value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
-                  placeholder="예: 홍길동"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none ring-0 transition placeholder:text-slate-500 focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-300">표시명 / 사건명</label>
-                <input
-                  value={jobTitle}
-                  onChange={(e) => setJobTitle(e.target.value)}
-                  placeholder="예: 홍길동_민사녹취_20260602"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none ring-0 transition placeholder:text-slate-500 focus:border-blue-500"
-                />
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/70 px-4 py-3 text-sm">
+                <div className="text-slate-500">자동 생성 표시명</div>
+                <div className="mt-1 font-semibold text-slate-100">{autoDisplayName}</div>
               </div>
 
               <input
