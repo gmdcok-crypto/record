@@ -124,6 +124,10 @@ function normalizeUploadFilename(filename: string): string {
   return filename.trim();
 }
 
+function fileIdentity(file: File): string {
+  return `${normalizeUploadFilename(file.name)}::${file.size}::${file.lastModified}`;
+}
+
 export default function App() {
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -204,18 +208,25 @@ export default function App() {
   };
 
   const onSelect = (files: FileList | null) => {
-    const nextFiles = files ? Array.from(files) : [];
-    const duplicateFile = nextFiles.find((file) => archivedFilenames.has(normalizeUploadFilename(file.name)));
+    const incomingFiles = files ? Array.from(files) : [];
+    if (!incomingFiles.length) return;
+
+    const duplicateFile = incomingFiles.find((file) => archivedFilenames.has(normalizeUploadFilename(file.name)));
     if (duplicateFile) {
       openDuplicateDialog(`이미 업로드된 파일입니다: ${duplicateFile.name}`);
       return;
     }
 
-    setSelectedFiles(nextFiles);
+    setSelectedFiles((prev) => {
+      const existing = new Set(prev.map(fileIdentity));
+      const appended = incomingFiles.filter((file) => !existing.has(fileIdentity(file)));
+      return [...prev, ...appended];
+    });
     setStep("idle");
     setProgress(0);
     setError("");
     setMessage("");
+    if (inputRef.current) inputRef.current.value = "";
   };
 
   const onDropFiles = (event: React.DragEvent<HTMLElement>) => {
