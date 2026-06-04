@@ -120,6 +120,12 @@ function buildAutoDisplayName(items: ArchiveItem[], dateCode: string): string {
   return `${TEST_CLIENT_NAME}_녹취_${dateCode}_${sequence}`;
 }
 
+function hasDuplicateFilename(items: ArchiveItem[], filename: string): boolean {
+  const normalized = filename.trim().toLowerCase();
+  if (!normalized) return false;
+  return items.some((item) => item.filename.trim().toLowerCase() === normalized);
+}
+
 export default function App() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -200,6 +206,14 @@ export default function App() {
 
   const onUpload = async () => {
     if (!selectedFile) return;
+    if (
+      hasDuplicateFilename(archive, selectedFile.name) &&
+      !window.confirm(`"${selectedFile.name}" 파일이 이미 업로드된 이력이 있습니다.\n그래도 다시 업로드할까요?`)
+    ) {
+      setMessage("중복 업로드를 취소했습니다.");
+      setError("");
+      return;
+    }
     const fileToUpload = selectedFile;
     const uploadTitle = currentTitle;
     setStep("uploading");
