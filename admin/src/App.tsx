@@ -1,4 +1,16 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+import {
+  assignJob,
+  fetchAdminOverview,
+  fetchJob,
+  updateInvoiceStatus,
+  updateJobStatus,
+  updateSettlementStatus,
+  updateTranscriber,
+  type AdminOverview,
+  type JobResponse,
+} from "./api";
 
 type MenuKey =
   | "dashboard"
@@ -59,6 +71,7 @@ type Transcriber = {
 };
 
 type SettlementItem = {
+  id: number;
   month: string;
   transcriber: string;
   jobs: number;
@@ -68,178 +81,149 @@ type SettlementItem = {
 };
 
 type SalesItem = {
+  id: number;
   month: string;
   client: string;
   billed: number;
   collected: number;
   outstanding: number;
   margin: string;
+  status: string;
 };
 
-const MENU: MenuItem[] = [
+type ActivityItem = {
+  time: string;
+  title: string;
+};
+
+const MENU_BASE: Array<Omit<MenuItem, "count">> = [
   { key: "dashboard", label: "대시보드" },
-  { key: "jobs", label: "의뢰 / 파일 관리", count: "148" },
-  { key: "assignments", label: "배정 관리", count: "19" },
-  { key: "transcribers", label: "속기사 관리", count: "24" },
-  { key: "progress", label: "진행 현황", count: "36" },
+  { key: "jobs", label: "의뢰 / 파일 관리" },
+  { key: "assignments", label: "배정 관리" },
+  { key: "transcribers", label: "속기사 관리" },
+  { key: "progress", label: "진행 현황" },
   { key: "settlements", label: "정산 관리" },
   { key: "sales", label: "매출 관리" },
   { key: "reports", label: "집계" },
   { key: "analytics", label: "분석" },
 ];
 
-const JOBS: JobItem[] = [
-  {
-    id: "REC-20260604-001",
-    client: "세종법무법인",
-    title: "형사사건 녹취 초안",
-    filename: "meeting_0604_client01.m4a",
-    uploadedAt: "2026-06-04 09:12",
-    dueAt: "2026-06-04 18:00",
-    priority: "긴급",
-    status: "속기사 작업 중",
-    assignee: "김민서",
-    progress: 68,
-    duration: "01:42:18",
-    salesAmount: 420000,
-    settlementAmount: 180000,
-    paymentStatus: "부분 입금",
-    settlementStatus: "정산 대기",
-  },
-  {
-    id: "REC-20260604-002",
-    client: "하나손해보험",
-    title: "보험 상담 통화 정리",
-    filename: "consulting_batch_12.wav",
-    uploadedAt: "2026-06-04 08:45",
-    dueAt: "2026-06-05 11:00",
-    priority: "일반",
-    status: "배정 대기",
-    assignee: "-",
-    progress: 12,
-    duration: "00:38:06",
-    salesAmount: 130000,
-    settlementAmount: 52000,
-    paymentStatus: "미수",
-    settlementStatus: "정산 대기",
-  },
-  {
-    id: "REC-20260603-118",
-    client: "케이메디컬",
-    title: "의료 자문 회의록",
-    filename: "medical_roundtable.mp3",
-    uploadedAt: "2026-06-03 16:20",
-    dueAt: "2026-06-04 16:00",
-    priority: "일반",
-    status: "의뢰인 수정 중",
-    assignee: "박지안",
-    progress: 82,
-    duration: "00:56:44",
-    salesAmount: 250000,
-    settlementAmount: 98000,
-    paymentStatus: "입금 완료",
-    settlementStatus: "정산 확정",
-  },
-  {
-    id: "REC-20260603-109",
-    client: "아인파트너스",
-    title: "임원 인터뷰 녹취",
-    filename: "board_interview_2.webm",
-    uploadedAt: "2026-06-03 14:08",
-    dueAt: "2026-06-04 13:00",
-    priority: "긴급",
-    status: "재검수 대기",
-    assignee: "정수빈",
-    progress: 91,
-    duration: "01:17:09",
-    salesAmount: 390000,
-    settlementAmount: 160000,
-    paymentStatus: "미수",
-    settlementStatus: "정산 대기",
-  },
-  {
-    id: "REC-20260602-094",
-    client: "블루컴 본사",
-    title: "제품 전략 회의",
-    filename: "strategy_room_0602.mp4",
-    uploadedAt: "2026-06-02 11:30",
-    dueAt: "2026-06-03 17:00",
-    priority: "일반",
-    status: "최종 완료",
-    assignee: "김민서",
-    progress: 100,
-    duration: "01:08:51",
-    salesAmount: 310000,
-    settlementAmount: 130000,
-    paymentStatus: "입금 완료",
-    settlementStatus: "지급 완료",
-  },
-];
-
-const TRANSCRIBERS: Transcriber[] = [
-  {
-    id: "TR-001",
-    name: "김민서",
-    specialty: "법률 / 인터뷰",
-    status: "작업 중",
-    activeJobs: 6,
-    monthlyCapacity: 28,
-    unitPrice: "분당 1,800원",
-    qualityScore: "4.9 / 5",
-  },
-  {
-    id: "TR-002",
-    name: "박지안",
-    specialty: "의료 / 회의록",
-    status: "작업 가능",
-    activeJobs: 3,
-    monthlyCapacity: 24,
-    unitPrice: "분당 1,700원",
-    qualityScore: "4.7 / 5",
-  },
-  {
-    id: "TR-003",
-    name: "정수빈",
-    specialty: "방송 / 대담",
-    status: "작업 중",
-    activeJobs: 5,
-    monthlyCapacity: 26,
-    unitPrice: "분당 1,850원",
-    qualityScore: "4.8 / 5",
-  },
-  {
-    id: "TR-004",
-    name: "이도현",
-    specialty: "교육 / 세미나",
-    status: "휴무",
-    activeJobs: 0,
-    monthlyCapacity: 20,
-    unitPrice: "분당 1,500원",
-    qualityScore: "4.6 / 5",
-  },
-];
-
-const SETTLEMENTS: SettlementItem[] = [
-  { month: "2026-06", transcriber: "김민서", jobs: 18, amount: 2180000, status: "정산 대기", paidAt: "-" },
-  { month: "2026-06", transcriber: "박지안", jobs: 11, amount: 1240000, status: "정산 확정", paidAt: "-" },
-  { month: "2026-05", transcriber: "정수빈", jobs: 21, amount: 2490000, status: "지급 완료", paidAt: "2026-06-03" },
-];
-
-const SALES: SalesItem[] = [
-  { month: "2026-06", client: "세종법무법인", billed: 6480000, collected: 4200000, outstanding: 2280000, margin: "41%" },
-  { month: "2026-06", client: "하나손해보험", billed: 3920000, collected: 1810000, outstanding: 2110000, margin: "38%" },
-  { month: "2026-06", client: "케이메디컬", billed: 2870000, collected: 2870000, outstanding: 0, margin: "44%" },
-];
-
-const ACTIVITY_FEED = [
-  { time: "10:24", title: "REC-20260604-001 재배정 요청", detail: "운영자 김나연이 김민서 유지로 확정" },
-  { time: "09:58", title: "세종법무법인 긴급 의뢰 등록", detail: "마감 18:00, 우선순위 상향" },
-  { time: "09:21", title: "박지안 정산 확정", detail: "6월 1차 정산 확정 1,240,000원" },
-  { time: "08:46", title: "하나손해보험 신규 파일 업로드", detail: "REC-20260604-002 생성" },
-];
-
 function formatCurrency(value: number): string {
   return `${value.toLocaleString("ko-KR")}원`;
+}
+
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return "-";
+  try {
+    return new Date(value).toLocaleString("ko-KR", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return value;
+  }
+}
+
+function formatCompactDateTime(value: string | null | undefined): string {
+  if (!value) return "-";
+  try {
+    return new Date(value).toLocaleString("ko-KR", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return value;
+  }
+}
+
+function mapJobStatus(status: string): JobStatus {
+  switch (status) {
+    case "waiting_assignment":
+    case "uploaded":
+      return "배정 대기";
+    case "assigned":
+    case "working":
+      return "속기사 작업 중";
+    case "first_done":
+      return "1차 완료";
+    case "client_editing":
+      return "의뢰인 수정 중";
+    case "review_waiting":
+      return "재검수 대기";
+    case "final_done":
+    case "pdf_sent":
+      return "최종 완료";
+    default:
+      return "배정 대기";
+  }
+}
+
+function mapPaymentStatus(status: string): PaymentStatus {
+  switch (status) {
+    case "paid":
+      return "입금 완료";
+    case "partial_paid":
+      return "부분 입금";
+    default:
+      return "미수";
+  }
+}
+
+function mapSettlementStatus(status: string): SettlementStatus {
+  switch (status) {
+    case "paid":
+      return "지급 완료";
+    case "confirmed":
+      return "정산 확정";
+    default:
+      return "정산 대기";
+  }
+}
+
+function mapTranscriberStatus(status: string, currentLoad: number): TranscriberStatus {
+  if (status === "inactive") return "비활성";
+  if (status === "vacation" || status === "off") return "휴무";
+  if (status === "working" || currentLoad > 0) return "작업 중";
+  return "작업 가능";
+}
+
+function marginFromSale(billed: number, collected: number): string {
+  if (!billed) return "0%";
+  return `${Math.round((collected / billed) * 100)}%`;
+}
+
+function activityTitle(job: JobItem): string {
+  switch (job.status) {
+    case "배정 대기":
+      return `${job.id} 신규 의뢰 접수`;
+    case "속기사 작업 중":
+      return `${job.id} 속기사 작업 진행`;
+    case "의뢰인 수정 중":
+      return `${job.id} 의뢰인 수정 진행`;
+    case "재검수 대기":
+      return `${job.id} 재검수 대기`;
+    case "최종 완료":
+      return `${job.id} 최종본 완료`;
+    default:
+      return `${job.id} 작업 업데이트`;
+  }
+}
+
+function transcriptPreview(job: JobResponse | null): string {
+  if (!job?.transcript_json) return "전사 내용이 없습니다.";
+  const segments = job.transcript_json.segments ?? [];
+  if (segments.length) {
+    return segments
+      .slice(0, 6)
+      .map((segment) => `${segment.speaker}: ${segment.text}`)
+      .join("\n\n");
+  }
+  return (job.transcript_json.text || job.transcript_json.plain_text || "전사 내용이 없습니다.").trim();
 }
 
 function statusTone(status: JobStatus | SettlementStatus | PaymentStatus | TranscriberStatus): string {
@@ -329,9 +313,227 @@ function App() {
   const [activeMenu, setActiveMenu] = useState<MenuKey>("dashboard");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"전체" | JobStatus>("전체");
+  const [overview, setOverview] = useState<AdminOverview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [busyMessage, setBusyMessage] = useState("");
+  const [detailJobId, setDetailJobId] = useState<string | null>(null);
+  const [detailJob, setDetailJob] = useState<JobResponse | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [assignTarget, setAssignTarget] = useState<JobItem | null>(null);
+  const [selectedTranscriberCode, setSelectedTranscriberCode] = useState("");
+
+  const loadOverview = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const data = await fetchAdminOverview();
+      setOverview(data);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError("");
+    fetchAdminOverview()
+      .then((data) => {
+        if (!alive) return;
+        setOverview(data);
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setError(err instanceof Error ? err.message : "관리자 데이터를 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const jobs = useMemo<JobItem[]>(() => {
+    return (overview?.jobs ?? []).map((job) => ({
+      id: job.id,
+      client: job.client,
+      title: job.title,
+      filename: job.filename,
+      uploadedAt: job.uploaded_at ? formatDateTime(job.uploaded_at) : "-",
+      dueAt: job.due_at ? formatDateTime(job.due_at) : "-",
+      priority: job.priority === "urgent" ? "긴급" : "일반",
+      status: mapJobStatus(job.status),
+      assignee: job.assignee || "-",
+      progress: job.progress,
+      duration: job.duration,
+      salesAmount: job.sales_amount,
+      settlementAmount: job.settlement_amount,
+      paymentStatus: mapPaymentStatus(job.payment_status),
+      settlementStatus: mapSettlementStatus(job.settlement_status),
+    }));
+  }, [overview]);
+
+  const transcribers = useMemo<Transcriber[]>(() => {
+    return (overview?.transcribers ?? []).map((person) => ({
+      id: person.code,
+      name: person.name,
+      specialty: person.specialty || "-",
+      status: mapTranscriberStatus(person.status, person.current_load),
+      activeJobs: person.current_load,
+      monthlyCapacity: person.monthly_capacity ?? 0,
+      unitPrice: `분당 ${Math.round(person.unit_price).toLocaleString("ko-KR")}원`,
+      qualityScore: `${person.quality_score.toFixed(1)} / 5`,
+    }));
+  }, [overview]);
+
+  const settlements = useMemo<SettlementItem[]>(() => {
+    return (overview?.settlements ?? []).map((item) => ({
+      id: item.id,
+      month: item.month,
+      transcriber: String(item.transcriber),
+      jobs: item.jobs,
+      amount: item.amount,
+      status: mapSettlementStatus(item.status),
+      paidAt: item.paid_at ? formatDateTime(item.paid_at) : "-",
+    }));
+  }, [overview]);
+
+  const sales = useMemo<SalesItem[]>(() => {
+    return (overview?.sales ?? []).map((item) => ({
+      id: item.id,
+      month: item.month,
+      client: item.client,
+      billed: item.billed,
+      collected: item.collected,
+      outstanding: item.outstanding,
+      margin: item.margin || marginFromSale(item.billed, item.collected),
+      status: item.status,
+    }));
+  }, [overview]);
+
+  const runAdminAction = async (message: string, action: () => Promise<void>) => {
+    try {
+      setBusyMessage(message);
+      setError("");
+      await action();
+      await loadOverview();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "관리 작업 실패");
+      setLoading(false);
+    } finally {
+      setBusyMessage("");
+    }
+  };
+
+  const handleAssign = async (jobId: string, transcriberCode = "TR-001") => {
+    await runAdminAction("배정 처리 중입니다.", async () => {
+      await assignJob(jobId, transcriberCode, "관리자 화면 배정");
+    });
+  };
+
+  const openDetailModal = async (jobId: string) => {
+    try {
+      setDetailJobId(jobId);
+      setDetailJob(null);
+      setDetailLoading(true);
+      const data = await fetchJob(jobId);
+      setDetailJob(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "상세 정보를 불러오지 못했습니다.");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const closeDetailModal = () => {
+    setDetailJobId(null);
+    setDetailJob(null);
+    setDetailLoading(false);
+  };
+
+  const openAssignModal = (job: JobItem) => {
+    setAssignTarget(job);
+    setSelectedTranscriberCode(transcribers[0]?.id ?? "TR-001");
+  };
+
+  const closeAssignModal = () => {
+    setAssignTarget(null);
+    setSelectedTranscriberCode("");
+  };
+
+  const confirmAssignModal = async () => {
+    if (!assignTarget || !selectedTranscriberCode) return;
+    await handleAssign(assignTarget.id, selectedTranscriberCode);
+    closeAssignModal();
+  };
+
+  const handleJobAdvance = async (job: JobItem) => {
+    const nextStatus: Record<JobStatus, string> = {
+      "배정 대기": "assigned",
+      "속기사 작업 중": "review_waiting",
+      "1차 완료": "client_editing",
+      "의뢰인 수정 중": "review_waiting",
+      "재검수 대기": "final_done",
+      "최종 완료": "pdf_sent",
+    };
+    await runAdminAction("상태 변경 중입니다.", async () => {
+      await updateJobStatus(job.id, nextStatus[job.status], "관리자 상태 변경");
+    });
+  };
+
+  const handleTranscriberToggle = async (person: Transcriber) => {
+    const nextStatus =
+      person.status === "작업 가능" ? "working" : person.status === "작업 중" ? "available" : "available";
+    await runAdminAction("속기사 상태 변경 중입니다.", async () => {
+      await updateTranscriber(person.id, { status: nextStatus });
+    });
+  };
+
+  const handleSettlementConfirm = async (item: SettlementItem) => {
+    const nextStatus = item.status === "정산 대기" ? "confirmed" : "paid";
+    await runAdminAction("정산 상태 변경 중입니다.", async () => {
+      await updateSettlementStatus(item.id, nextStatus);
+    });
+  };
+
+  const handleInvoiceConfirm = async (item: SalesItem) => {
+    const nextStatus = item.status === "paid" ? "paid" : "paid";
+    await runAdminAction("매출 상태 변경 중입니다.", async () => {
+      await updateInvoiceStatus(item.id, nextStatus);
+    });
+  };
+
+  const activityFeed = useMemo<ActivityItem[]>(() => {
+    return jobs.slice(0, 4).map((job) => ({
+      time: formatCompactDateTime(job.uploadedAt),
+      title: activityTitle(job),
+    }));
+  }, [jobs]);
+
+  const menuItems = useMemo<MenuItem[]>(() => {
+    return MENU_BASE.map((item) => {
+      switch (item.key) {
+        case "jobs":
+          return { ...item, count: `${jobs.length}` };
+        case "assignments":
+          return {
+            ...item,
+            count: `${jobs.filter((job) => job.status === "배정 대기" || job.status === "재검수 대기").length}`,
+          };
+        case "transcribers":
+          return { ...item, count: `${transcribers.length}` };
+        case "progress":
+          return { ...item, count: `${jobs.filter((job) => job.status !== "최종 완료").length}` };
+        default:
+          return item;
+      }
+    });
+  }, [jobs, transcribers]);
 
   const visibleJobs = useMemo(() => {
-    return JOBS.filter((job) => {
+    return jobs.filter((job) => {
       const matchesQuery =
         !query.trim() ||
         [job.id, job.client, job.title, job.filename, job.assignee]
@@ -341,18 +543,19 @@ function App() {
       const matchesStatus = statusFilter === "전체" || job.status === statusFilter;
       return matchesQuery && matchesStatus;
     });
-  }, [query, statusFilter]);
+  }, [jobs, query, statusFilter]);
 
   const dashboardStats = useMemo(() => {
-    const totalSales = JOBS.reduce((sum, job) => sum + job.salesAmount, 0);
-    const totalSettlements = JOBS.reduce((sum, job) => sum + job.settlementAmount, 0);
-    const outstanding = JOBS.filter((job) => job.paymentStatus !== "입금 완료").reduce(
-      (sum, job) => sum + job.salesAmount,
-      0,
-    );
-    const waitingAssign = JOBS.filter((job) => job.status === "배정 대기").length;
-    return { totalSales, totalSettlements, outstanding, waitingAssign };
-  }, []);
+    return {
+      totalSales: overview?.stats.total_sales ?? 0,
+      totalSettlements: overview?.stats.total_settlements ?? 0,
+      outstanding: overview?.stats.outstanding ?? 0,
+      waitingAssign: overview?.stats.waiting_assignment ?? 0,
+      working: overview?.stats.working ?? 0,
+      finalDone: overview?.stats.final_done ?? 0,
+      totalJobs: overview?.stats.total_jobs ?? 0,
+    };
+  }, [overview]);
 
   const renderDashboard = () => (
     <div className="space-y-6">
@@ -366,15 +569,18 @@ function App() {
       <div className="grid gap-6 xl:grid-cols-[1.45fr_0.9fr]">
         <SectionCard
           title="긴급 작업 보드"
-          subtitle="오늘 우선 대응이 필요한 작업을 기준으로 정렬한 운영 보드"
           action={
-            <button className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10">
+            <button
+              type="button"
+              onClick={() => setActiveMenu("jobs")}
+              className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10"
+            >
               전체 작업 보기
             </button>
           }
         >
           <div className="space-y-3">
-            {JOBS.filter((job) => job.priority === "긴급").map((job) => (
+            {jobs.filter((job) => job.priority === "긴급").map((job) => (
               <div
                 key={job.id}
                 className="rounded-2xl border border-white/8 bg-slate-950/60 p-4 transition hover:border-cyan-400/30"
@@ -390,11 +596,9 @@ function App() {
                       </span>
                     </div>
                     <h3 className="mt-3 text-base font-semibold text-white">{job.title}</h3>
-                    <p className="mt-1 text-sm text-slate-400">
-                      {job.client} · {job.filename}
-                    </p>
+                    <p className="mt-1 text-sm text-slate-300">{job.client}</p>
                   </div>
-                  <div className="text-right text-sm text-slate-400">
+                  <div className="text-right text-sm text-slate-300">
                     <p>담당: {job.assignee}</p>
                     <p className="mt-1">마감: {job.dueAt}</p>
                   </div>
@@ -411,14 +615,13 @@ function App() {
           </div>
         </SectionCard>
 
-        <SectionCard title="운영 피드" subtitle="업로드, 배정, 정산 관련 최근 활동">
+        <SectionCard title="운영 피드">
           <div className="space-y-4">
-            {ACTIVITY_FEED.map((item) => (
+            {activityFeed.map((item) => (
               <div key={`${item.time}-${item.title}`} className="flex gap-3">
                 <div className="mt-1 h-2.5 w-2.5 rounded-full bg-cyan-400" />
                 <div>
                   <p className="text-sm font-medium text-white">{item.title}</p>
-                  <p className="mt-1 text-sm text-slate-400">{item.detail}</p>
                   <p className="mt-1 text-xs text-slate-500">{item.time}</p>
                 </div>
               </div>
@@ -432,14 +635,24 @@ function App() {
   const renderJobs = () => (
     <SectionCard
       title="의뢰 / 파일 관리"
-      subtitle="의뢰인이 업로드한 파일을 조회하고 담당자, 마감일, 상태를 운영 단위로 관리합니다."
       action={
         <div className="flex gap-2">
-          <button className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10">
+          <button
+            type="button"
+            onClick={() => {
+              const firstWaiting = visibleJobs.find((job) => job.status === "배정 대기" || job.status === "재검수 대기");
+              if (firstWaiting) openAssignModal(firstWaiting);
+            }}
+            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10"
+          >
             일괄 배정
           </button>
-          <button className="rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400">
-            신규 의뢰 등록
+          <button
+            type="button"
+            onClick={() => setActiveMenu("assignments")}
+            className="rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+          >
+            배정 화면 이동
           </button>
         </div>
       }
@@ -467,8 +680,7 @@ function App() {
       </div>
 
       <div className="overflow-hidden rounded-3xl border border-white/10">
-        <div className="hidden grid-cols-[1.2fr_1.2fr_1fr_0.9fr_0.8fr_0.8fr_0.8fr] gap-4 bg-slate-950/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 lg:grid">
-          <span>작업</span>
+        <div className="hidden grid-cols-[1.5fr_1fr_0.9fr_0.8fr_0.8fr_0.8fr] gap-4 bg-slate-950/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 lg:grid">
           <span>의뢰인 / 파일</span>
           <span>담당 / 마감</span>
           <span>상태</span>
@@ -478,14 +690,13 @@ function App() {
         </div>
         <div className="divide-y divide-white/5">
           {visibleJobs.map((job) => (
-            <div key={job.id} className="grid gap-4 bg-slate-950/40 px-4 py-4 lg:grid-cols-[1.2fr_1.2fr_1fr_0.9fr_0.8fr_0.8fr_0.8fr] lg:items-center">
+            <div key={job.id} className="grid gap-4 bg-slate-950/40 px-4 py-4 lg:grid-cols-[1.5fr_1fr_0.9fr_0.8fr_0.8fr_0.8fr] lg:items-center">
               <div>
                 <p className="font-semibold text-white">{job.title}</p>
-                <p className="mt-1 text-xs text-slate-500">{job.id}</p>
-              </div>
-              <div>
-                <p className="text-sm text-slate-200">{job.client}</p>
-                <p className="mt-1 text-xs text-slate-500">{job.filename}</p>
+                <p className="mt-1 text-sm text-slate-200">{job.client}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {job.id} · {job.filename}
+                </p>
               </div>
               <div className="text-sm text-slate-300">
                 <p>{job.assignee}</p>
@@ -508,10 +719,18 @@ function App() {
                 <p className="mt-1 text-xs text-slate-500">{job.paymentStatus}</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/5">
+                <button
+                  type="button"
+                  onClick={() => void openDetailModal(job.id)}
+                  className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/5"
+                >
                   상세
                 </button>
-                <button className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-300 transition hover:bg-cyan-500/20">
+                <button
+                  type="button"
+                  onClick={() => openAssignModal(job)}
+                  className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-300 transition hover:bg-cyan-500/20"
+                >
                   배정
                 </button>
               </div>
@@ -524,30 +743,33 @@ function App() {
 
   const renderAssignments = () => (
     <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-      <SectionCard title="배정 대기 작업" subtitle="가용 인원과 전문 분야를 기준으로 빠르게 배정하는 운영 화면">
+      <SectionCard title="배정 대기 작업">
         <div className="space-y-3">
-          {JOBS.filter((job) => job.status === "배정 대기" || job.status === "재검수 대기").map((job) => (
+          {jobs.filter((job) => job.status === "배정 대기" || job.status === "재검수 대기").map((job) => (
             <div key={job.id} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold text-white">{job.title}</p>
-                  <p className="mt-1 text-sm text-slate-400">
-                    {job.client} · {job.duration} · 마감 {job.dueAt}
-                  </p>
+                  <p className="mt-1 text-sm text-slate-300">{job.client}</p>
                 </div>
                 <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(job.status)}`}>
                   {job.status}
                 </span>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
-                <button className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950">
-                  김민서에게 배정
+                <button
+                  type="button"
+                  onClick={() => openAssignModal(job)}
+                  className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950"
+                >
+                  배정
                 </button>
-                <button className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200">
-                  후보 보기
-                </button>
-                <button className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200">
-                  배정 메모
+                <button
+                  type="button"
+                  onClick={() => void openDetailModal(job.id)}
+                  className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200"
+                >
+                  상세
                 </button>
               </div>
             </div>
@@ -555,14 +777,13 @@ function App() {
         </div>
       </SectionCard>
 
-      <SectionCard title="속기사 가용 현황" subtitle="전문 분야, 현재 작업량, 품질 지표를 보고 배정 판단">
+      <SectionCard title="속기사 가용 현황">
         <div className="space-y-3">
-          {TRANSCRIBERS.map((person) => (
+          {transcribers.map((person) => (
             <div key={person.id} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold text-white">{person.name}</p>
-                  <p className="mt-1 text-sm text-slate-400">{person.specialty}</p>
                 </div>
                 <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(person.status)}`}>
                   {person.status}
@@ -592,20 +813,22 @@ function App() {
   const renderTranscribers = () => (
     <SectionCard
       title="속기사 관리"
-      subtitle="속기사 마스터, 상태, 단가, 전문 분야를 관리하는 운영 화면"
       action={
-        <button className="rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400">
-          속기사 등록
+        <button
+          type="button"
+          onClick={() => setActiveMenu("assignments")}
+          className="rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+        >
+          배정 보기
         </button>
       }
     >
       <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
-        {TRANSCRIBERS.map((person) => (
+        {transcribers.map((person) => (
           <div key={person.id} className="rounded-3xl border border-white/10 bg-slate-950/60 p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-lg font-semibold text-white">{person.name}</p>
-                <p className="mt-1 text-sm text-slate-400">{person.specialty}</p>
               </div>
               <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(person.status)}`}>
                 {person.status}
@@ -630,10 +853,23 @@ function App() {
               </div>
             </div>
             <div className="mt-5 flex gap-2">
-              <button className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200">
-                수정
+              <button
+                type="button"
+                onClick={() =>
+                  void runAdminAction("속기사 단가 조정 중입니다.", async () => {
+                    const unitPrice = Number(person.unitPrice.replace(/[^\d]/g, "")) || 0;
+                    await updateTranscriber(person.id, { unit_price: unitPrice + 100 });
+                  })
+                }
+                className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200"
+              >
+                단가 +100
               </button>
-              <button className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200">
+              <button
+                type="button"
+                onClick={() => void handleTranscriberToggle(person)}
+                className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200"
+              >
                 상태 변경
               </button>
             </div>
@@ -644,19 +880,21 @@ function App() {
   );
 
   const renderProgress = () => (
-    <SectionCard title="진행 현황" subtitle="작업 상태 분포와 지연 위험 건을 중심으로 보는 화면">
+    <SectionCard title="진행 현황">
       <div className="grid gap-4 lg:grid-cols-3">
         {[
-          { title: "배정 대기", count: "19건", tone: "bg-amber-500/15 text-amber-300" },
-          { title: "속기사 작업 중", count: "11건", tone: "bg-cyan-500/15 text-cyan-300" },
-          { title: "마감 임박", count: "7건", tone: "bg-rose-500/15 text-rose-300" },
+          { title: "배정 대기", count: `${dashboardStats.waitingAssign}건`, tone: "bg-amber-500/15 text-amber-300" },
+          { title: "속기사 작업 중", count: `${dashboardStats.working}건`, tone: "bg-cyan-500/15 text-cyan-300" },
+          {
+            title: "최종 완료",
+            count: `${dashboardStats.finalDone}건`,
+            tone: "bg-emerald-500/15 text-emerald-300",
+          },
         ].map((item) => (
           <div key={item.title} className="rounded-3xl border border-white/10 bg-slate-950/60 p-5">
             <p className="text-sm text-slate-500">{item.title}</p>
             <p className="mt-3 text-3xl font-semibold text-white">{item.count}</p>
-            <div className={`mt-4 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${item.tone}`}>
-              운영 우선 모니터링
-            </div>
+            <div className={`mt-4 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${item.tone}`}>{item.title}</div>
           </div>
         ))}
       </div>
@@ -666,25 +904,32 @@ function App() {
   const renderSettlements = () => (
     <SectionCard
       title="정산 관리"
-      subtitle="속기사별 정산 예정액, 확정액, 지급 완료 내역을 관리합니다."
       action={
         <div className="flex gap-2">
-          <button className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200">
+          <button
+            type="button"
+            onClick={() => setActiveMenu("reports")}
+            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200"
+          >
             정산서 출력
           </button>
-          <button className="rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950">
+          <button
+            type="button"
+            onClick={() => settlements[0] && void handleSettlementConfirm(settlements[0])}
+            className="rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950"
+          >
             정산 확정
           </button>
         </div>
       }
     >
       <div className="space-y-3">
-        {SETTLEMENTS.map((item) => (
-          <div key={`${item.month}-${item.transcriber}`} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/60 p-4 md:grid-cols-[0.9fr_1.1fr_0.8fr_1fr_0.8fr_0.8fr] md:items-center">
+        {settlements.map((item) => (
+          <div key={`${item.month}-${item.transcriber}`} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/60 p-4 md:grid-cols-[0.9fr_1.1fr_0.8fr_1fr_0.8fr_1fr] md:items-center">
             <div className="text-sm text-slate-400">{item.month}</div>
             <div>
               <p className="font-semibold text-white">{item.transcriber}</p>
-              <p className="mt-1 text-xs text-slate-500">{item.jobs}건 처리</p>
+              <p className="mt-1 text-xs text-slate-500">{item.jobs}건</p>
             </div>
             <div className="text-sm text-slate-300">{item.jobs}건</div>
             <div className="font-medium text-white">{formatCurrency(item.amount)}</div>
@@ -693,7 +938,19 @@ function App() {
                 {item.status}
               </span>
             </div>
-            <div className="text-sm text-slate-400">{item.paidAt}</div>
+            <div className="flex justify-end gap-2">
+              {item.status !== "지급 완료" ? (
+                <button
+                  type="button"
+                  onClick={() => void handleSettlementConfirm(item)}
+                  className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-300"
+                >
+                  {item.status === "정산 대기" ? "정산 확정" : "지급 완료"}
+                </button>
+              ) : (
+                <span className="text-xs text-slate-500">{item.paidAt}</span>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -703,20 +960,22 @@ function App() {
   const renderSales = () => (
     <SectionCard
       title="매출 관리"
-      subtitle="고객사별 청구 금액, 수금 현황, 마진을 관리하는 화면"
       action={
-        <button className="rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950">
-          매출 확정
+        <button
+          type="button"
+          onClick={() => setActiveMenu("reports")}
+          className="rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950"
+        >
+          집계 보기
         </button>
       }
     >
       <div className="grid gap-4 xl:grid-cols-3">
-        {SALES.map((item) => (
+        {sales.map((item) => (
           <div key={`${item.month}-${item.client}`} className="rounded-3xl border border-white/10 bg-slate-950/60 p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-lg font-semibold text-white">{item.client}</p>
-                <p className="mt-1 text-sm text-slate-500">{item.month}</p>
               </div>
               <span className="rounded-full bg-cyan-500/15 px-2.5 py-1 text-xs font-semibold text-cyan-300">
                 마진 {item.margin}
@@ -736,6 +995,16 @@ function App() {
                 <span className="font-medium text-amber-300">{formatCurrency(item.outstanding)}</span>
               </div>
             </div>
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                disabled={item.status === "paid"}
+                onClick={() => void handleInvoiceConfirm(item)}
+                className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {item.status === "paid" ? "수금 완료" : "수금 완료 처리"}
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -743,21 +1012,21 @@ function App() {
   );
 
   const renderReports = () => (
-    <SectionCard title="집계" subtitle="기간별 운영 지표를 숫자 중심으로 확인하는 화면">
+    <SectionCard title="집계">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="일간 접수" value="24건" change="+4건" />
-        <StatCard label="주간 완료" value="81건" change="+9.3%" />
-        <StatCard label="월 매출 합계" value="13,270,000원" change="+14.2%" />
-        <StatCard label="월 정산 합계" value="5,910,000원" change="+7.6%" />
+        <StatCard label="전체 의뢰" value={`${dashboardStats.totalJobs}건`} change="실시간" />
+        <StatCard label="작업 중" value={`${dashboardStats.working}건`} change="실시간" />
+        <StatCard label="월 매출 합계" value={formatCurrency(dashboardStats.totalSales)} change="DB 연동" />
+        <StatCard label="월 정산 합계" value={formatCurrency(dashboardStats.totalSettlements)} change="DB 연동" />
       </div>
     </SectionCard>
   );
 
   const renderAnalytics = () => (
     <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-      <SectionCard title="매출 분석" subtitle="고객사별 매출 비중과 수익성 비교">
+      <SectionCard title="매출 분석">
         <div className="space-y-4">
-          {SALES.map((item, index) => (
+          {sales.map((item, index) => (
             <div key={item.client}>
               <div className="mb-2 flex items-center justify-between text-sm">
                 <span className="text-slate-300">{item.client}</span>
@@ -769,13 +1038,12 @@ function App() {
         </div>
       </SectionCard>
 
-      <SectionCard title="속기사 생산성 분석" subtitle="처리량, 품질 점수, 가용량을 함께 보는 비교 카드">
+      <SectionCard title="속기사 생산성 분석">
         <div className="space-y-3">
-          {TRANSCRIBERS.map((person) => (
+          {transcribers.map((person) => (
             <div key={person.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
               <div>
                 <p className="font-medium text-white">{person.name}</p>
-                <p className="mt-1 text-xs text-slate-500">{person.specialty}</p>
               </div>
               <div className="text-right text-sm">
                 <p className="text-slate-200">활성 {person.activeJobs}건</p>
@@ -829,13 +1097,10 @@ function App() {
                   <h1 className="mt-1 text-lg font-semibold text-white">Operations Console</h1>
                 </div>
               </div>
-              <p className="mt-4 text-sm leading-6 text-slate-400">
-                의뢰 파일 운영, 속기사 배정, 매출/정산, 집계/분석까지 한 화면 흐름으로 정리한 관리자 와이어프레임
-              </p>
             </div>
 
             <nav className="mt-6 space-y-2">
-              {MENU.map((item) => {
+              {menuItems.map((item) => {
                 const active = item.key === activeMenu;
                 return (
                   <button
@@ -863,46 +1128,190 @@ function App() {
               })}
             </nav>
 
-            <div className="mt-8 rounded-3xl border border-cyan-500/20 bg-cyan-500/10 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Deployment</p>
-              <p className="mt-3 text-sm text-slate-200">Netlify 정적 배포를 기준으로 구성한 SPA 와이어프레임</p>
-              <p className="mt-2 text-xs leading-5 text-slate-400">
-                이후 API 연동 전까지는 목업 데이터 기반으로 구조와 인터랙션을 먼저 검증하는 단계입니다.
-              </p>
-            </div>
+            {busyMessage ? <div className="mt-8 rounded-3xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-sm text-cyan-100">{busyMessage}</div> : null}
           </aside>
 
           <main className="space-y-6">
             <header className="rounded-[28px] border border-white/10 bg-slate-950/60 px-5 py-5 backdrop-blur-xl">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                 <div>
-                  <p className="text-sm font-medium text-cyan-300">세련된 다크모드 관리자 UI 시안</p>
                   <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white">
                     파일 운영부터 매출 분석까지 이어지는 Admin Workspace
                   </h2>
-                  <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-                    실제 운영자가 가장 많이 쓰는 흐름을 기준으로 작업 보드, 배정, 속기사 관리, 진행 현황,
-                    정산, 매출, 집계, 분석 화면을 하나의 경험으로 엮었습니다.
-                  </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-white/10">
-                    오늘 업로드 24건
+                    전체 의뢰 {dashboardStats.totalJobs}건
                   </button>
                   <button className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-white/10">
-                    미수 4건
+                    미수 {formatCurrency(dashboardStats.outstanding)}
                   </button>
-                  <button className="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400">
+                  <button
+                    type="button"
+                    onClick={() => setActiveMenu("assignments")}
+                    className="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+                  >
                     새 배정 시작
                   </button>
                 </div>
               </div>
             </header>
 
-            {content}
+            {loading ? (
+              <section className="rounded-[28px] border border-white/10 bg-slate-950/60 px-5 py-10 text-center text-slate-400 backdrop-blur-xl">
+                관리자 데이터를 불러오는 중입니다.
+              </section>
+            ) : null}
+
+            {!loading && error ? (
+              <section className="rounded-[28px] border border-rose-500/20 bg-rose-500/10 px-5 py-5 text-sm text-rose-200 backdrop-blur-xl">
+                {error}
+              </section>
+            ) : null}
+
+            {!loading && !error ? content : null}
           </main>
         </div>
       </div>
+
+      {detailJobId ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-3xl rounded-[28px] border border-white/10 bg-slate-950 p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-semibold text-white">{detailJob?.title || detailJobId}</h3>
+                <p className="mt-2 text-sm text-slate-400">{detailJob?.client?.name || "-"}</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeDetailModal}
+                className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300"
+              >
+                닫기
+              </button>
+            </div>
+
+            {detailLoading ? (
+              <div className="mt-6 text-sm text-slate-400">상세 정보를 불러오는 중입니다.</div>
+            ) : detailJob ? (
+              <div className="mt-6 grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+                <div className="space-y-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs text-slate-500">작업번호</p>
+                      <p className="mt-1 text-sm text-white">{detailJob.job_id}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">상태</p>
+                      <p className="mt-1 text-sm text-white">{mapJobStatus(detailJob.status || "")}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">담당</p>
+                      <p className="mt-1 text-sm text-white">{detailJob.transcriber?.name || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">마감</p>
+                      <p className="mt-1 text-sm text-white">{formatDateTime(detailJob.due_at)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">음성 키</p>
+                      <p className="mt-1 break-all text-sm text-white">{detailJob.voice_key}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">최종 PDF</p>
+                      <p className="mt-1 text-sm text-white">{detailJob.final_pdf_ready ? "준비됨" : "미준비"}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const matching = jobs.find((job) => job.id === detailJob.job_id);
+                        if (matching) openAssignModal(matching);
+                      }}
+                      className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-300"
+                    >
+                      배정 변경
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const matching = jobs.find((job) => job.id === detailJob.job_id);
+                        if (matching) void handleJobAdvance(matching);
+                      }}
+                      className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200"
+                    >
+                      상태 진행
+                    </button>
+                  </div>
+                </div>
+                <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-5">
+                  <p className="text-xs text-slate-500">전사 미리보기</p>
+                  <pre className="mt-3 max-h-[420px] overflow-auto whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">
+                    {transcriptPreview(detailJob)}
+                  </pre>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {assignTarget ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-[28px] border border-white/10 bg-slate-950 p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-semibold text-white">속기사 배정</h3>
+                <p className="mt-2 text-sm text-slate-400">{assignTarget.title}</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeAssignModal}
+                className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300"
+              >
+                닫기
+              </button>
+            </div>
+            <div className="mt-6 space-y-4">
+              <div>
+                <label className="mb-2 block text-xs text-slate-500">속기사 선택</label>
+                <select
+                  value={selectedTranscriberCode}
+                  onChange={(e) => setSelectedTranscriberCode(e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100 outline-none focus:border-cyan-400"
+                >
+                  {transcribers.map((person) => (
+                    <option key={person.id} value={person.id}>
+                      {person.name} / {person.status} / 활성 {person.activeJobs}건
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-300">
+                <p>{assignTarget.client}</p>
+                <p className="mt-1">{assignTarget.id}</p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeAssignModal}
+                  className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void confirmAssignModal()}
+                  className="rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950"
+                >
+                  배정 확정
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -21,6 +21,7 @@ DEFAULT_TRANSCRIBER_NAME = "김민서"
 DEFAULT_TRANSCRIBER_CODE = "TR-001"
 DEFAULT_CLIENT_CODE = "CLIENT-DEFAULT"
 DEFAULT_CLIENT_NAME = "일반 의뢰인"
+ACTIVE_JOB_STATUSES = {"assigned", "working", "first_done", "client_editing", "review_waiting"}
 
 
 def ensure_seed_data(db: Session) -> tuple[Client, Transcriber]:
@@ -135,6 +136,54 @@ def get_job_record(db: Session, job_id: str) -> Job | None:
     return db.scalar(select(Job).where(Job.job_id == job_id))
 
 
+def assign_job(
+    db: Session,
+    job: Job,
+    *,
+    transcriber_code: str,
+    note: str | None = None,
+) -> Job:
+    transcriber = db.scalar(select(Transcriber).where(Transcriber.transcriber_code == transcriber_code))
+    if transcriber is None:
+        raise ValueError("Transcriber not found")
+
+    admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
+    previous_transcriber_id = job.assigned_transcriber_id
+    previous_status = job.status
+
+    job.assigned_transcriber_id = transcriber.id
+    if job.status in {"uploaded", "waiting_assignment", "review_waiting"}:
+        job.status = "assigned"
+
+    db.add(
+        JobAssignment(
+            job_id=job.job_id,
+            from_transcriber_id=previous_transcriber_id,
+            to_transcriber_id=transcriber.id,
+            assigned_by_admin_id=admin.id if admin else None,
+            assignment_type="manual",
+            reason=note or "관리자 배정",
+        )
+    )
+
+    if previous_status != job.status:
+        db.add(
+            JobStatusLog(
+                job_id=job.job_id,
+                from_status=previous_status,
+                to_status=job.status,
+                changed_by_admin_id=admin.id if admin else None,
+                change_note=note or "관리자 배정",
+            )
+        )
+
+    db.commit()
+    _sync_transcriber_load(db, previous_transcriber_id)
+    _sync_transcriber_load(db, transcriber.id)
+    db.refresh(job)
+    return job
+
+
 def set_job_status(db: Session, job: Job, next_status: str, note: str | None = None) -> Job:
     previous = job.status
     job.status = next_status
@@ -152,6 +201,7 @@ def set_job_status(db: Session, job: Job, next_status: str, note: str | None = N
         )
     )
     db.commit()
+    _sync_transcriber_load(db, job.assigned_transcriber_id)
     db.refresh(job)
     return job
 
@@ -273,6 +323,59 @@ def get_transcriber_by_code(db: Session, transcriber_code: str = DEFAULT_TRANSCR
     return db.scalar(select(Transcriber).where(Transcriber.transcriber_code == transcriber_code))
 
 
+def update_transcriber(
+    db: Session,
+    transcriber: Transcriber,
+    *,
+    specialty: str | None = None,
+    unit_price: float | None = None,
+    monthly_capacity: int | None = None,
+    status: str | None = None,
+) -> Transcriber:
+    if specialty is not None:
+        transcriber.specialty = specialty.strip() or None
+    if unit_price is not None:
+        transcriber.unit_price = unit_price
+    if monthly_capacity is not None:
+        transcriber.monthly_capacity = monthly_capacity
+    if status is not None:
+        transcriber.status = status
+    db.commit()
+    db.refresh(transcriber)
+    return transcriber
+
+
+def get_settlement_record(db: Session, settlement_id: int) -> Settlement | None:
+    return db.scalar(select(Settlement).where(Settlement.id == settlement_id))
+
+
+def update_settlement_status(db: Session, settlement: Settlement, status: str) -> Settlement:
+    admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
+    settlement.status = status
+    if status == "confirmed":
+        settlement.confirmed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        settlement.confirmed_by_admin_id = admin.id if admin else None
+    if status == "paid":
+        settlement.paid_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        if settlement.confirmed_at is None:
+            settlement.confirmed_at = settlement.paid_at
+            settlement.confirmed_by_admin_id = admin.id if admin else None
+    db.commit()
+    db.refresh(settlement)
+    return settlement
+
+
+def get_invoice_record(db: Session, invoice_id: int) -> Invoice | None:
+    return db.scalar(select(Invoice).where(Invoice.id == invoice_id))
+
+
+def update_invoice_status(db: Session, invoice: Invoice, status: str) -> Invoice:
+    invoice.invoice_status = status
+    db.commit()
+    db.refresh(invoice)
+    return invoice
+
+
 def dashboard_overview(db: Session) -> dict:
     jobs = db.scalars(select(Job).order_by(Job.updated_at.desc()).limit(50)).all()
     transcribers = list_transcribers(db)
@@ -320,8 +423,11 @@ def dashboard_overview(db: Session) -> dict:
         "transcribers": transcribers,
         "settlements": [
             {
+                "id": row.id,
                 "month": f"{row.period_start:%Y-%m}",
-                "transcriber": row.transcriber_id,
+                "transcriber": (
+                    db.scalar(select(Transcriber.name).where(Transcriber.id == row.transcriber_id)) or row.transcriber_id
+                ),
                 "jobs": row.total_jobs,
                 "amount": float(row.final_amount or 0),
                 "status": row.status,
@@ -331,12 +437,14 @@ def dashboard_overview(db: Session) -> dict:
         ],
         "sales": [
             {
+                "id": row.id,
                 "month": f"{row.issue_date:%Y-%m}",
                 "client": db.scalar(select(Client.name).where(Client.id == row.client_id)) or DEFAULT_CLIENT_NAME,
                 "billed": float(row.total_amount or 0),
                 "collected": float(row.total_amount or 0) if row.invoice_status == "paid" else 0,
                 "outstanding": 0 if row.invoice_status == "paid" else float(row.total_amount or 0),
                 "margin": "40%",
+                "status": row.invoice_status,
             }
             for row in invoices
         ],
@@ -366,3 +474,16 @@ def _format_duration(seconds: int | None) -> str:
     minutes = (seconds % 3600) // 60
     secs = seconds % 60
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def _sync_transcriber_load(db: Session, transcriber_id: int | None) -> None:
+    if transcriber_id is None:
+        return
+    transcriber = db.scalar(select(Transcriber).where(Transcriber.id == transcriber_id))
+    if transcriber is None:
+        return
+    jobs = db.scalars(
+        select(Job).where(Job.assigned_transcriber_id == transcriber_id, Job.status.in_(ACTIVE_JOB_STATUSES))
+    ).all()
+    transcriber.current_load = len(jobs)
+    db.commit()

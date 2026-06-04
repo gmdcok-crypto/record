@@ -10,8 +10,11 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.services.audio import remux_faststart, should_faststart
 from app.services.job_store import (
+    assign_job,
     dashboard_overview,
     get_job_record,
+    get_invoice_record,
+    get_settlement_record,
     get_transcriber_by_code,
     list_client_jobs,
     list_transcriber_jobs,
@@ -19,6 +22,9 @@ from app.services.job_store import (
     mark_transcript_saved,
     serialize_job,
     set_job_status,
+    update_invoice_status,
+    update_settlement_status,
+    update_transcriber,
 )
 from app.services.pdf_export import build_transcript_pdf
 from app.services.r2 import (
@@ -45,6 +51,26 @@ class JobStatusUpdateRequest(BaseModel):
 
 class ExportTranscriptPdfRequest(BaseModel):
     transcript_json: dict | None = None
+
+
+class JobAssignRequest(BaseModel):
+    transcriber_code: str
+    note: str | None = None
+
+
+class AdminTranscriberUpdateRequest(BaseModel):
+    specialty: str | None = None
+    unit_price: float | None = None
+    monthly_capacity: int | None = None
+    status: str | None = None
+
+
+class SettlementStatusUpdateRequest(BaseModel):
+    status: str
+
+
+class InvoiceStatusUpdateRequest(BaseModel):
+    status: str
 
 
 def _media_type(voice_key: str) -> str:
@@ -93,6 +119,75 @@ def admin_overview(db: Annotated[Session, Depends(get_db)]) -> dict:
 @router.get("/admin/transcribers")
 def admin_transcribers(db: Annotated[Session, Depends(get_db)]) -> dict:
     return {"transcribers": dashboard_overview(db)["transcribers"]}
+
+
+@router.post("/admin/jobs/{job_id}/assign")
+def admin_assign_job(
+    job_id: str,
+    body: JobAssignRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        job = assign_job(db, job, transcriber_code=body.transcriber_code, note=body.note)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"job_id": job.job_id, "status": job.status, "assigned_transcriber_id": job.assigned_transcriber_id}
+
+
+@router.patch("/admin/transcribers/{transcriber_code}")
+def admin_update_transcriber(
+    transcriber_code: str,
+    body: AdminTranscriberUpdateRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    transcriber = get_transcriber_by_code(db, transcriber_code)
+    if transcriber is None:
+        raise HTTPException(status_code=404, detail="Transcriber not found")
+    transcriber = update_transcriber(
+        db,
+        transcriber,
+        specialty=body.specialty,
+        unit_price=body.unit_price,
+        monthly_capacity=body.monthly_capacity,
+        status=body.status,
+    )
+    return {
+        "code": transcriber.transcriber_code,
+        "name": transcriber.name,
+        "status": transcriber.status,
+        "specialty": transcriber.specialty,
+        "monthly_capacity": transcriber.monthly_capacity,
+        "unit_price": float(transcriber.unit_price or 0),
+    }
+
+
+@router.post("/admin/settlements/{settlement_id}/status")
+def admin_update_settlement(
+    settlement_id: int,
+    body: SettlementStatusUpdateRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    settlement = get_settlement_record(db, settlement_id)
+    if settlement is None:
+        raise HTTPException(status_code=404, detail="Settlement not found")
+    settlement = update_settlement_status(db, settlement, body.status)
+    return {"id": settlement.id, "status": settlement.status}
+
+
+@router.post("/admin/invoices/{invoice_id}/status")
+def admin_update_invoice(
+    invoice_id: int,
+    body: InvoiceStatusUpdateRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    invoice = get_invoice_record(db, invoice_id)
+    if invoice is None:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    invoice = update_invoice_status(db, invoice, body.status)
+    return {"id": invoice.id, "status": invoice.invoice_status}
 
 
 @router.get("/transcriber/assigned")

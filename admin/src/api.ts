@@ -21,6 +21,18 @@ export type JobResponse = {
   transcript_key: string;
   audio_url: string;
   transcript_json: TranscriptJson;
+  title?: string;
+  status?: string;
+  due_at?: string | null;
+  client?: {
+    id: number | null;
+    name: string;
+  };
+  transcriber?: {
+    id: number | null;
+    name: string | null;
+  };
+  final_pdf_ready?: boolean;
 };
 
 export type AdminOverviewStats = {
@@ -64,6 +76,7 @@ export type AdminOverviewTranscriber = {
 };
 
 export type AdminOverviewSettlement = {
+  id: number;
   month: string;
   transcriber: string | number;
   jobs: number;
@@ -73,12 +86,14 @@ export type AdminOverviewSettlement = {
 };
 
 export type AdminOverviewSale = {
+  id: number;
   month: string;
   client: string;
   billed: number;
   collected: number;
   outstanding: number;
   margin: string;
+  status: string;
 };
 
 export type AdminOverview = {
@@ -115,6 +130,69 @@ export async function fetchAdminOverview(): Promise<AdminOverview> {
     throw new Error(err.detail || "관리자 데이터를 불러올 수 없습니다");
   }
   return res.json();
+}
+
+export async function assignJob(jobId: string, transcriberCode: string, note?: string): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/assign`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transcriber_code: transcriberCode, note }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "배정 실패");
+  }
+}
+
+export async function updateJobStatus(jobId: string, status: string, note?: string): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/status`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status, note }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "상태 변경 실패");
+  }
+}
+
+export async function updateTranscriber(
+  transcriberCode: string,
+  payload: { specialty?: string; unit_price?: number; monthly_capacity?: number; status?: string },
+): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/transcribers/${encodeURIComponent(transcriberCode)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "속기사 수정 실패");
+  }
+}
+
+export async function updateSettlementStatus(settlementId: number, status: string): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/settlements/${settlementId}/status`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "정산 상태 변경 실패");
+  }
+}
+
+export async function updateInvoiceStatus(invoiceId: number, status: string): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/invoices/${invoiceId}/status`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "매출 상태 변경 실패");
+  }
 }
 
 export async function saveTranscript(jobId: string, transcript: TranscriptJson): Promise<void> {
