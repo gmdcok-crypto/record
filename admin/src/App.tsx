@@ -823,17 +823,16 @@ function App() {
       </div>
 
       <div className="overflow-hidden rounded-3xl border border-white/10">
-        <div className="hidden grid-cols-[1.5fr_1fr_0.9fr_0.8fr_0.8fr_0.8fr] gap-4 bg-slate-950/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 lg:grid">
+        <div className="hidden grid-cols-[1.7fr_1fr_0.9fr_0.9fr_0.8fr] gap-4 bg-slate-950/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 lg:grid">
           <span>의뢰인 / 파일</span>
           <span>담당 / 마감</span>
           <span>상태</span>
-          <span>진행률</span>
           <span>매출</span>
           <span>동작</span>
         </div>
         <div className="divide-y divide-white/5">
           {visibleJobs.length === 0 ? <EmptyState message="표시할 의뢰/파일 데이터가 없습니다." /> : visibleJobs.map((job) => (
-            <div key={job.id} className="grid gap-4 bg-slate-950/40 px-4 py-4 lg:grid-cols-[1.5fr_1fr_0.9fr_0.8fr_0.8fr_0.8fr] lg:items-center">
+            <div key={job.id} className="grid gap-4 bg-slate-950/40 px-4 py-4 lg:grid-cols-[1.7fr_1fr_0.9fr_0.9fr_0.8fr] lg:items-center">
               <div>
                 <p className="font-semibold text-white">{job.title}</p>
                 <p className="mt-1 text-sm text-slate-200">{job.client}</p>
@@ -849,13 +848,6 @@ function App() {
                 <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(job.status)}`}>
                   {job.status}
                 </span>
-              </div>
-              <div>
-                <div className="mb-2 flex justify-between text-xs text-slate-500">
-                  <span>{job.progress}%</span>
-                  <span>{job.duration}</span>
-                </div>
-                <ProgressBar value={job.progress} />
               </div>
               <div>
                 <p className="text-sm font-medium text-white">{formatCurrency(job.salesAmount)}</p>

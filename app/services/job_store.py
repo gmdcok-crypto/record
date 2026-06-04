@@ -80,6 +80,14 @@ def _visible_transcriber_for_job(db: Session, job: Job) -> Transcriber | None:
     return job.transcriber
 
 
+def _display_status_for_job(db: Session, job: Job) -> str:
+    if job.status in ACTIVE_JOB_STATUSES and not _has_manual_assignment(db, job.job_id):
+        return "waiting_assignment"
+    if job.status == "uploaded":
+        return "waiting_assignment"
+    return job.status
+
+
 def create_job_record(
     db: Session,
     *,
@@ -247,6 +255,7 @@ def mark_final_pdf_saved(db: Session, job: Job, pdf_key: str, filename: str) -> 
 
 def serialize_job(db: Session, job: Job, *, transcript_json: dict, audio_url: str) -> dict:
     visible_transcriber = _visible_transcriber_for_job(db, job)
+    visible_status = _display_status_for_job(db, job)
     return {
         "job_id": job.job_id,
         "voice_key": job.r2_voice_key,
@@ -254,7 +263,7 @@ def serialize_job(db: Session, job: Job, *, transcript_json: dict, audio_url: st
         "audio_url": audio_url,
         "transcript_json": transcript_json,
         "title": job.title,
-        "status": job.status,
+        "status": visible_status,
         "priority": job.priority,
         "uploaded_at": job.uploaded_at.isoformat() if job.uploaded_at else None,
         "due_at": job.due_at.isoformat() if job.due_at else None,
@@ -306,10 +315,11 @@ def list_transcriber_jobs(db: Session, transcriber_code: str = DEFAULT_TRANSCRIB
             "title": job.title,
             "filename": job.original_filename,
             "due_at": job.due_at.isoformat() if job.due_at else None,
-            "status": job.status,
+            "status": _display_status_for_job(db, job),
             "priority": job.priority,
         }
         for job in rows
+        if _has_manual_assignment(db, job.job_id)
     ]
 
 
@@ -432,6 +442,7 @@ def dashboard_overview(db: Session) -> dict:
     transcribers = list_transcribers(db)
     settlements = db.scalars(select(Settlement).order_by(Settlement.created_at.desc()).limit(20)).all()
     invoices = db.scalars(select(Invoice).order_by(Invoice.issue_date.desc()).limit(20)).all()
+    display_statuses = {job.job_id: _display_status_for_job(db, job) for job in jobs}
 
     total_sales = sum(float(job.final_bill_amount or job.sales_amount or 0) for job in jobs)
     total_settlements = sum(float(job.settlement_amount or 0) for job in jobs)
@@ -444,9 +455,9 @@ def dashboard_overview(db: Session) -> dict:
     return {
         "stats": {
             "total_jobs": len(jobs),
-            "waiting_assignment": sum(1 for job in jobs if job.status == "waiting_assignment"),
-            "working": sum(1 for job in jobs if job.status in {"assigned", "working", "client_editing", "review_waiting"}),
-            "final_done": sum(1 for job in jobs if job.status in {"final_done", "pdf_sent"}),
+            "waiting_assignment": sum(1 for job in jobs if display_statuses[job.job_id] == "waiting_assignment"),
+            "working": sum(1 for job in jobs if display_statuses[job.job_id] in {"assigned", "working", "client_editing", "review_waiting"}),
+            "final_done": sum(1 for job in jobs if display_statuses[job.job_id] in {"final_done", "pdf_sent"}),
             "total_sales": total_sales,
             "total_settlements": total_settlements,
             "outstanding": outstanding,
@@ -460,9 +471,9 @@ def dashboard_overview(db: Session) -> dict:
                 "uploaded_at": job.uploaded_at.isoformat() if job.uploaded_at else None,
                 "due_at": job.due_at.isoformat() if job.due_at else None,
                 "priority": job.priority,
-                "status": job.status,
+                "status": display_statuses[job.job_id],
                 "assignee": visible_transcriber.name if (visible_transcriber := _visible_transcriber_for_job(db, job)) else "-",
-                "progress": _progress_for_status(job.status),
+                "progress": _progress_for_status(display_statuses[job.job_id]),
                 "duration": _format_duration(job.duration_seconds),
                 "sales_amount": float(job.sales_amount or 0),
                 "settlement_amount": float(job.settlement_amount or 0),
