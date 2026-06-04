@@ -155,6 +155,14 @@ def put_object_bytes(object_key: str, data: bytes, content_type: str) -> None:
     )
 
 
+def delete_object(object_key: str) -> None:
+    if not settings.r2_configured:
+        raise ValueError("R2 is not configured")
+
+    client = _client()
+    client.delete_object(Bucket=settings.r2_bucket_name, Key=object_key)
+
+
 def get_object_metadata(object_key: str) -> dict:
     if not settings.r2_configured:
         raise ValueError("R2 is not configured")

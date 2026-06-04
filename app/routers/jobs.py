@@ -14,6 +14,7 @@ from app.services.job_store import (
     assign_job,
     create_transcriber,
     dashboard_overview,
+    delete_job_if_unassigned,
     delete_transcriber,
     get_job_record,
     get_invoice_record,
@@ -32,6 +33,7 @@ from app.services.job_store import (
 from app.services.pdf_export import build_transcript_pdf
 from app.services.r2 import (
     create_download_url,
+    delete_object,
     get_object_bytes,
     get_transcript_json,
     get_voice_object_key,
@@ -123,6 +125,33 @@ def _ensure_job_exists(job_id: str) -> None:
 @router.get("")
 def list_jobs(db: Annotated[Session, Depends(get_db)]) -> dict:
     return {"jobs": list_client_jobs(db)}
+
+
+@router.delete("/{job_id}")
+def cancel_client_job(job_id: str, db: Annotated[Session, Depends(get_db)]) -> dict:
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.status not in {"uploaded", "waiting_assignment"} or job.assigned_transcriber_id is not None:
+        raise HTTPException(status_code=409, detail="배정 전 업로드만 취소할 수 있습니다")
+
+    object_keys = [key for key in [job.r2_voice_key, job.r2_transcript_key, job.final_pdf_r2_key] if key]
+    try:
+        for object_key in object_keys:
+            delete_object(object_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"파일 삭제 실패: {exc}") from exc
+
+    try:
+        delete_job_if_unassigned(db, job)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    publish_admin_event("job_deleted", {"job_id": job_id})
+    return {"job_id": job_id, "deleted": True}
 
 
 @router.get("/admin/overview")

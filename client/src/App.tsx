@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  cancelClientJob,
   checkHealth,
   downloadTranscriptPdf,
   downloadFinalTranscriptPdf,
@@ -356,6 +357,24 @@ export default function App() {
     setError("");
   };
 
+  const onCancelUpload = async (jobId: string) => {
+    setError("");
+    setMessage("");
+    try {
+      await cancelClientJob(jobId);
+      if (job?.job_id === jobId) {
+        setJob(null);
+        setSegments([]);
+        setJobIdInput("");
+        setStep("idle");
+      }
+      await refreshArchive();
+      setMessage("배정 전 업로드를 취소했습니다.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "업로드 취소 실패");
+    }
+  };
+
   return (
     <div className="min-h-dvh bg-slate-950 text-slate-100">
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
@@ -487,26 +506,35 @@ export default function App() {
             <div className="space-y-3">
               {archive.length ? (
                 archive.map((item) => (
-                  <button
+                  <div
                     key={item.job_id}
-                    type="button"
-                    onClick={() => void loadJobById(item.job_id)}
-                    className="block w-full rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-left transition hover:border-blue-500 hover:bg-slate-900"
+                    className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 transition hover:border-blue-500 hover:bg-slate-900"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
+                      <button type="button" onClick={() => void loadJobById(item.job_id)} className="min-w-0 flex-1 text-left">
                         <p className="truncate font-semibold text-slate-100">{item.title}</p>
                         <p className="mt-1 truncate text-sm text-slate-400">{item.filename}</p>
-                      </div>
+                      </button>
                       <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${archiveStatusStyle(item.status)}`}>
                         {item.status}
                       </span>
                     </div>
                     <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
                       <span className="font-mono">{item.job_id}</span>
-                      <span>{formatDateTime(item.updated_at)}</span>
+                      <div className="flex items-center gap-2">
+                        <span>{formatDateTime(item.updated_at)}</span>
+                        {item.status === "waiting_assignment" ? (
+                          <button
+                            type="button"
+                            onClick={() => void onCancelUpload(item.job_id)}
+                            className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-300"
+                          >
+                            업로드 취소
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
-                  </button>
+                  </div>
                 ))
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-5 py-10 text-center text-sm text-slate-400">

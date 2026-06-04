@@ -172,6 +172,16 @@ export async function fetchClientJobs(): Promise<JobArchiveItem[]> {
   return data.jobs || [];
 }
 
+export async function cancelClientJob(jobId: string): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/${jobId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err));
+  }
+}
+
 export async function saveTranscript(
   jobId: string,
   transcript: TranscriptJson,

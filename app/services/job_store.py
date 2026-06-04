@@ -413,6 +413,22 @@ def delete_transcriber(db: Session, transcriber: Transcriber) -> None:
     db.commit()
 
 
+def delete_job_if_unassigned(db: Session, job: Job) -> None:
+    if job.status not in {"uploaded", "waiting_assignment"} or job.assigned_transcriber_id is not None:
+        raise ValueError("Only unassigned jobs can be cancelled")
+
+    assignments = db.scalars(select(JobAssignment).where(JobAssignment.job_id == job.job_id)).all()
+    for assignment in assignments:
+        db.delete(assignment)
+
+    status_logs = db.scalars(select(JobStatusLog).where(JobStatusLog.job_id == job.job_id)).all()
+    for log in status_logs:
+        db.delete(log)
+
+    db.delete(job)
+    db.commit()
+
+
 def get_settlement_record(db: Session, settlement_id: int) -> Settlement | None:
     return db.scalar(select(Settlement).where(Settlement.id == settlement_id))
 
