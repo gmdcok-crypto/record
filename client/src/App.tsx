@@ -299,19 +299,9 @@ export default function App() {
           <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20 lg:order-1">
             <div className="mb-5">
               <p className="text-sm font-semibold text-blue-300">1. 파일 업로드</p>
-              <h2 className="mt-1 text-xl font-bold text-white">새 녹취 작업 만들기</h2>
-              <p className="mt-2 text-sm text-slate-400">
-                테스트 단계에서는 의뢰자명을 <span className="font-semibold text-slate-100">{TEST_CLIENT_NAME}</span>으로 고정하고,
-                표시명은 자동 생성합니다.
-              </p>
             </div>
 
             <div className="space-y-4">
-              <div className="rounded-2xl border border-slate-800 bg-slate-950/70 px-4 py-3 text-sm">
-                <div className="text-slate-500">자동 생성 표시명</div>
-                <div className="mt-1 font-semibold text-slate-100">{autoDisplayName}</div>
-              </div>
-
               <input
                 ref={inputRef}
                 type="file"
