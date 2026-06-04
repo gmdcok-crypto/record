@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   assignJob,
+  createAdminEventsSource,
   fetchAdminOverview,
   fetchJob,
   updateInvoiceStatus,
@@ -330,33 +331,73 @@ function App() {
   const [assignTarget, setAssignTarget] = useState<JobItem | null>(null);
   const [selectedTranscriberCode, setSelectedTranscriberCode] = useState("");
 
-  const loadOverview = async () => {
+  const loadOverview = async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       const data = await fetchAdminOverview();
       setOverview(data);
+      return data;
+    } catch (err) {
+      console.error(err);
+      return null;
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
-    fetchAdminOverview()
-      .then((data) => {
+
+    const initialLoad = async () => {
+      if (!alive) return;
+      setLoading(true);
+      try {
+        const data = await fetchAdminOverview();
         if (!alive) return;
         setOverview(data);
-      })
-      .catch((err) => {
+      } catch (err) {
         if (!alive) return;
         console.error(err);
-      })
-      .finally(() => {
+      } finally {
         if (alive) setLoading(false);
-      });
+      }
+    };
+
+    const refreshVisibleData = () => {
+      if (document.visibilityState === "visible") {
+        void loadOverview({ silent: true });
+      }
+    };
+
+    void initialLoad();
+
+    const eventSource = createAdminEventsSource();
+    eventSource.addEventListener("admin_update", () => {
+      if (!alive) return;
+      void loadOverview({ silent: true });
+    });
+    eventSource.addEventListener("error", () => {
+      console.error("admin SSE connection error");
+    });
+
+    const intervalId = window.setInterval(() => {
+      if (!alive || document.visibilityState !== "visible") return;
+      void loadOverview({ silent: true });
+    }, 10000);
+    window.addEventListener("focus", refreshVisibleData);
+    document.addEventListener("visibilitychange", refreshVisibleData);
+
     return () => {
       alive = false;
+      eventSource.close();
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshVisibleData);
+      document.removeEventListener("visibilitychange", refreshVisibleData);
     };
   }, []);
 

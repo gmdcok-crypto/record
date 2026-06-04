@@ -3,12 +3,13 @@ from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.services.audio import remux_faststart, should_faststart
+from app.services.admin_events import publish_admin_event, stream_admin_events
 from app.services.job_store import (
     assign_job,
     dashboard_overview,
@@ -116,6 +117,19 @@ def admin_overview(db: Annotated[Session, Depends(get_db)]) -> dict:
     return dashboard_overview(db)
 
 
+@router.get("/admin/events")
+def admin_events() -> StreamingResponse:
+    return StreamingResponse(
+        stream_admin_events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.get("/admin/transcribers")
 def admin_transcribers(db: Annotated[Session, Depends(get_db)]) -> dict:
     return {"transcribers": dashboard_overview(db)["transcribers"]}
@@ -134,6 +148,7 @@ def admin_assign_job(
         job = assign_job(db, job, transcriber_code=body.transcriber_code, note=body.note)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    publish_admin_event("job_assigned", {"job_id": job.job_id})
     return {"job_id": job.job_id, "status": job.status, "assigned_transcriber_id": job.assigned_transcriber_id}
 
 
@@ -154,6 +169,7 @@ def admin_update_transcriber(
         monthly_capacity=body.monthly_capacity,
         status=body.status,
     )
+    publish_admin_event("transcriber_updated", {"transcriber_code": transcriber.transcriber_code})
     return {
         "code": transcriber.transcriber_code,
         "name": transcriber.name,
@@ -174,6 +190,7 @@ def admin_update_settlement(
     if settlement is None:
         raise HTTPException(status_code=404, detail="Settlement not found")
     settlement = update_settlement_status(db, settlement, body.status)
+    publish_admin_event("settlement_updated", {"settlement_id": settlement.id})
     return {"id": settlement.id, "status": settlement.status}
 
 
@@ -187,6 +204,7 @@ def admin_update_invoice(
     if invoice is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
     invoice = update_invoice_status(db, invoice, body.status)
+    publish_admin_event("invoice_updated", {"invoice_id": invoice.id})
     return {"id": invoice.id, "status": invoice.invoice_status}
 
 
@@ -328,6 +346,7 @@ def finalize_transcript_pdf(
         pdf_bytes, filename = build_transcript_pdf(transcript)
         pdf_key, stored_filename = save_final_pdf(job_id, pdf_bytes, filename)
         mark_final_pdf_saved(db, job, pdf_key, stored_filename)
+        publish_admin_event("job_updated", {"job_id": job_id, "status": "pdf_sent"})
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
@@ -392,6 +411,7 @@ def save_transcript(
     job = get_job_record(db, job_id)
     if job is not None:
         mark_transcript_saved(db, job, transcript_key, body.transcript_json)
+        publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
 
     return {"job_id": job_id, "status": "saved", "transcript_key": transcript_key}
 
@@ -406,4 +426,5 @@ def update_job_status(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     job = set_job_status(db, job, body.status, body.note)
+    publish_admin_event("job_updated", {"job_id": job.job_id, "status": job.status})
     return {"job_id": job.job_id, "status": job.status}

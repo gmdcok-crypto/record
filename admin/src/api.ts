@@ -128,6 +128,10 @@ export function resolveUrl(path: string): string {
   return `${apiBase()}${path}`;
 }
 
+export function createAdminEventsSource(): EventSource {
+  return new EventSource(`${apiBase()}/api/jobs/admin/events`);
+}
+
 export async function fetchJob(jobId: string): Promise<JobResponse> {
   const res = await fetch(`${apiBase()}/api/jobs/${jobId}`);
   if (!res.ok) {

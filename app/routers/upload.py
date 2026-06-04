@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.services.audio import remux_faststart, should_faststart
+from app.services.admin_events import publish_admin_event
 from app.services.job_store import create_job_record
 from app.services.r2 import (
     create_voice_upload_url,
@@ -135,13 +136,14 @@ async def upload_voice(
     )
 
     if not settings.soniox_api_key:
-        create_job_record(
+        job = create_job_record(
             db,
             job_id=upload_result["job_id"],
             filename=upload_result.get("filename", file.filename),
             content_type=content_type,
             voice_key=upload_result["object_key"],
         )
+        publish_admin_event("job_created", {"job_id": job.job_id, "status": job.status})
         response.error = "SONIOX_API_KEY is not configured"
         return response
 
@@ -156,7 +158,7 @@ async def upload_voice(
         response.transcript_text = transcription["transcript_text"]
         response.transcript_key = transcription["transcript_key"]
         response.transcript_json = transcription["transcript_json"]
-        create_job_record(
+        job = create_job_record(
             db,
             job_id=upload_result["job_id"],
             filename=upload_result.get("filename", file.filename),
@@ -165,26 +167,29 @@ async def upload_voice(
             transcript_key=transcription["transcript_key"],
             transcript_json=transcription["transcript_json"],
         )
+        publish_admin_event("job_created", {"job_id": job.job_id, "status": job.status})
     except ValueError as exc:
         response.status = "AI_FAILED"
         response.error = str(exc)
-        create_job_record(
+        job = create_job_record(
             db,
             job_id=upload_result["job_id"],
             filename=upload_result.get("filename", file.filename),
             content_type=content_type,
             voice_key=upload_result["object_key"],
         )
+        publish_admin_event("job_created", {"job_id": job.job_id, "status": job.status})
     except Exception as exc:
         response.status = "AI_FAILED"
         response.error = f"Transcription failed: {exc}"
-        create_job_record(
+        job = create_job_record(
             db,
             job_id=upload_result["job_id"],
             filename=upload_result.get("filename", file.filename),
             content_type=content_type,
             voice_key=upload_result["object_key"],
         )
+        publish_admin_event("job_created", {"job_id": job.job_id, "status": job.status})
 
     return response
 
