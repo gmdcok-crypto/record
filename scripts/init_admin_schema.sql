@@ -1,0 +1,309 @@
+-- Bluecom AI Record admin schema draft
+-- Target: MySQL 8.x / Railway MySQL
+-- Notes:
+-- 1) Keep jobs.job_id as VARCHAR(36) to stay compatible with the current R2-based app flow.
+-- 2) This draft focuses on admin operations: client/job management, assignment, progress tracking,
+--    sales, settlement, and reporting data.
+
+SET NAMES utf8mb4;
+
+CREATE TABLE IF NOT EXISTS clients (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  client_code VARCHAR(50) NOT NULL,
+  name VARCHAR(150) NOT NULL,
+  contact_name VARCHAR(100) NULL,
+  contact_phone VARCHAR(30) NULL,
+  contact_email VARCHAR(150) NULL,
+  billing_policy VARCHAR(100) NULL,
+  default_unit_price DECIMAL(12,2) NULL,
+  default_turnaround_hours INT NULL,
+  notes TEXT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_clients_code (client_code),
+  KEY idx_clients_name (name),
+  KEY idx_clients_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS admin_users (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(150) NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  role ENUM('owner', 'manager', 'operator', 'accounting', 'viewer') NOT NULL DEFAULT 'operator',
+  phone VARCHAR(30) NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  last_login_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_admin_users_email (email),
+  KEY idx_admin_users_role (role),
+  KEY idx_admin_users_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS transcribers (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  transcriber_code VARCHAR(50) NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  phone VARCHAR(30) NULL,
+  email VARCHAR(150) NULL,
+  status ENUM('available', 'working', 'off', 'inactive') NOT NULL DEFAULT 'available',
+  specialty VARCHAR(200) NULL,
+  unit_price_type ENUM('per_minute', 'per_case', 'custom') NOT NULL DEFAULT 'per_minute',
+  unit_price DECIMAL(12,2) NOT NULL DEFAULT 0,
+  monthly_capacity INT NULL,
+  current_load INT NOT NULL DEFAULT 0,
+  quality_score DECIMAL(3,2) NULL,
+  bank_name VARCHAR(100) NULL,
+  account_holder VARCHAR(100) NULL,
+  account_number VARCHAR(100) NULL,
+  resident_id_masked VARCHAR(30) NULL,
+  notes TEXT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_transcribers_code (transcriber_code),
+  UNIQUE KEY uk_transcribers_email (email),
+  KEY idx_transcribers_status (status),
+  KEY idx_transcribers_active (is_active),
+  KEY idx_transcribers_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS jobs (
+  job_id VARCHAR(36) PRIMARY KEY,
+  client_id BIGINT NULL,
+  title VARCHAR(200) NOT NULL,
+  original_filename VARCHAR(255) NOT NULL,
+  media_type VARCHAR(50) NULL,
+  duration_seconds INT NULL,
+  source_language VARCHAR(20) NULL DEFAULT 'ko',
+  requested_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  due_at DATETIME NULL,
+  completed_at DATETIME NULL,
+  priority ENUM('normal', 'urgent') NOT NULL DEFAULT 'normal',
+  status ENUM(
+    'uploaded',
+    'waiting_assignment',
+    'assigned',
+    'working',
+    'first_done',
+    'client_editing',
+    'review_waiting',
+    'final_done',
+    'cancelled'
+  ) NOT NULL DEFAULT 'uploaded',
+  assigned_transcriber_id BIGINT NULL,
+  assigned_admin_id BIGINT NULL,
+  r2_voice_key VARCHAR(255) NOT NULL,
+  r2_transcript_key VARCHAR(255) NULL,
+  transcript_version INT NOT NULL DEFAULT 1,
+  speaker_count INT NULL,
+  memo TEXT NULL,
+  internal_note TEXT NULL,
+  sales_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  extra_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  discount_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  final_bill_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  settlement_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  payment_status ENUM('unpaid', 'partial_paid', 'paid') NOT NULL DEFAULT 'unpaid',
+  settlement_status ENUM('waiting', 'confirmed', 'paid') NOT NULL DEFAULT 'waiting',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_jobs_client
+    FOREIGN KEY (client_id) REFERENCES clients(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT fk_jobs_transcriber
+    FOREIGN KEY (assigned_transcriber_id) REFERENCES transcribers(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT fk_jobs_admin
+    FOREIGN KEY (assigned_admin_id) REFERENCES admin_users(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  KEY idx_jobs_status (status),
+  KEY idx_jobs_due_at (due_at),
+  KEY idx_jobs_uploaded_at (uploaded_at),
+  KEY idx_jobs_client_id (client_id),
+  KEY idx_jobs_assigned_transcriber_id (assigned_transcriber_id),
+  KEY idx_jobs_priority_status (priority, status),
+  KEY idx_jobs_payment_status (payment_status),
+  KEY idx_jobs_settlement_status (settlement_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS job_assignments (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  job_id VARCHAR(36) NOT NULL,
+  from_transcriber_id BIGINT NULL,
+  to_transcriber_id BIGINT NULL,
+  assigned_by_admin_id BIGINT NULL,
+  assignment_type ENUM('manual', 'bulk', 'reassign', 'auto') NOT NULL DEFAULT 'manual',
+  reason VARCHAR(255) NULL,
+  assigned_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_job_assignments_job
+    FOREIGN KEY (job_id) REFERENCES jobs(job_id)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT fk_job_assignments_from_transcriber
+    FOREIGN KEY (from_transcriber_id) REFERENCES transcribers(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT fk_job_assignments_to_transcriber
+    FOREIGN KEY (to_transcriber_id) REFERENCES transcribers(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT fk_job_assignments_admin
+    FOREIGN KEY (assigned_by_admin_id) REFERENCES admin_users(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  KEY idx_job_assignments_job_id (job_id),
+  KEY idx_job_assignments_to_transcriber_id (to_transcriber_id),
+  KEY idx_job_assignments_assigned_at (assigned_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS job_status_logs (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  job_id VARCHAR(36) NOT NULL,
+  from_status VARCHAR(40) NULL,
+  to_status VARCHAR(40) NOT NULL,
+  changed_by_admin_id BIGINT NULL,
+  changed_by_transcriber_id BIGINT NULL,
+  change_note VARCHAR(255) NULL,
+  changed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_job_status_logs_job
+    FOREIGN KEY (job_id) REFERENCES jobs(job_id)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT fk_job_status_logs_admin
+    FOREIGN KEY (changed_by_admin_id) REFERENCES admin_users(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT fk_job_status_logs_transcriber
+    FOREIGN KEY (changed_by_transcriber_id) REFERENCES transcribers(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  KEY idx_job_status_logs_job_id (job_id),
+  KEY idx_job_status_logs_to_status (to_status),
+  KEY idx_job_status_logs_changed_at (changed_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS job_notes (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  job_id VARCHAR(36) NOT NULL,
+  author_admin_id BIGINT NULL,
+  author_transcriber_id BIGINT NULL,
+  note_type ENUM('internal', 'client_request', 'assignment', 'billing', 'quality') NOT NULL DEFAULT 'internal',
+  content TEXT NOT NULL,
+  is_private TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_job_notes_job
+    FOREIGN KEY (job_id) REFERENCES jobs(job_id)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT fk_job_notes_admin
+    FOREIGN KEY (author_admin_id) REFERENCES admin_users(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT fk_job_notes_transcriber
+    FOREIGN KEY (author_transcriber_id) REFERENCES transcribers(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  KEY idx_job_notes_job_id (job_id),
+  KEY idx_job_notes_type (note_type),
+  KEY idx_job_notes_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS invoices (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  invoice_no VARCHAR(50) NOT NULL,
+  job_id VARCHAR(36) NOT NULL,
+  client_id BIGINT NOT NULL,
+  issue_date DATE NOT NULL,
+  due_date DATE NULL,
+  base_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  extra_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  discount_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  total_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  vat_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  invoice_status ENUM('draft', 'issued', 'partial_paid', 'paid', 'cancelled') NOT NULL DEFAULT 'draft',
+  memo TEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_invoices_invoice_no (invoice_no),
+  CONSTRAINT fk_invoices_job
+    FOREIGN KEY (job_id) REFERENCES jobs(job_id)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT fk_invoices_client
+    FOREIGN KEY (client_id) REFERENCES clients(id)
+    ON UPDATE CASCADE ON DELETE RESTRICT,
+  KEY idx_invoices_job_id (job_id),
+  KEY idx_invoices_client_id (client_id),
+  KEY idx_invoices_issue_date (issue_date),
+  KEY idx_invoices_status (invoice_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS invoice_payments (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  invoice_id BIGINT NOT NULL,
+  payment_date DATE NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  payment_method ENUM('bank_transfer', 'card', 'cash', 'other') NOT NULL DEFAULT 'bank_transfer',
+  payer_name VARCHAR(100) NULL,
+  reference_no VARCHAR(100) NULL,
+  note VARCHAR(255) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_invoice_payments_invoice
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  KEY idx_invoice_payments_invoice_id (invoice_id),
+  KEY idx_invoice_payments_payment_date (payment_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS settlements (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  settlement_no VARCHAR(50) NOT NULL,
+  transcriber_id BIGINT NOT NULL,
+  period_start DATE NOT NULL,
+  period_end DATE NOT NULL,
+  total_jobs INT NOT NULL DEFAULT 0,
+  total_minutes INT NOT NULL DEFAULT 0,
+  gross_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  adjustment_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  final_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  status ENUM('draft', 'confirmed', 'paid') NOT NULL DEFAULT 'draft',
+  confirmed_by_admin_id BIGINT NULL,
+  confirmed_at DATETIME NULL,
+  paid_at DATETIME NULL,
+  note TEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_settlements_no (settlement_no),
+  CONSTRAINT fk_settlements_transcriber
+    FOREIGN KEY (transcriber_id) REFERENCES transcribers(id)
+    ON UPDATE CASCADE ON DELETE RESTRICT,
+  CONSTRAINT fk_settlements_admin
+    FOREIGN KEY (confirmed_by_admin_id) REFERENCES admin_users(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  KEY idx_settlements_transcriber_id (transcriber_id),
+  KEY idx_settlements_period (period_start, period_end),
+  KEY idx_settlements_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS settlement_items (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  settlement_id BIGINT NOT NULL,
+  job_id VARCHAR(36) NOT NULL,
+  transcriber_id BIGINT NOT NULL,
+  unit_price DECIMAL(12,2) NOT NULL DEFAULT 0,
+  quantity_minutes INT NOT NULL DEFAULT 0,
+  amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  adjustment_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  final_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  note VARCHAR(255) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_settlement_items_settlement
+    FOREIGN KEY (settlement_id) REFERENCES settlements(id)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT fk_settlement_items_job
+    FOREIGN KEY (job_id) REFERENCES jobs(job_id)
+    ON UPDATE CASCADE ON DELETE RESTRICT,
+  CONSTRAINT fk_settlement_items_transcriber
+    FOREIGN KEY (transcriber_id) REFERENCES transcribers(id)
+    ON UPDATE CASCADE ON DELETE RESTRICT,
+  UNIQUE KEY uk_settlement_items_job (settlement_id, job_id),
+  KEY idx_settlement_items_transcriber_id (transcriber_id),
+  KEY idx_settlement_items_job_id (job_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Optional seed/status log example:
+-- INSERT INTO job_status_logs (job_id, from_status, to_status, change_note)
+-- VALUES ('uuid', 'uploaded', 'waiting_assignment', '업로드 후 운영 검토 대기');

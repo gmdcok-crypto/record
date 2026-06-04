@@ -1,13 +1,15 @@
 # Bluecom AI Record — 녹취록 테스트 API
 
-Railway에 배포하여 Soniox AI로 음성→텍스트 변환을 테스트하는 FastAPI 백엔드 + 의뢰인 업로드 PWA입니다.
+Railway에 배포하여 Soniox AI로 음성→텍스트 변환을 테스트하는 FastAPI 백엔드 + 의뢰인 / 관리자 / 속기사 화면입니다.
 
 ## 구조
 
 ```
 record/
 ├── app/          # FastAPI 백엔드
-└── client/       # React PWA (음성 → R2 voice/ 업로드)
+├── client/       # 의뢰인 화면
+├── admin/        # 관리자 화면
+└── transcriber/  # 속기사 화면
 ```
 
 ## 백엔드 로컬 실행
@@ -22,7 +24,7 @@ copy .env.example .env
 uvicorn app.main:app --reload
 ```
 
-## PWA 로컬 실행
+## 프론트 로컬 실행
 
 ```powershell
 cd D:\record\client
@@ -34,6 +36,24 @@ npm run dev
 
 브라우저에서 `http://localhost:5173` 접속
 
+관리자 화면:
+
+```powershell
+cd D:\record\admin
+npm install
+copy .env.example .env
+npm run dev
+```
+
+속기사 화면:
+
+```powershell
+cd D:\record\transcriber
+npm install
+copy .env.example .env
+npm run dev
+```
+
 ## API
 
 | Method | Path | 설명 |
@@ -41,6 +61,11 @@ npm run dev
 | GET | `/health` | 서버·R2 상태 확인 |
 | POST | `/api/upload/presign` | R2 Pre-signed URL 발급 |
 | POST | `/api/test/transcribe` | 음성 파일 직접 업로드 → Soniox 변환 |
+
+## SQL 초안
+
+- 관리자 기능용 MySQL 스키마 초안: `scripts/init_admin_schema.sql`
+- 예전 녹취 이력 테이블 참고용 스크립트: `scripts/init_transcript_history.sql`
 
 ### Pre-signed URL 발급
 
@@ -102,7 +127,7 @@ Cloudflare Dashboard → R2 → `record` 버킷 → Settings → CORS:
 
 ## PWA 배포 (선택)
 
-`client/` 빌드 후 Cloudflare Pages, Vercel, Netlify 등에 배포:
+`client/`, `admin/`, `transcriber/` 각각 빌드 후 Cloudflare Pages, Vercel, Netlify 등에 배포:
 
 ```powershell
 cd client

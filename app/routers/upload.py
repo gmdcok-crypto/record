@@ -1,10 +1,13 @@
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.db import get_db
 from app.services.audio import remux_faststart, should_faststart
+from app.services.job_store import create_job_record
 from app.services.r2 import (
     create_voice_upload_url,
     ensure_filename_with_extension,
@@ -93,7 +96,10 @@ class VoiceUploadResponse(BaseModel):
 
 
 @router.post("/voice", response_model=VoiceUploadResponse)
-async def upload_voice(file: UploadFile = File(...)) -> VoiceUploadResponse:
+async def upload_voice(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> VoiceUploadResponse:
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required")
 
@@ -129,6 +135,13 @@ async def upload_voice(file: UploadFile = File(...)) -> VoiceUploadResponse:
     )
 
     if not settings.soniox_api_key:
+        create_job_record(
+            db,
+            job_id=upload_result["job_id"],
+            filename=upload_result.get("filename", file.filename),
+            content_type=content_type,
+            voice_key=upload_result["object_key"],
+        )
         response.error = "SONIOX_API_KEY is not configured"
         return response
 
@@ -143,12 +156,35 @@ async def upload_voice(file: UploadFile = File(...)) -> VoiceUploadResponse:
         response.transcript_text = transcription["transcript_text"]
         response.transcript_key = transcription["transcript_key"]
         response.transcript_json = transcription["transcript_json"]
+        create_job_record(
+            db,
+            job_id=upload_result["job_id"],
+            filename=upload_result.get("filename", file.filename),
+            content_type=content_type,
+            voice_key=upload_result["object_key"],
+            transcript_key=transcription["transcript_key"],
+            transcript_json=transcription["transcript_json"],
+        )
     except ValueError as exc:
         response.status = "AI_FAILED"
         response.error = str(exc)
+        create_job_record(
+            db,
+            job_id=upload_result["job_id"],
+            filename=upload_result.get("filename", file.filename),
+            content_type=content_type,
+            voice_key=upload_result["object_key"],
+        )
     except Exception as exc:
         response.status = "AI_FAILED"
         response.error = f"Transcription failed: {exc}"
+        create_job_record(
+            db,
+            job_id=upload_result["job_id"],
+            filename=upload_result.get("filename", file.filename),
+            content_type=content_type,
+            voice_key=upload_result["object_key"],
+        )
 
     return response
 

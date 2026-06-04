@@ -1,15 +1,26 @@
 import re
-
+from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from app.db import get_db
 from app.services.audio import remux_faststart, should_faststart
+from app.services.job_store import (
+    dashboard_overview,
+    get_job_record,
+    get_transcriber_by_code,
+    list_client_jobs,
+    list_transcriber_jobs,
+    mark_transcript_saved,
+    serialize_job,
+    set_job_status,
+)
 from app.services.pdf_export import build_transcript_pdf
 from app.services.r2 import (
-    build_transcript_object_key,
     get_object_bytes,
     get_transcript_json,
     get_voice_object_key,
@@ -24,6 +35,15 @@ class SaveTranscriptRequest(BaseModel):
     transcript_json: dict
 
 
+class JobStatusUpdateRequest(BaseModel):
+    status: str
+    note: str | None = None
+
+
+class ExportTranscriptPdfRequest(BaseModel):
+    transcript_json: dict | None = None
+
+
 def _media_type(voice_key: str) -> str:
     if voice_key.endswith(".m4a"):
         return "audio/mp4"
@@ -34,8 +54,75 @@ def _media_type(voice_key: str) -> str:
     return "application/octet-stream"
 
 
+def _pdf_response(transcript: dict) -> Response:
+    try:
+        pdf_bytes, filename = build_transcript_pdf(transcript)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"PDF export failed: {exc}") from exc
+
+    encoded = quote(filename)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"transcript.pdf\"; filename*=UTF-8''{encoded}",
+            "Cache-Control": "no-cache",
+        },
+    )
+
+
+def _ensure_job_exists(job_id: str) -> None:
+    voice_key = get_voice_object_key(job_id)
+    if not voice_key:
+        raise HTTPException(status_code=404, detail="Voice file not found")
+
+
+@router.get("")
+def list_jobs(db: Annotated[Session, Depends(get_db)]) -> dict:
+    return {"jobs": list_client_jobs(db)}
+
+
+@router.get("/admin/overview")
+def admin_overview(db: Annotated[Session, Depends(get_db)]) -> dict:
+    return dashboard_overview(db)
+
+
+@router.get("/admin/transcribers")
+def admin_transcribers(db: Annotated[Session, Depends(get_db)]) -> dict:
+    return {"transcribers": dashboard_overview(db)["transcribers"]}
+
+
+@router.get("/transcriber/assigned")
+def list_transcriber_assigned_jobs(
+    db: Annotated[Session, Depends(get_db)],
+    transcriber_code: str = Query("TR-001"),
+) -> dict:
+    return {"jobs": list_transcriber_jobs(db, transcriber_code)}
+
+
+@router.get("/transcriber/profile")
+def transcriber_profile(
+    db: Annotated[Session, Depends(get_db)],
+    transcriber_code: str = Query("TR-001"),
+) -> dict:
+    transcriber = get_transcriber_by_code(db, transcriber_code)
+    if transcriber is None:
+        raise HTTPException(status_code=404, detail="Transcriber not found")
+    return {
+        "id": transcriber.id,
+        "code": transcriber.transcriber_code,
+        "name": transcriber.name,
+        "specialty": transcriber.specialty,
+        "status": transcriber.status,
+        "monthly_capacity": transcriber.monthly_capacity,
+        "current_load": transcriber.current_load,
+        "unit_price": float(transcriber.unit_price or 0),
+        "quality_score": float(transcriber.quality_score or 0),
+    }
+
+
 @router.get("/{job_id}")
-def get_job(job_id: str) -> dict:
+def get_job(job_id: str, db: Annotated[Session, Depends(get_db)]) -> dict:
     voice_key = get_voice_object_key(job_id)
     if not voice_key:
         raise HTTPException(status_code=404, detail="Voice file not found")
@@ -44,13 +131,11 @@ def get_job(job_id: str) -> dict:
     if not transcript:
         raise HTTPException(status_code=404, detail="Transcript not found")
 
-    return {
-        "job_id": job_id,
-        "voice_key": voice_key,
-        "transcript_key": build_transcript_object_key(job_id),
-        "audio_url": f"/api/jobs/{job_id}/audio",
-        "transcript_json": transcript,
-    }
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found in database")
+
+    return serialize_job(job, transcript_json=transcript, audio_url=f"/api/jobs/{job_id}/audio")
 
 
 @router.get("/{job_id}/audio")
@@ -108,33 +193,6 @@ def stream_audio(job_id: str, request: Request) -> Response:
     )
 
 
-class ExportTranscriptPdfRequest(BaseModel):
-    transcript_json: dict | None = None
-
-
-def _pdf_response(transcript: dict) -> Response:
-    try:
-        pdf_bytes, filename = build_transcript_pdf(transcript)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"PDF export failed: {exc}") from exc
-
-    encoded = quote(filename)
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f"attachment; filename=\"transcript.pdf\"; filename*=UTF-8''{encoded}",
-            "Cache-Control": "no-cache",
-        },
-    )
-
-
-def _ensure_job_exists(job_id: str) -> None:
-    voice_key = get_voice_object_key(job_id)
-    if not voice_key:
-        raise HTTPException(status_code=404, detail="Voice file not found")
-
-
 @router.get("/{job_id}/transcript.pdf")
 def export_transcript_pdf_get(job_id: str) -> Response:
     _ensure_job_exists(job_id)
@@ -154,7 +212,11 @@ def export_transcript_pdf_post(job_id: str, body: ExportTranscriptPdfRequest) ->
 
 
 @router.put("/{job_id}/transcript")
-def save_transcript(job_id: str, body: SaveTranscriptRequest) -> dict:
+def save_transcript(
+    job_id: str,
+    body: SaveTranscriptRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
     voice_key = get_voice_object_key(job_id)
     if not voice_key:
         raise HTTPException(status_code=404, detail="Voice file not found")
@@ -166,4 +228,21 @@ def save_transcript(job_id: str, body: SaveTranscriptRequest) -> dict:
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Save failed: {exc}") from exc
 
+    job = get_job_record(db, job_id)
+    if job is not None:
+        mark_transcript_saved(db, job, transcript_key, body.transcript_json)
+
     return {"job_id": job_id, "status": "saved", "transcript_key": transcript_key}
+
+
+@router.post("/{job_id}/status")
+def update_job_status(
+    job_id: str,
+    body: JobStatusUpdateRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    job = set_job_status(db, job, body.status, body.note)
+    return {"job_id": job.job_id, "status": job.status}

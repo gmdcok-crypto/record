@@ -1,0 +1,343 @@
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models.admin_models import (
+    AdminUser,
+    Client,
+    Invoice,
+    Job,
+    JobAssignment,
+    JobStatusLog,
+    Settlement,
+    Transcriber,
+)
+
+DEFAULT_ADMIN_EMAIL = "ops@bluecom.local"
+DEFAULT_ADMIN_NAME = "운영관리자"
+DEFAULT_TRANSCRIBER_EMAIL = "transcriber@bluecom.local"
+DEFAULT_TRANSCRIBER_NAME = "김민서"
+DEFAULT_TRANSCRIBER_CODE = "TR-001"
+DEFAULT_CLIENT_CODE = "CLIENT-DEFAULT"
+DEFAULT_CLIENT_NAME = "일반 의뢰인"
+
+
+def ensure_seed_data(db: Session) -> tuple[Client, Transcriber]:
+    client = db.scalar(select(Client).where(Client.client_code == DEFAULT_CLIENT_CODE))
+    if client is None:
+        client = Client(client_code=DEFAULT_CLIENT_CODE, name=DEFAULT_CLIENT_NAME)
+        db.add(client)
+
+    admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
+    if admin is None:
+        admin = AdminUser(email=DEFAULT_ADMIN_EMAIL, name=DEFAULT_ADMIN_NAME, role="owner")
+        db.add(admin)
+
+    transcriber = db.scalar(select(Transcriber).where(Transcriber.transcriber_code == DEFAULT_TRANSCRIBER_CODE))
+    if transcriber is None:
+        transcriber = Transcriber(
+            transcriber_code=DEFAULT_TRANSCRIBER_CODE,
+            name=DEFAULT_TRANSCRIBER_NAME,
+            email=DEFAULT_TRANSCRIBER_EMAIL,
+            status="available",
+            specialty="법률 / 인터뷰",
+            unit_price=1800,
+            monthly_capacity=30,
+            current_load=0,
+            quality_score=4.8,
+        )
+        db.add(transcriber)
+
+    db.commit()
+    db.refresh(client)
+    db.refresh(transcriber)
+    return client, transcriber
+
+
+def infer_title(filename: str) -> str:
+    stem = filename.rsplit(".", 1)[0]
+    return stem.replace("_", " ").strip() or "새 녹취 작업"
+
+
+def create_job_record(
+    db: Session,
+    *,
+    job_id: str,
+    filename: str,
+    content_type: str,
+    voice_key: str,
+    transcript_key: str | None = None,
+    transcript_json: dict | None = None,
+) -> Job:
+    client, transcriber = ensure_seed_data(db)
+    admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    due_at = now + timedelta(hours=24)
+    title = transcript_json.get("filename") if transcript_json else None
+    title = (title or infer_title(filename)).strip()
+
+    job = Job(
+        job_id=job_id,
+        client_id=client.id,
+        title=title,
+        original_filename=filename,
+        media_type=content_type,
+        requested_at=now,
+        uploaded_at=now,
+        due_at=due_at,
+        priority="normal",
+        status="working" if transcript_json else "waiting_assignment",
+        assigned_transcriber_id=transcriber.id if transcript_json else None,
+        assigned_admin_id=admin.id if admin else None,
+        r2_voice_key=voice_key,
+        r2_transcript_key=transcript_key,
+        transcript_version=1,
+        speaker_count=len((transcript_json or {}).get("speaker_labels") or {}),
+        memo=None,
+        internal_note=None,
+        sales_amount=0,
+        extra_amount=0,
+        discount_amount=0,
+        final_bill_amount=0,
+        settlement_amount=0,
+        payment_status="unpaid",
+        settlement_status="waiting",
+    )
+    db.add(job)
+    db.flush()
+
+    if job.assigned_transcriber_id:
+        db.add(
+            JobAssignment(
+                job_id=job.job_id,
+                to_transcriber_id=job.assigned_transcriber_id,
+                assignment_type="auto",
+                reason="AI 전사 완료 후 기본 속기사 배정",
+            )
+        )
+
+    db.add(
+        JobStatusLog(
+            job_id=job.job_id,
+            from_status=None,
+            to_status=job.status,
+            change_note="업로드 및 초기 작업 생성",
+        )
+    )
+
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def get_job_record(db: Session, job_id: str) -> Job | None:
+    return db.scalar(select(Job).where(Job.job_id == job_id))
+
+
+def set_job_status(db: Session, job: Job, next_status: str, note: str | None = None) -> Job:
+    previous = job.status
+    job.status = next_status
+    if next_status == "final_done" and job.completed_at is None:
+        job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.add(
+        JobStatusLog(
+            job_id=job.job_id,
+            from_status=previous,
+            to_status=next_status,
+            change_note=note,
+            changed_by_transcriber_id=job.assigned_transcriber_id,
+        )
+    )
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def mark_transcript_saved(db: Session, job: Job, transcript_key: str, transcript_json: dict) -> Job:
+    job.r2_transcript_key = transcript_key
+    job.transcript_version = (job.transcript_version or 0) + 1
+    job.speaker_count = len((transcript_json or {}).get("speaker_labels") or {})
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def serialize_job(job: Job, *, transcript_json: dict, audio_url: str) -> dict:
+    return {
+        "job_id": job.job_id,
+        "voice_key": job.r2_voice_key,
+        "transcript_key": job.r2_transcript_key,
+        "audio_url": audio_url,
+        "transcript_json": transcript_json,
+        "title": job.title,
+        "status": job.status,
+        "priority": job.priority,
+        "uploaded_at": job.uploaded_at.isoformat() if job.uploaded_at else None,
+        "due_at": job.due_at.isoformat() if job.due_at else None,
+        "client": {
+            "id": job.client.id if job.client else None,
+            "name": job.client.name if job.client else DEFAULT_CLIENT_NAME,
+        },
+        "transcriber": {
+            "id": job.transcriber.id if job.transcriber else None,
+            "name": job.transcriber.name if job.transcriber else None,
+        },
+        "final_pdf_ready": job.status == "pdf_sent",
+    }
+
+
+def list_client_jobs(db: Session) -> list[dict]:
+    rows = db.scalars(select(Job).order_by(Job.updated_at.desc())).all()
+    result: list[dict] = []
+    for job in rows:
+        result.append(
+            {
+                "job_id": job.job_id,
+                "title": job.title,
+                "filename": job.original_filename,
+                "status": job.status,
+                "updated_at": job.updated_at.isoformat() if job.updated_at else None,
+                "client_name": job.client.name if job.client else DEFAULT_CLIENT_NAME,
+                "pdf_ready": job.status == "pdf_sent",
+            }
+        )
+    return result
+
+
+def list_transcriber_jobs(db: Session, transcriber_code: str = DEFAULT_TRANSCRIBER_CODE) -> list[dict]:
+    transcriber = db.scalar(select(Transcriber).where(Transcriber.transcriber_code == transcriber_code))
+    if transcriber is None:
+        return []
+    rows = db.scalars(
+        select(Job).where(Job.assigned_transcriber_id == transcriber.id).order_by(Job.updated_at.desc())
+    ).all()
+    return [
+        {
+            "job_id": job.job_id,
+            "client": job.client.name if job.client else DEFAULT_CLIENT_NAME,
+            "title": job.title,
+            "filename": job.original_filename,
+            "due_at": job.due_at.isoformat() if job.due_at else None,
+            "status": job.status,
+            "priority": job.priority,
+        }
+        for job in rows
+    ]
+
+
+def list_transcribers(db: Session) -> list[dict]:
+    rows = db.scalars(select(Transcriber).order_by(Transcriber.name.asc())).all()
+    return [
+        {
+            "id": row.id,
+            "code": row.transcriber_code,
+            "name": row.name,
+            "specialty": row.specialty,
+            "status": row.status,
+            "monthly_capacity": row.monthly_capacity,
+            "current_load": row.current_load,
+            "unit_price": float(row.unit_price or 0),
+            "quality_score": float(row.quality_score or 0),
+        }
+        for row in rows
+    ]
+
+
+def get_transcriber_by_code(db: Session, transcriber_code: str = DEFAULT_TRANSCRIBER_CODE) -> Transcriber | None:
+    return db.scalar(select(Transcriber).where(Transcriber.transcriber_code == transcriber_code))
+
+
+def dashboard_overview(db: Session) -> dict:
+    jobs = db.scalars(select(Job).order_by(Job.updated_at.desc()).limit(50)).all()
+    transcribers = list_transcribers(db)
+    settlements = db.scalars(select(Settlement).order_by(Settlement.created_at.desc()).limit(20)).all()
+    invoices = db.scalars(select(Invoice).order_by(Invoice.issue_date.desc()).limit(20)).all()
+
+    total_sales = sum(float(job.final_bill_amount or job.sales_amount or 0) for job in jobs)
+    total_settlements = sum(float(job.settlement_amount or 0) for job in jobs)
+    outstanding = sum(
+        float(job.final_bill_amount or job.sales_amount or 0)
+        for job in jobs
+        if job.payment_status != "paid"
+    )
+
+    return {
+        "stats": {
+            "total_jobs": len(jobs),
+            "waiting_assignment": sum(1 for job in jobs if job.status == "waiting_assignment"),
+            "working": sum(1 for job in jobs if job.status in {"assigned", "working", "client_editing", "review_waiting"}),
+            "final_done": sum(1 for job in jobs if job.status in {"final_done", "pdf_sent"}),
+            "total_sales": total_sales,
+            "total_settlements": total_settlements,
+            "outstanding": outstanding,
+        },
+        "jobs": [
+            {
+                "id": job.job_id,
+                "client": job.client.name if job.client else DEFAULT_CLIENT_NAME,
+                "title": job.title,
+                "filename": job.original_filename,
+                "uploaded_at": job.uploaded_at.isoformat() if job.uploaded_at else None,
+                "due_at": job.due_at.isoformat() if job.due_at else None,
+                "priority": job.priority,
+                "status": job.status,
+                "assignee": job.transcriber.name if job.transcriber else "-",
+                "progress": _progress_for_status(job.status),
+                "duration": _format_duration(job.duration_seconds),
+                "sales_amount": float(job.sales_amount or 0),
+                "settlement_amount": float(job.settlement_amount or 0),
+                "payment_status": job.payment_status,
+                "settlement_status": job.settlement_status,
+            }
+            for job in jobs
+        ],
+        "transcribers": transcribers,
+        "settlements": [
+            {
+                "month": f"{row.period_start:%Y-%m}",
+                "transcriber": row.transcriber_id,
+                "jobs": row.total_jobs,
+                "amount": float(row.final_amount or 0),
+                "status": row.status,
+                "paid_at": row.paid_at.isoformat() if row.paid_at else None,
+            }
+            for row in settlements
+        ],
+        "sales": [
+            {
+                "month": f"{row.issue_date:%Y-%m}",
+                "client": db.scalar(select(Client.name).where(Client.id == row.client_id)) or DEFAULT_CLIENT_NAME,
+                "billed": float(row.total_amount or 0),
+                "collected": float(row.total_amount or 0) if row.invoice_status == "paid" else 0,
+                "outstanding": 0 if row.invoice_status == "paid" else float(row.total_amount or 0),
+                "margin": "40%",
+            }
+            for row in invoices
+        ],
+    }
+
+
+def _progress_for_status(status: str) -> int:
+    mapping = {
+        "uploaded": 5,
+        "waiting_assignment": 15,
+        "assigned": 25,
+        "working": 55,
+        "first_done": 70,
+        "client_editing": 82,
+        "review_waiting": 90,
+        "final_done": 98,
+        "pdf_sent": 100,
+        "cancelled": 0,
+    }
+    return mapping.get(status, 0)
+
+
+def _format_duration(seconds: int | None) -> str:
+    if not seconds:
+        return "--:--:--"
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"

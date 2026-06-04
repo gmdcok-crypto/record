@@ -23,6 +23,72 @@ export type JobResponse = {
   transcript_json: TranscriptJson;
 };
 
+export type AdminOverviewStats = {
+  total_jobs: number;
+  waiting_assignment: number;
+  working: number;
+  final_done: number;
+  total_sales: number;
+  total_settlements: number;
+  outstanding: number;
+};
+
+export type AdminOverviewJob = {
+  id: string;
+  client: string;
+  title: string;
+  filename: string;
+  uploaded_at: string | null;
+  due_at: string | null;
+  priority: string;
+  status: string;
+  assignee: string;
+  progress: number;
+  duration: string;
+  sales_amount: number;
+  settlement_amount: number;
+  payment_status: string;
+  settlement_status: string;
+};
+
+export type AdminOverviewTranscriber = {
+  id: number;
+  code: string;
+  name: string;
+  specialty: string | null;
+  status: string;
+  monthly_capacity: number | null;
+  current_load: number;
+  unit_price: number;
+  quality_score: number;
+};
+
+export type AdminOverviewSettlement = {
+  month: string;
+  transcriber: string | number;
+  jobs: number;
+  amount: number;
+  status: string;
+  paid_at: string | null;
+};
+
+export type AdminOverviewSale = {
+  month: string;
+  client: string;
+  billed: number;
+  collected: number;
+  outstanding: number;
+  margin: string;
+};
+
+export type AdminOverview = {
+  stats: AdminOverviewStats;
+  jobs: AdminOverviewJob[];
+  transcribers: AdminOverviewTranscriber[];
+  settlements: AdminOverviewSettlement[];
+  sales: AdminOverviewSale[];
+};
+
 function apiBase(): string {
   const configured = import.meta.env.VITE_API_URL?.replace(/\/$/, "");
   return configured || window.location.origin;
@@ -38,6 +104,15 @@ export async function fetchJob(jobId: string): Promise<JobResponse> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || "작업을 불러올 수 없습니다");
+  }
+  return res.json();
+}
+
+export async function fetchAdminOverview(): Promise<AdminOverview> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/overview`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "관리자 데이터를 불러올 수 없습니다");
   }
   return res.json();
 }

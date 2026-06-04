@@ -41,6 +41,30 @@ export type JobResponse = {
   transcript_key: string;
   audio_url: string;
   transcript_json: TranscriptJson;
+  title?: string;
+  status?: string;
+  priority?: string;
+  uploaded_at?: string | null;
+  due_at?: string | null;
+  client?: {
+    id: number | null;
+    name: string;
+  };
+  transcriber?: {
+    id: number | null;
+    name: string | null;
+  };
+  final_pdf_ready?: boolean;
+};
+
+export type JobArchiveItem = {
+  job_id: string;
+  title: string;
+  filename: string;
+  status: string;
+  updated_at: string | null;
+  client_name: string;
+  pdf_ready: boolean;
 };
 
 export type HealthResponse = {
@@ -48,6 +72,7 @@ export type HealthResponse = {
   soniox_configured?: boolean;
   r2_configured: boolean;
   bucket: string;
+  database_configured?: boolean;
 };
 
 function apiBase(): string {
@@ -135,6 +160,16 @@ export async function fetchJob(jobId: string): Promise<JobResponse> {
   return res.json();
 }
 
+export async function fetchClientJobs(): Promise<JobArchiveItem[]> {
+  const res = await fetch(`${apiBase()}/api/jobs`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err));
+  }
+  const data = (await res.json()) as { jobs?: JobArchiveItem[] };
+  return data.jobs || [];
+}
+
 export async function saveTranscript(
   jobId: string,
   transcript: TranscriptJson,
@@ -145,6 +180,18 @@ export async function saveTranscript(
     body: JSON.stringify({
       transcript_json: transcript,
     }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err));
+  }
+}
+
+export async function updateJobStatus(jobId: string, status: string, note?: string): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/status`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status, note }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

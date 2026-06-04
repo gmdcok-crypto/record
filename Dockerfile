@@ -13,6 +13,13 @@ RUN npm ci
 COPY admin/ ./
 RUN npm run build
 
+FROM node:20-alpine AS transcriber-build
+WORKDIR /app/transcriber
+COPY transcriber/package.json ./
+RUN npm install
+COPY transcriber/ ./
+RUN npm run build
+
 # API + static files
 FROM python:3.12-slim
 WORKDIR /app
@@ -30,6 +37,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY --from=client-build /app/client/dist ./client/dist
 COPY --from=admin-build /app/admin/dist ./admin/dist
+COPY --from=transcriber-build /app/transcriber/dist ./transcriber/dist
 
 RUN mkdir -p /app/app/assets/fonts \
     && curl -fsSL -o /app/app/assets/fonts/NotoSansKR-Regular.ttf \

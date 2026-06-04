@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -6,16 +7,27 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
+from app.db import create_tables, init_db
 from app.routers import jobs, transcribe, upload
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "client" / "dist"
 ADMIN_DIR = Path(__file__).resolve().parent.parent / "admin" / "dist"
+TRANSCRIBER_DIR = Path(__file__).resolve().parent.parent / "transcriber" / "dist"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if settings.database_configured:
+        init_db(settings.resolved_database_url)
+        create_tables()
+    yield
 
 
 app = FastAPI(
     title="Bluecom AI Record API",
     description="음성 파일 녹취록 테스트 API",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -40,6 +52,7 @@ def health() -> dict:
         "model": settings.soniox_model,
         "speaker_diarization": settings.soniox_enable_speaker_diarization,
         "bucket": settings.r2_bucket_name,
+        "database_configured": settings.database_configured,
     }
 
 
@@ -48,8 +61,16 @@ def admin_root_redirect() -> RedirectResponse:
     return RedirectResponse(url="/admin/")
 
 
+@app.get("/transcriber")
+def transcriber_root_redirect() -> RedirectResponse:
+    return RedirectResponse(url="/transcriber/")
+
+
 if ADMIN_DIR.is_dir():
     app.mount("/admin", StaticFiles(directory=ADMIN_DIR, html=True), name="admin")
+
+if TRANSCRIBER_DIR.is_dir():
+    app.mount("/transcriber", StaticFiles(directory=TRANSCRIBER_DIR, html=True), name="transcriber")
 
 if STATIC_DIR.is_dir():
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="frontend")
