@@ -61,6 +61,13 @@ def infer_title(filename: str) -> str:
     return stem.replace("_", " ").strip() or "새 녹취 작업"
 
 
+def find_job_by_filename(db: Session, filename: str) -> Job | None:
+    normalized = filename.strip()
+    if not normalized:
+        return None
+    return db.scalar(select(Job).where(Job.original_filename == normalized).order_by(Job.uploaded_at.desc()))
+
+
 def _has_manual_assignment(db: Session, job_id: str) -> bool:
     assignment_id = db.scalar(
         select(JobAssignment.id)

@@ -8,16 +8,8 @@ from app.config import settings
 from app.db import get_db
 from app.services.audio import remux_faststart, should_faststart
 from app.services.admin_events import publish_admin_event
-from app.services.job_store import create_job_record
-from app.services.r2 import (
-    create_voice_upload_url,
-    ensure_filename_with_extension,
-    get_object_bytes,
-    get_voice_object_key,
-    save_transcript_json,
-    upload_voice_bytes,
-)
-from app.services.soniox import transcribe_upload
+from app.services.job_store import create_job_record, find_job_by_filename
+from app.services.r2 import create_voice_upload_url, ensure_filename_with_extension, get_object_bytes, get_voice_object_key, upload_voice_bytes
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
 
@@ -54,22 +46,6 @@ def is_allowed_upload(content_type: str, filename: str) -> bool:
         return True
     ext = Path(filename).suffix.lower()
     return ext in ALLOWED_EXTENSIONS
-
-
-def run_transcription(
-    job_id: str,
-    content: bytes,
-    filename: str,
-    content_type: str,
-) -> dict:
-    transcript_json = transcribe_upload(content, filename, content_type)
-    transcript_key = save_transcript_json(job_id, transcript_json)
-    return {
-        "status": "AI_DONE",
-        "transcript_text": transcript_json.get("text", ""),
-        "transcript_key": transcript_key,
-        "transcript_json": transcript_json,
-    }
 
 
 class PresignRequest(BaseModel):
@@ -116,6 +92,9 @@ async def upload_voice(
         raise HTTPException(status_code=400, detail="Empty file")
 
     safe_name = ensure_filename_with_extension(file.filename, content_type)
+    existing_job = find_job_by_filename(db, safe_name)
+    if existing_job is not None:
+        raise HTTPException(status_code=409, detail=f"이미 업로드된 파일입니다: {safe_name}")
     if should_faststart(content, safe_name):
         remuxed = remux_faststart(content)
         if remuxed:
@@ -135,61 +114,14 @@ async def upload_voice(
         status="UPLOADED",
     )
 
-    if not settings.soniox_api_key:
-        job = create_job_record(
-            db,
-            job_id=upload_result["job_id"],
-            filename=upload_result.get("filename", file.filename),
-            content_type=content_type,
-            voice_key=upload_result["object_key"],
-        )
-        publish_admin_event("job_created", {"job_id": job.job_id, "status": job.status})
-        response.error = "SONIOX_API_KEY is not configured"
-        return response
-
-    try:
-        transcription = run_transcription(
-            upload_result["job_id"],
-            content,
-            upload_result.get("filename", file.filename),
-            content_type,
-        )
-        response.status = transcription["status"]
-        response.transcript_text = transcription["transcript_text"]
-        response.transcript_key = transcription["transcript_key"]
-        response.transcript_json = transcription["transcript_json"]
-        job = create_job_record(
-            db,
-            job_id=upload_result["job_id"],
-            filename=upload_result.get("filename", file.filename),
-            content_type=content_type,
-            voice_key=upload_result["object_key"],
-            transcript_key=transcription["transcript_key"],
-            transcript_json=transcription["transcript_json"],
-        )
-        publish_admin_event("job_created", {"job_id": job.job_id, "status": job.status})
-    except ValueError as exc:
-        response.status = "AI_FAILED"
-        response.error = str(exc)
-        job = create_job_record(
-            db,
-            job_id=upload_result["job_id"],
-            filename=upload_result.get("filename", file.filename),
-            content_type=content_type,
-            voice_key=upload_result["object_key"],
-        )
-        publish_admin_event("job_created", {"job_id": job.job_id, "status": job.status})
-    except Exception as exc:
-        response.status = "AI_FAILED"
-        response.error = f"Transcription failed: {exc}"
-        job = create_job_record(
-            db,
-            job_id=upload_result["job_id"],
-            filename=upload_result.get("filename", file.filename),
-            content_type=content_type,
-            voice_key=upload_result["object_key"],
-        )
-        publish_admin_event("job_created", {"job_id": job.job_id, "status": job.status})
+    job = create_job_record(
+        db,
+        job_id=upload_result["job_id"],
+        filename=upload_result.get("filename", file.filename),
+        content_type=content_type,
+        voice_key=upload_result["object_key"],
+    )
+    publish_admin_event("job_created", {"job_id": job.job_id, "status": job.status})
 
     return response
 

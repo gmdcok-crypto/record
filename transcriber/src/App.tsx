@@ -256,7 +256,7 @@ export default function App() {
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-300">Bluecom Transcriber</p>
               <h1 className="mt-2 text-2xl font-semibold text-white">속기사 작업함</h1>
               <p className="mt-3 text-sm leading-6 text-slate-400">
-                배정된 업무를 초벌 작성, 의뢰인 수정 확인, 최종 문서 확정, 도장 날인 PDF 전달 흐름으로 처리합니다.
+                배정된 음성 파일을 들으면서 초벌을 직접 작성하고, 의뢰인 수정 확인 후 최종 PDF까지 처리합니다.
               </p>
             </div>
 
@@ -420,14 +420,14 @@ export default function App() {
                       <p className="text-sm font-semibold text-violet-300">문서 편집</p>
                       <h3 className="mt-1 text-xl font-bold text-white">초벌본 / 최종본 작성</h3>
                       <p className="mt-2 text-sm leading-6 text-slate-400">
-                        속기사는 이 편집 화면에서 초벌 작성 후 의뢰인에게 전달하고, 수정 요청을 반영한 최종본을
+                        속기사는 이 편집 화면에서 빈 초안부터 직접 작성하고, 의뢰인에게 전달한 뒤 수정 요청을 반영한 최종본을
                         다시 확정합니다. 최종 확인이 끝나면 날인본 PDF를 생성합니다.
                       </p>
                     </div>
                     <textarea
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
-                      placeholder="화자명: 발언 내용 형식으로 초벌 및 최종 문서를 작성하세요."
+                      placeholder="오디오를 들으며 화자명: 발언 내용 형식으로 초벌 문서를 직접 작성하세요."
                       className="min-h-[520px] w-full rounded-3xl border border-slate-700 bg-slate-950 px-5 py-4 text-sm leading-7 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
                     />
                   </div>

@@ -296,13 +296,18 @@ def get_job(job_id: str, db: Annotated[Session, Depends(get_db)]) -> dict:
     if not voice_key:
         raise HTTPException(status_code=404, detail="Voice file not found")
 
-    transcript = get_transcript_json(job_id)
-    if not transcript:
-        raise HTTPException(status_code=404, detail="Transcript not found")
-
     job = get_job_record(db, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found in database")
+
+    transcript = get_transcript_json(job_id) or {
+        "filename": job.original_filename,
+        "text": "",
+        "plain_text": "",
+        "segments": [],
+        "tokens": [],
+        "speaker_labels": {},
+    }
 
     return serialize_job(db, job, transcript_json=transcript, audio_url=f"/api/jobs/{job_id}/audio")
 

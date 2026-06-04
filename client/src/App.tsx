@@ -119,6 +119,10 @@ function archiveStatusStyle(status: string): string {
   }
 }
 
+function normalizeUploadFilename(filename: string): string {
+  return filename.trim();
+}
+
 export default function App() {
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -139,6 +143,10 @@ export default function App() {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const busy = step === "uploading" || loadingJob || saving || downloadingPdf;
+  const archivedFilenames = useMemo(
+    () => new Set(archive.map((item) => normalizeUploadFilename(item.filename))),
+    [archive],
+  );
   const currentTranscript = useMemo(
     () => segmentsToTranscript(job?.transcript_json ?? null, segments),
     [job, segments],
@@ -193,7 +201,19 @@ export default function App() {
   };
 
   const onSelect = (files: FileList | null) => {
-    setSelectedFiles(files ? Array.from(files) : []);
+    const nextFiles = files ? Array.from(files) : [];
+    const duplicateFile = nextFiles.find((file) => archivedFilenames.has(normalizeUploadFilename(file.name)));
+    if (duplicateFile) {
+      setSelectedFiles([]);
+      setStep("error");
+      setProgress(0);
+      setError(`이미 업로드된 파일입니다: ${duplicateFile.name}`);
+      setMessage("");
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
+
+    setSelectedFiles(nextFiles);
     setStep("idle");
     setProgress(0);
     setError("");
@@ -217,7 +237,7 @@ export default function App() {
       setJobIdInput(data.job_id);
       setSegments(buildEditableSegments(data.transcript_json));
       setStep("ready");
-      setMessage("초벌 문서를 불러왔습니다. 대화 텍스트를 눌러 해당 구간을 재생하며 수정할 수 있습니다.");
+      setMessage("업로드된 작업을 불러왔습니다. 속기사 작업 후 보관함 상태가 갱신됩니다.");
       await refreshArchive();
     } catch (err) {
       setError(err instanceof Error ? err.message : "작업을 불러오지 못했습니다.");
@@ -247,13 +267,21 @@ export default function App() {
     if (!selectedFiles.length) return;
     const filesToUpload = [...selectedFiles];
 
+    const duplicateFile = filesToUpload.find((file) => archivedFilenames.has(normalizeUploadFilename(file.name)));
+    if (duplicateFile) {
+      setStep("error");
+      setError(`이미 업로드된 파일입니다: ${duplicateFile.name}`);
+      setMessage("");
+      return;
+    }
+
     try {
       for (let index = 0; index < filesToUpload.length; index += 1) {
         const file = filesToUpload[index];
         setMessage(`업로드 중 ${index + 1}/${filesToUpload.length}: ${file.name}`);
         await performUpload(file);
       }
-      resetUploadUi(`${filesToUpload.length}개 파일 업로드가 완료되었습니다. 속기사 초벌이 준비되면 보관함에서 문서를 열어 수정할 수 있습니다.`);
+      resetUploadUi(`${filesToUpload.length}개 파일 업로드가 완료되었습니다. 업로드된 파일은 관리자 배정 후 속기사가 직접 녹취록을 작성합니다.`);
     } catch {
       // Error state is already handled in performUpload.
     }
