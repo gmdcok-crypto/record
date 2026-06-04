@@ -323,7 +323,6 @@ function App() {
   const [statusFilter, setStatusFilter] = useState<"전체" | JobStatus>("전체");
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [busyMessage, setBusyMessage] = useState("");
   const [detailJobId, setDetailJobId] = useState<string | null>(null);
   const [detailJob, setDetailJob] = useState<JobResponse | null>(null);
@@ -334,7 +333,6 @@ function App() {
   const loadOverview = async () => {
     try {
       setLoading(true);
-      setError("");
       const data = await fetchAdminOverview();
       setOverview(data);
     } finally {
@@ -345,7 +343,6 @@ function App() {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    setError("");
     fetchAdminOverview()
       .then((data) => {
         if (!alive) return;
@@ -353,7 +350,7 @@ function App() {
       })
       .catch((err) => {
         if (!alive) return;
-        setError(err instanceof Error ? err.message : "관리자 데이터를 불러오지 못했습니다.");
+        console.error(err);
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -424,11 +421,10 @@ function App() {
   const runAdminAction = async (message: string, action: () => Promise<void>) => {
     try {
       setBusyMessage(message);
-      setError("");
       await action();
       await loadOverview();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "관리 작업 실패");
+      console.error(err);
       setLoading(false);
     } finally {
       setBusyMessage("");
@@ -449,7 +445,7 @@ function App() {
       const data = await fetchJob(jobId);
       setDetailJob(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "상세 정보를 불러오지 못했습니다.");
+      console.error(err);
     } finally {
       setDetailLoading(false);
     }
@@ -1203,12 +1199,6 @@ function App() {
             {loading ? (
               <section className="rounded-[28px] border border-white/10 bg-slate-950/60 px-5 py-10 text-center text-slate-400 backdrop-blur-xl">
                 관리자 데이터를 불러오는 중입니다.
-              </section>
-            ) : null}
-
-            {!loading && error ? (
-              <section className="rounded-[28px] border border-rose-500/20 bg-rose-500/10 px-5 py-5 text-sm text-rose-200 backdrop-blur-xl">
-                {error}
               </section>
             ) : null}
 
