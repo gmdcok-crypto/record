@@ -2,41 +2,62 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body,
+#root {
+  min-height: 100vh;
+}
+
 body {
-  @apply bg-slate-100 text-slate-900 antialiased;
+  @apply bg-slate-950 text-slate-100 antialiased;
   margin: 0;
+  font-family:
+    Inter,
+    "Pretendard Variable",
+    Pretendard,
+    "Noto Sans KR",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
 }
 
-.ProseMirror {
-  outline: none;
-  min-height: 320px;
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
-.ProseMirror p {
-  margin: 0.5rem 0;
+button {
+  cursor: pointer;
 }
 
-.ProseMirror h3 {
-  @apply mb-1 mt-4 cursor-pointer text-sm font-bold text-violet-700;
+button:disabled {
+  cursor: not-allowed;
 }
 
-.ProseMirror h3:first-child {
-  margin-top: 0;
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
 }
 
-.ProseMirror p {
-  @apply cursor-pointer rounded-md px-1 py-0.5;
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
 }
 
-.ProseMirror h3[data-segment-active],
-.ProseMirror p[data-segment-active] {
-  @apply bg-violet-100 ring-1 ring-violet-300;
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
 }
 
-.ProseMirror p.is-editor-empty:first-child::before {
-  color: #94a3b8;
-  content: attr(data-placeholder);
-  float: left;
-  height: 0;
-  pointer-events: none;
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
 }

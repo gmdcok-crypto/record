@@ -41,7 +41,6 @@ export type JobResponse = {
   transcript_key: string;
   audio_url: string;
   transcript_json: TranscriptJson;
-  history_enabled?: boolean;
 };
 
 export type HealthResponse = {
@@ -49,11 +48,6 @@ export type HealthResponse = {
   soniox_configured?: boolean;
   r2_configured: boolean;
   bucket: string;
-};
-
-export type SaveTranscriptOptions = {
-  editor?: string;
-  changeSummary?: string;
 };
 
 function apiBase(): string {
@@ -144,15 +138,12 @@ export async function fetchJob(jobId: string): Promise<JobResponse> {
 export async function saveTranscript(
   jobId: string,
   transcript: TranscriptJson,
-  options?: SaveTranscriptOptions,
 ): Promise<void> {
   const res = await fetch(`${apiBase()}/api/jobs/${jobId}/transcript`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       transcript_json: transcript,
-      editor: options?.editor,
-      change_summary: options?.changeSummary,
     }),
   });
   if (!res.ok) {

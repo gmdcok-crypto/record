@@ -278,10 +278,7 @@ export default function App() {
     setError("");
     setMessage("");
     try {
-      await saveTranscript(job.job_id, currentTranscript, {
-        editor: TEST_CLIENT_NAME,
-        changeSummary: "의뢰인 초안 저장",
-      });
+      await saveTranscript(job.job_id, currentTranscript);
       setJob({
         ...job,
         transcript_json: currentTranscript,
@@ -301,10 +298,7 @@ export default function App() {
     setError("");
     setMessage("");
     try {
-      await saveTranscript(job.job_id, currentTranscript, {
-        editor: TEST_CLIENT_NAME,
-        changeSummary: "의뢰인 수정 후 속기사 검수 요청",
-      });
+      await saveTranscript(job.job_id, currentTranscript);
       setJob({
         ...job,
         transcript_json: currentTranscript,
