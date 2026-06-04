@@ -13,6 +13,7 @@ from app.db import get_optional_db
 from app.services.audio import remux_faststart, should_faststart
 from app.services.pdf_export import build_transcript_pdf
 from app.services.r2 import (
+    build_transcript_object_key,
     get_object_bytes,
     get_transcript_json,
     get_voice_object_key,
@@ -61,7 +62,7 @@ def get_job(job_id: str) -> dict:
     return {
         "job_id": job_id,
         "voice_key": voice_key,
-        "transcript_key": f"text/{job_id}/transcript.json",
+        "transcript_key": build_transcript_object_key(job_id),
         "audio_url": f"/api/jobs/{job_id}/audio",
         "transcript_json": transcript,
         "history_enabled": settings.database_configured,

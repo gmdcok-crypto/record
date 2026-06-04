@@ -57,13 +57,29 @@ def ensure_filename_with_extension(filename: str, content_type: str = "") -> str
     return f"{safe_name}{ext}"
 
 
+def build_voice_object_key(job_id: str, filename: str) -> str:
+    return f"{settings.r2_voice_prefix}{job_id}/{filename}"
+
+
+def build_voice_prefix(job_id: str) -> str:
+    return f"{settings.r2_voice_prefix}{job_id}/"
+
+
+def build_transcript_object_key(job_id: str) -> str:
+    return f"{settings.r2_text_prefix}{job_id}/transcript.json"
+
+
+def build_transcript_history_object_key(job_id: str, revision_id: str) -> str:
+    return f"{settings.r2_text_prefix}{job_id}/history/{revision_id}.json"
+
+
 def create_voice_upload_url(filename: str, content_type: str) -> dict:
     if not settings.r2_configured:
         raise ValueError("R2 is not configured")
 
     job_id = str(uuid.uuid4())
     safe_name = ensure_filename_with_extension(filename, content_type)
-    object_key = f"{settings.r2_voice_prefix}{job_id}/{safe_name}"
+    object_key = build_voice_object_key(job_id, safe_name)
 
     client = _client()
     upload_url = client.generate_presigned_url(
@@ -91,7 +107,7 @@ def upload_voice_bytes(data: bytes, filename: str, content_type: str) -> dict:
 
     job_id = str(uuid.uuid4())
     safe_name = ensure_filename_with_extension(filename, content_type)
-    object_key = f"{settings.r2_voice_prefix}{job_id}/{safe_name}"
+    object_key = build_voice_object_key(job_id, safe_name)
 
     client = _client()
     client.put_object(
@@ -148,7 +164,7 @@ def get_voice_object_key(job_id: str) -> str | None:
     if not settings.r2_configured:
         raise ValueError("R2 is not configured")
 
-    prefix = f"{settings.r2_voice_prefix}{job_id}/"
+    prefix = build_voice_prefix(job_id)
     client = _client()
     response = client.list_objects_v2(Bucket=settings.r2_bucket_name, Prefix=prefix)
 
@@ -164,7 +180,7 @@ def save_transcript_json(job_id: str, transcript: dict) -> str:
     if not settings.r2_configured:
         raise ValueError("R2 is not configured")
 
-    object_key = f"{settings.r2_text_prefix}{job_id}/transcript.json"
+    object_key = build_transcript_object_key(job_id)
     body = json.dumps(transcript, ensure_ascii=False, indent=2).encode("utf-8")
 
     client = _client()
@@ -182,7 +198,7 @@ def save_transcript_history_snapshot(job_id: str, revision_id: str, transcript: 
     if not settings.r2_configured:
         raise ValueError("R2 is not configured")
 
-    object_key = f"{settings.r2_text_prefix}{job_id}/history/{revision_id}.json"
+    object_key = build_transcript_history_object_key(job_id, revision_id)
     body = json.dumps(transcript, ensure_ascii=False, indent=2).encode("utf-8")
 
     client = _client()
@@ -201,7 +217,7 @@ def get_transcript_history_json(object_key: str) -> dict:
 
 
 def get_transcript_json(job_id: str) -> dict | None:
-    object_key = f"{settings.r2_text_prefix}{job_id}/transcript.json"
+    object_key = build_transcript_object_key(job_id)
     try:
         return json.loads(get_object_bytes(object_key).decode("utf-8"))
     except Exception:
