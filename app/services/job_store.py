@@ -61,6 +61,25 @@ def infer_title(filename: str) -> str:
     return stem.replace("_", " ").strip() or "새 녹취 작업"
 
 
+def _has_manual_assignment(db: Session, job_id: str) -> bool:
+    assignment_id = db.scalar(
+        select(JobAssignment.id)
+        .where(JobAssignment.job_id == job_id, JobAssignment.assignment_type == "manual")
+        .limit(1)
+    )
+    return assignment_id is not None
+
+
+def _visible_transcriber_for_job(db: Session, job: Job) -> Transcriber | None:
+    if job.transcriber is None:
+        return None
+    if job.status in {"uploaded", "waiting_assignment"}:
+        return None
+    if not _has_manual_assignment(db, job.job_id):
+        return None
+    return job.transcriber
+
+
 def create_job_record(
     db: Session,
     *,
@@ -226,8 +245,8 @@ def mark_final_pdf_saved(db: Session, job: Job, pdf_key: str, filename: str) -> 
     return job
 
 
-def serialize_job(job: Job, *, transcript_json: dict, audio_url: str) -> dict:
-    visible_transcriber = job.transcriber if job.status not in {"uploaded", "waiting_assignment"} else None
+def serialize_job(db: Session, job: Job, *, transcript_json: dict, audio_url: str) -> dict:
+    visible_transcriber = _visible_transcriber_for_job(db, job)
     return {
         "job_id": job.job_id,
         "voice_key": job.r2_voice_key,
@@ -442,7 +461,7 @@ def dashboard_overview(db: Session) -> dict:
                 "due_at": job.due_at.isoformat() if job.due_at else None,
                 "priority": job.priority,
                 "status": job.status,
-                "assignee": job.transcriber.name if job.transcriber and job.status not in {"uploaded", "waiting_assignment"} else "-",
+                "assignee": visible_transcriber.name if (visible_transcriber := _visible_transcriber_for_job(db, job)) else "-",
                 "progress": _progress_for_status(job.status),
                 "duration": _format_duration(job.duration_seconds),
                 "sales_amount": float(job.sales_amount or 0),

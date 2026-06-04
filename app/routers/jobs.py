@@ -304,7 +304,7 @@ def get_job(job_id: str, db: Annotated[Session, Depends(get_db)]) -> dict:
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found in database")
 
-    return serialize_job(job, transcript_json=transcript, audio_url=f"/api/jobs/{job_id}/audio")
+    return serialize_job(db, job, transcript_json=transcript, audio_url=f"/api/jobs/{job_id}/audio")
 
 
 @router.get("/{job_id}/audio")
