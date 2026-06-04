@@ -122,7 +122,8 @@ function archiveStatusStyle(status: string): string {
 export default function App() {
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isDragActive, setIsDragActive] = useState(false);
   const [step, setStep] = useState<Step>("idle");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
@@ -143,8 +144,8 @@ export default function App() {
     [job, segments],
   );
   const currentTitle = useMemo(
-    () => job?.title || job?.transcript_json.filename || selectedFile?.name || "새 녹취 작업",
-    [job, selectedFile],
+    () => job?.title || job?.transcript_json.filename || selectedFiles[0]?.name || "새 녹취 작업",
+    [job, selectedFiles],
   );
 
   const refreshArchive = async () => {
@@ -169,8 +170,21 @@ export default function App() {
     void refreshArchive();
   }, []);
 
+  useEffect(() => {
+    const preventWindowDrop = (event: DragEvent) => {
+      event.preventDefault();
+    };
+
+    window.addEventListener("dragover", preventWindowDrop);
+    window.addEventListener("drop", preventWindowDrop);
+    return () => {
+      window.removeEventListener("dragover", preventWindowDrop);
+      window.removeEventListener("drop", preventWindowDrop);
+    };
+  }, []);
+
   const resetUploadUi = (nextMessage = "") => {
-    setSelectedFile(null);
+    setSelectedFiles([]);
     setProgress(0);
     setStep("idle");
     setError("");
@@ -178,12 +192,18 @@ export default function App() {
     if (inputRef.current) inputRef.current.value = "";
   };
 
-  const onSelect = (file: File | null) => {
-    setSelectedFile(file);
+  const onSelect = (files: FileList | null) => {
+    setSelectedFiles(files ? Array.from(files) : []);
     setStep("idle");
     setProgress(0);
     setError("");
     setMessage("");
+  };
+
+  const onDropFiles = (event: React.DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    setIsDragActive(false);
+    onSelect(event.dataTransfer.files);
   };
 
   const loadJobById = async (jobId: string) => {
@@ -210,23 +230,33 @@ export default function App() {
     setStep("uploading");
     setProgress(0);
     setError("");
-    setMessage("");
     try {
       const uploaded: UploadResponse = await uploadVoice(fileToUpload, setProgress);
       setJob(null);
       setSegments([]);
       setJobIdInput(uploaded.job_id);
       await refreshArchive();
-      resetUploadUi("업로드가 완료되었습니다. 속기사 초벌이 준비되면 보관함에서 문서를 열어 수정할 수 있습니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "업로드 실패");
       setStep("error");
+      throw err;
     }
   };
 
   const onUpload = async () => {
-    if (!selectedFile) return;
-    await performUpload(selectedFile);
+    if (!selectedFiles.length) return;
+    const filesToUpload = [...selectedFiles];
+
+    try {
+      for (let index = 0; index < filesToUpload.length; index += 1) {
+        const file = filesToUpload[index];
+        setMessage(`업로드 중 ${index + 1}/${filesToUpload.length}: ${file.name}`);
+        await performUpload(file);
+      }
+      resetUploadUi(`${filesToUpload.length}개 파일 업로드가 완료되었습니다. 속기사 초벌이 준비되면 보관함에서 문서를 열어 수정할 수 있습니다.`);
+    } catch {
+      // Error state is already handled in performUpload.
+    }
   };
 
   const onSaveDraft = async () => {
@@ -316,22 +346,45 @@ export default function App() {
                 ref={inputRef}
                 type="file"
                 accept={ACCEPT}
+                multiple
                 className="hidden"
-                onChange={(e) => onSelect(e.target.files?.[0] ?? null)}
+                onChange={(e) => onSelect(e.target.files)}
               />
 
               <button
                 type="button"
                 onClick={() => inputRef.current?.click()}
                 disabled={busy}
-                className="flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-700 bg-slate-950/80 px-4 py-10 text-center transition hover:border-blue-400 hover:bg-slate-900 disabled:opacity-60"
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  setIsDragActive(true);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setIsDragActive(true);
+                }}
+                onDragLeave={(event) => {
+                  event.preventDefault();
+                  if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+                  setIsDragActive(false);
+                }}
+                onDrop={onDropFiles}
+                className={`flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-10 text-center transition disabled:opacity-60 ${
+                  isDragActive
+                    ? "border-blue-400 bg-slate-900"
+                    : "border-slate-700 bg-slate-950/80 hover:border-blue-400 hover:bg-slate-900"
+                }`}
               >
                 <span className="text-4xl">🎙️</span>
                 <span className="mt-3 font-semibold text-slate-100">
-                  {selectedFile ? selectedFile.name : "음성/영상 파일 선택"}
+                  {selectedFiles.length > 0 ? `${selectedFiles.length}개 파일 선택됨` : "음성/영상 파일 선택"}
                 </span>
                 <span className="mt-1 text-sm text-slate-400">
-                  {selectedFile ? formatSize(selectedFile.size) : "wav, mp3, m4a, mp4 등 지원"}
+                  {selectedFiles.length > 0
+                    ? `${selectedFiles[0].name}${selectedFiles.length > 1 ? ` 외 ${selectedFiles.length - 1}개` : ""} · 총 ${formatSize(
+                        selectedFiles.reduce((sum, file) => sum + file.size, 0),
+                      )}`
+                    : "wav, mp3, m4a, mp4 등 지원 · 드래그 앤 드롭 가능"}
                 </span>
               </button>
 
@@ -347,13 +400,27 @@ export default function App() {
                 </div>
               )}
 
+              {selectedFiles.length > 1 && (
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-3">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">선택된 파일</p>
+                  <div className="space-y-2">
+                    {selectedFiles.map((file) => (
+                      <div key={`${file.name}-${file.size}-${file.lastModified}`} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="truncate text-slate-200">{file.name}</span>
+                        <span className="shrink-0 text-slate-500">{formatSize(file.size)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={onUpload}
-                disabled={!selectedFile || busy || r2Ready === false || dbReady === false}
+                disabled={!selectedFiles.length || busy || r2Ready === false || dbReady === false}
                 className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-slate-700"
               >
-                업로드
+                {selectedFiles.length > 1 ? `${selectedFiles.length}개 파일 업로드` : "업로드"}
               </button>
             </div>
           </section>
