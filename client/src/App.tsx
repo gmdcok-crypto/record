@@ -100,12 +100,6 @@ function formatSegmentTime(ms: number | null | undefined): string {
   return `${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}`;
 }
 
-function seekToSegment(audio: HTMLAudioElement | null, startMs: number | null | undefined): void {
-  if (!audio || startMs == null) return;
-  audio.currentTime = Math.max(0, startMs / 1000);
-  void audio.play().catch(() => {});
-}
-
 function archiveStatusStyle(status: string): string {
   switch (status) {
     case "review_waiting":
@@ -148,6 +142,7 @@ export default function App() {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<JobArchiveItem | null>(null);
   const [duplicateDialogMessage, setDuplicateDialogMessage] = useState("");
+  const segmentEndRef = useRef<number | null>(null);
 
   const busy = step === "uploading" || loadingJob || saving || downloadingPdf;
   const archivedFilenames = useMemo(
@@ -198,6 +193,32 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleTimeUpdate = () => {
+      if (segmentEndRef.current == null) return;
+      if (audio.currentTime >= segmentEndRef.current) {
+        audio.pause();
+        segmentEndRef.current = null;
+      }
+    };
+
+    const clearSegmentTarget = () => {
+      segmentEndRef.current = null;
+    };
+
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("ended", clearSegmentTarget);
+    audio.addEventListener("pause", clearSegmentTarget);
+    return () => {
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("ended", clearSegmentTarget);
+      audio.removeEventListener("pause", clearSegmentTarget);
+    };
+  }, [job?.job_id]);
+
   const resetUploadUi = (nextMessage = "") => {
     setSelectedFiles([]);
     setProgress(0);
@@ -233,6 +254,17 @@ export default function App() {
     event.preventDefault();
     setIsDragActive(false);
     onSelect(event.dataTransfer.files);
+  };
+
+  const playSegment = (startMs: number | null | undefined, endMs: number | null | undefined) => {
+    const audio = audioRef.current;
+    if (!audio || startMs == null) return;
+
+    segmentEndRef.current = endMs != null ? Math.max(startMs / 1000, endMs / 1000) : null;
+    audio.currentTime = Math.max(0, startMs / 1000);
+    void audio.play().catch(() => {
+      segmentEndRef.current = null;
+    });
   };
 
   const loadJobById = async (jobId: string) => {
@@ -635,7 +667,7 @@ export default function App() {
                             </div>
                             <button
                               type="button"
-                              onClick={() => seekToSegment(audioRef.current, segment.start_ms)}
+                              onClick={() => playSegment(segment.start_ms, segment.end_ms)}
                               className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-300 transition hover:bg-cyan-500/20"
                             >
                               이 구간 재생
@@ -643,7 +675,7 @@ export default function App() {
                           </div>
                           <button
                             type="button"
-                            onClick={() => seekToSegment(audioRef.current, segment.start_ms)}
+                            onClick={() => playSegment(segment.start_ms, segment.end_ms)}
                             className="block w-full rounded-2xl bg-slate-900/80 px-4 py-3 text-left text-sm leading-7 text-slate-200 transition hover:bg-slate-800"
                           >
                             {segment.text || "내용을 입력하세요."}
