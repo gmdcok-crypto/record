@@ -12,7 +12,9 @@ from app.services.audio import remux_faststart, should_faststart
 from app.services.admin_events import publish_admin_event, stream_admin_events
 from app.services.job_store import (
     assign_job,
+    create_transcriber,
     dashboard_overview,
+    delete_transcriber,
     get_job_record,
     get_invoice_record,
     get_settlement_record,
@@ -64,6 +66,17 @@ class AdminTranscriberUpdateRequest(BaseModel):
     unit_price: float | None = None
     monthly_capacity: int | None = None
     status: str | None = None
+
+
+class AdminTranscriberCreateRequest(BaseModel):
+    code: str
+    name: str
+    specialty: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    unit_price: float = 0
+    monthly_capacity: int | None = None
+    status: str = "available"
 
 
 class SettlementStatusUpdateRequest(BaseModel):
@@ -178,6 +191,46 @@ def admin_update_transcriber(
         "monthly_capacity": transcriber.monthly_capacity,
         "unit_price": float(transcriber.unit_price or 0),
     }
+
+
+@router.post("/admin/transcribers")
+def admin_create_transcriber(
+    body: AdminTranscriberCreateRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    transcriber = create_transcriber(
+        db,
+        code=body.code,
+        name=body.name,
+        specialty=body.specialty,
+        email=body.email,
+        phone=body.phone,
+        unit_price=body.unit_price,
+        monthly_capacity=body.monthly_capacity,
+        status=body.status,
+    )
+    publish_admin_event("transcriber_created", {"transcriber_code": transcriber.transcriber_code})
+    return {
+        "code": transcriber.transcriber_code,
+        "name": transcriber.name,
+        "status": transcriber.status,
+        "specialty": transcriber.specialty,
+        "monthly_capacity": transcriber.monthly_capacity,
+        "unit_price": float(transcriber.unit_price or 0),
+    }
+
+
+@router.delete("/admin/transcribers/{transcriber_code}")
+def admin_delete_transcriber(
+    transcriber_code: str,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    transcriber = get_transcriber_by_code(db, transcriber_code)
+    if transcriber is None:
+        raise HTTPException(status_code=404, detail="Transcriber not found")
+    delete_transcriber(db, transcriber)
+    publish_admin_event("transcriber_deleted", {"transcriber_code": transcriber_code})
+    return {"code": transcriber_code, "deleted": True}
 
 
 @router.post("/admin/settlements/{settlement_id}/status")

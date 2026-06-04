@@ -188,6 +188,35 @@ export async function updateTranscriber(
   }
 }
 
+export async function createTranscriber(payload: {
+  code: string;
+  name: string;
+  specialty?: string;
+  email?: string;
+  phone?: string;
+  unit_price?: number;
+  monthly_capacity?: number;
+  status?: string;
+}): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/transcribers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "속기사 추가 실패");
+  }
+}
+
+export async function deleteTranscriber(transcriberCode: string): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/transcribers/${encodeURIComponent(transcriberCode)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "속기사 삭제 실패");
+  }
+}
+
 export async function updateSettlementStatus(settlementId: number, status: string): Promise<void> {
   const res = await fetch(`${apiBase()}/api/jobs/admin/settlements/${settlementId}/status`, {
     method: "POST",

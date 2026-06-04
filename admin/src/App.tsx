@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   assignJob,
+  createTranscriber,
   createAdminEventsSource,
+  deleteTranscriber,
   fetchAdminOverview,
   fetchJob,
   getApiBaseUrl,
@@ -70,6 +72,17 @@ type Transcriber = {
   monthlyCapacity: number;
   unitPrice: string;
   qualityScore: string;
+};
+
+type TranscriberForm = {
+  code: string;
+  name: string;
+  specialty: string;
+  email: string;
+  phone: string;
+  unitPrice: string;
+  monthlyCapacity: string;
+  status: "작업 가능" | "작업 중" | "휴무" | "비활성";
 };
 
 type SettlementItem = {
@@ -331,6 +344,18 @@ function App() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [assignTarget, setAssignTarget] = useState<JobItem | null>(null);
   const [selectedTranscriberCode, setSelectedTranscriberCode] = useState("");
+  const [transcriberModalOpen, setTranscriberModalOpen] = useState(false);
+  const [editingTranscriberId, setEditingTranscriberId] = useState<string | null>(null);
+  const [transcriberForm, setTranscriberForm] = useState<TranscriberForm>({
+    code: "",
+    name: "",
+    specialty: "",
+    email: "",
+    phone: "",
+    unitPrice: "0",
+    monthlyCapacity: "",
+    status: "작업 가능",
+  });
 
   const loadOverview = async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
@@ -529,14 +554,6 @@ function App() {
     });
   };
 
-  const handleTranscriberToggle = async (person: Transcriber) => {
-    const nextStatus =
-      person.status === "작업 가능" ? "working" : person.status === "작업 중" ? "available" : "available";
-    await runAdminAction("속기사 상태 변경 중입니다.", async () => {
-      await updateTranscriber(person.id, { status: nextStatus });
-    });
-  };
-
   const handleSettlementConfirm = async (item: SettlementItem) => {
     const nextStatus = item.status === "정산 대기" ? "confirmed" : "paid";
     await runAdminAction("정산 상태 변경 중입니다.", async () => {
@@ -548,6 +565,78 @@ function App() {
     const nextStatus = item.status === "paid" ? "paid" : "paid";
     await runAdminAction("매출 상태 변경 중입니다.", async () => {
       await updateInvoiceStatus(item.id, nextStatus);
+    });
+  };
+
+  const openCreateTranscriberModal = () => {
+    setEditingTranscriberId(null);
+    setTranscriberForm({
+      code: "",
+      name: "",
+      specialty: "",
+      email: "",
+      phone: "",
+      unitPrice: "0",
+      monthlyCapacity: "",
+      status: "작업 가능",
+    });
+    setTranscriberModalOpen(true);
+  };
+
+  const openEditTranscriberModal = (person: Transcriber) => {
+    setEditingTranscriberId(person.id);
+    setTranscriberForm({
+      code: person.id,
+      name: person.name,
+      specialty: person.specialty === "-" ? "" : person.specialty,
+      email: "",
+      phone: "",
+      unitPrice: person.unitPrice.replace(/[^\d]/g, ""),
+      monthlyCapacity: person.monthlyCapacity ? String(person.monthlyCapacity) : "",
+      status: person.status,
+    });
+    setTranscriberModalOpen(true);
+  };
+
+  const closeTranscriberModal = () => {
+    setTranscriberModalOpen(false);
+    setEditingTranscriberId(null);
+  };
+
+  const saveTranscriberModal = async () => {
+    const statusMap: Record<TranscriberForm["status"], string> = {
+      "작업 가능": "available",
+      "작업 중": "working",
+      "휴무": "vacation",
+      "비활성": "inactive",
+    };
+    await runAdminAction(editingTranscriberId ? "속기사 수정 중입니다." : "속기사 추가 중입니다.", async () => {
+      if (editingTranscriberId) {
+        await updateTranscriber(editingTranscriberId, {
+          specialty: transcriberForm.specialty,
+          unit_price: Number(transcriberForm.unitPrice || 0),
+          monthly_capacity: transcriberForm.monthlyCapacity ? Number(transcriberForm.monthlyCapacity) : undefined,
+          status: statusMap[transcriberForm.status],
+        });
+      } else {
+        await createTranscriber({
+          code: transcriberForm.code,
+          name: transcriberForm.name,
+          specialty: transcriberForm.specialty,
+          email: transcriberForm.email,
+          phone: transcriberForm.phone,
+          unit_price: Number(transcriberForm.unitPrice || 0),
+          monthly_capacity: transcriberForm.monthlyCapacity ? Number(transcriberForm.monthlyCapacity) : undefined,
+          status: statusMap[transcriberForm.status],
+        });
+      }
+    });
+    closeTranscriberModal();
+  };
+
+  const removeTranscriber = async (person: Transcriber) => {
+    await runAdminAction("속기사 삭제 중입니다.", async () => {
+      await deleteTranscriber(person.id);
     });
   };
 
@@ -880,70 +969,60 @@ function App() {
       action={
         <button
           type="button"
-          onClick={() => setActiveMenu("assignments")}
+          onClick={openCreateTranscriberModal}
           className="rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
         >
-          배정 보기
+          추가
         </button>
       }
     >
-      <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
+      <div className="overflow-hidden rounded-3xl border border-white/10">
         {transcribers.length === 0 ? (
-          <div className="md:col-span-2 2xl:col-span-4">
-            <EmptyState message="속기사 관리 데이터가 없습니다." />
-          </div>
+          <EmptyState message="속기사 관리 데이터가 없습니다." />
         ) : (
-          transcribers.map((person) => (
-          <div key={person.id} className="rounded-3xl border border-white/10 bg-slate-950/60 p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-lg font-semibold text-white">{person.name}</p>
-              </div>
-              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(person.status)}`}>
-                {person.status}
-              </span>
+          <>
+            <div className="hidden grid-cols-[0.9fr_1.1fr_1.2fr_0.9fr_0.7fr_0.8fr_1fr] gap-4 bg-slate-950/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 lg:grid">
+              <span>코드</span>
+              <span>이름</span>
+              <span>전문분야</span>
+              <span>상태</span>
+              <span>진행중</span>
+              <span>월 용량</span>
+              <span>동작</span>
             </div>
-            <div className="mt-5 space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-slate-500">단가</span>
-                <span className="font-medium text-slate-200">{person.unitPrice}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">진행 중</span>
-                <span className="font-medium text-slate-200">{person.activeJobs}건</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">월 용량</span>
-                <span className="font-medium text-slate-200">{person.monthlyCapacity}건</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">품질</span>
-                <span className="font-medium text-slate-200">{person.qualityScore}</span>
-              </div>
+            <div className="divide-y divide-white/5">
+              {transcribers.map((person) => (
+                <div key={person.id} className="grid gap-4 bg-slate-950/40 px-4 py-4 lg:grid-cols-[0.9fr_1.1fr_1.2fr_0.9fr_0.7fr_0.8fr_1fr] lg:items-center">
+                  <div className="text-sm text-slate-300">{person.id}</div>
+                  <div className="text-sm font-medium text-white">{person.name}</div>
+                  <div className="text-sm text-slate-300">{person.specialty}</div>
+                  <div>
+                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(person.status)}`}>
+                      {person.status}
+                    </span>
+                  </div>
+                  <div className="text-sm text-slate-300">{person.activeJobs}건</div>
+                  <div className="text-sm text-slate-300">{person.monthlyCapacity}건</div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openEditTranscriberModal(person)}
+                      className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200"
+                    >
+                      수정
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void removeTranscriber(person)}
+                      className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-300"
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="mt-5 flex gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  void runAdminAction("속기사 단가 조정 중입니다.", async () => {
-                    const unitPrice = Number(person.unitPrice.replace(/[^\d]/g, "")) || 0;
-                    await updateTranscriber(person.id, { unit_price: unitPrice + 100 });
-                  })
-                }
-                className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200"
-              >
-                단가 +100
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleTranscriberToggle(person)}
-                className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200"
-              >
-                상태 변경
-              </button>
-            </div>
-          </div>
-          ))
+          </>
         )}
       </div>
     </SectionCard>
@@ -1389,6 +1468,103 @@ function App() {
                   배정 확정
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {transcriberModalOpen ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-[28px] border border-white/10 bg-slate-950 p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-semibold text-white">{editingTranscriberId ? "속기사 수정" : "속기사 추가"}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={closeTranscriberModal}
+                className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300"
+              >
+                닫기
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <input
+                value={transcriberForm.code}
+                onChange={(e) => setTranscriberForm((prev) => ({ ...prev, code: e.target.value }))}
+                disabled={Boolean(editingTranscriberId)}
+                placeholder="코드"
+                className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100 disabled:opacity-50"
+              />
+              <input
+                value={transcriberForm.name}
+                onChange={(e) => setTranscriberForm((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="이름"
+                className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
+              />
+              <input
+                value={transcriberForm.specialty}
+                onChange={(e) => setTranscriberForm((prev) => ({ ...prev, specialty: e.target.value }))}
+                placeholder="전문분야"
+                className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
+              />
+              <input
+                value={transcriberForm.email}
+                onChange={(e) => setTranscriberForm((prev) => ({ ...prev, email: e.target.value }))}
+                placeholder="이메일"
+                className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
+              />
+              <input
+                value={transcriberForm.phone}
+                onChange={(e) => setTranscriberForm((prev) => ({ ...prev, phone: e.target.value }))}
+                placeholder="연락처"
+                className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
+              />
+              <input
+                value={transcriberForm.unitPrice}
+                onChange={(e) => setTranscriberForm((prev) => ({ ...prev, unitPrice: e.target.value }))}
+                placeholder="단가"
+                className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
+              />
+              <input
+                value={transcriberForm.monthlyCapacity}
+                onChange={(e) => setTranscriberForm((prev) => ({ ...prev, monthlyCapacity: e.target.value }))}
+                placeholder="월 용량"
+                className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
+              />
+              <select
+                value={transcriberForm.status}
+                onChange={(e) =>
+                  setTranscriberForm((prev) => ({
+                    ...prev,
+                    status: e.target.value as TranscriberForm["status"],
+                  }))
+                }
+                className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
+              >
+                <option value="작업 가능">작업 가능</option>
+                <option value="작업 중">작업 중</option>
+                <option value="휴무">휴무</option>
+                <option value="비활성">비활성</option>
+              </select>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeTranscriberModal}
+                className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveTranscriberModal()}
+                className="rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950"
+              >
+                저장
+              </button>
             </div>
           </div>
         </div>

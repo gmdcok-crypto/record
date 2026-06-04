@@ -323,6 +323,35 @@ def get_transcriber_by_code(db: Session, transcriber_code: str = DEFAULT_TRANSCR
     return db.scalar(select(Transcriber).where(Transcriber.transcriber_code == transcriber_code))
 
 
+def create_transcriber(
+    db: Session,
+    *,
+    code: str,
+    name: str,
+    specialty: str | None = None,
+    email: str | None = None,
+    phone: str | None = None,
+    unit_price: float = 0,
+    monthly_capacity: int | None = None,
+    status: str = "available",
+) -> Transcriber:
+    transcriber = Transcriber(
+        transcriber_code=code.strip(),
+        name=name.strip(),
+        specialty=(specialty or "").strip() or None,
+        email=(email or "").strip() or None,
+        phone=(phone or "").strip() or None,
+        unit_price=unit_price,
+        monthly_capacity=monthly_capacity,
+        status=status,
+        current_load=0,
+    )
+    db.add(transcriber)
+    db.commit()
+    db.refresh(transcriber)
+    return transcriber
+
+
 def update_transcriber(
     db: Session,
     transcriber: Transcriber,
@@ -343,6 +372,16 @@ def update_transcriber(
     db.commit()
     db.refresh(transcriber)
     return transcriber
+
+
+def delete_transcriber(db: Session, transcriber: Transcriber) -> None:
+    assigned_jobs = db.scalars(select(Job).where(Job.assigned_transcriber_id == transcriber.id)).all()
+    for job in assigned_jobs:
+        job.assigned_transcriber_id = None
+        if job.status == "assigned":
+            job.status = "waiting_assignment"
+    db.delete(transcriber)
+    db.commit()
 
 
 def get_settlement_record(db: Session, settlement_id: int) -> Settlement | None:
