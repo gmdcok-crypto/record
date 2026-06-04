@@ -141,6 +141,7 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [duplicateUploadWarning, setDuplicateUploadWarning] = useState<string | null>(null);
 
   useEffect(() => {
     checkHealth()
@@ -162,6 +163,17 @@ export default function App() {
   }, [job, selectedFile, autoDisplayName]);
 
   const refreshArchive = () => setArchive(readArchive());
+
+  const resetUploadUi = (nextMessage = "") => {
+    setSelectedFile(null);
+    setProgress(0);
+    setStep("idle");
+    setError("");
+    setMessage(nextMessage);
+    if (inputRef.current) {
+      inputRef.current.value = "";
+    }
+  };
 
   const pushArchive = (status: ArchiveStatus, filename?: string) => {
     if (!job) return;
@@ -204,18 +216,7 @@ export default function App() {
     }
   };
 
-  const onUpload = async () => {
-    if (!selectedFile) return;
-    if (
-      hasDuplicateFilename(archive, selectedFile.name) &&
-      !window.confirm(`"${selectedFile.name}" 파일이 이미 업로드된 이력이 있습니다.\n그래도 다시 업로드할까요?`)
-    ) {
-      setMessage("중복 업로드를 취소했습니다.");
-      setError("");
-      return;
-    }
-    const fileToUpload = selectedFile;
-    const uploadTitle = currentTitle;
+  const performUpload = async (fileToUpload: File, uploadTitle: string) => {
     setStep("uploading");
     setProgress(0);
     setError("");
@@ -239,17 +240,36 @@ export default function App() {
       });
       saveArchive(nextArchive);
       setArchive(nextArchive);
-      setSelectedFile(null);
-      setProgress(0);
-      setStep("idle");
-      if (inputRef.current) {
-        inputRef.current.value = "";
-      }
-      setMessage("업로드가 완료되었습니다. 속기사 1차 초벌 후 보관함 또는 작업번호로 문서를 열어 수정할 수 있습니다.");
+      resetUploadUi("업로드가 완료되었습니다. 속기사 1차 초벌 후 보관함 또는 작업번호로 문서를 열어 수정할 수 있습니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "업로드 실패");
       setStep("error");
     }
+  };
+
+  const onUpload = async () => {
+    if (!selectedFile) return;
+    if (hasDuplicateFilename(archive, selectedFile.name)) {
+      setDuplicateUploadWarning(selectedFile.name);
+      return;
+    }
+    await performUpload(selectedFile, currentTitle);
+  };
+
+  const onCancelDuplicateUpload = () => {
+    setDuplicateUploadWarning(null);
+    resetUploadUi("중복 업로드를 취소했습니다.");
+  };
+
+  const onConfirmDuplicateUpload = async () => {
+    if (!selectedFile) {
+      setDuplicateUploadWarning(null);
+      return;
+    }
+    const fileToUpload = selectedFile;
+    const uploadTitle = currentTitle;
+    setDuplicateUploadWarning(null);
+    await performUpload(fileToUpload, uploadTitle);
   };
 
   const onSaveDraft = async () => {
@@ -542,6 +562,37 @@ export default function App() {
             }`}
           >
             {error || message}
+          </div>
+        )}
+
+        {duplicateUploadWarning && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
+            <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl shadow-black/40">
+              <p className="text-lg font-semibold text-white">중복 업로드 확인</p>
+              <p className="mt-3 text-sm leading-6 text-slate-300">
+                <span className="font-semibold text-slate-100">{duplicateUploadWarning}</span>
+                {" "}
+                파일이 이미 업로드된 이력이 있습니다.
+                <br />
+                그래도 다시 업로드할까요?
+              </p>
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={onCancelDuplicateUpload}
+                  className="rounded-xl border border-slate-700 bg-slate-950 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void onConfirmDuplicateUpload()}
+                  className="rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-500"
+                >
+                  다시 업로드
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
