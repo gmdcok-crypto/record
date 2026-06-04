@@ -200,6 +200,8 @@ export default function App() {
 
   const onUpload = async () => {
     if (!selectedFile) return;
+    const fileToUpload = selectedFile;
+    const uploadTitle = currentTitle;
     setStep("uploading");
     setProgress(0);
     setError("");
@@ -207,23 +209,28 @@ export default function App() {
 
     try {
       const uploaded: UploadResponse = await uploadVoice(
-        selectedFile,
+        fileToUpload,
         setProgress,
       );
       setJob(null);
       setDraft("");
       setJobIdInput(uploaded.job_id);
-      setStep("idle");
 
       const nextArchive = upsertArchiveItem(readArchive(), {
         jobId: uploaded.job_id,
-        title: currentTitle,
-        filename: selectedFile.name,
+        title: uploadTitle,
+        filename: fileToUpload.name,
         status: "속기사 1차 초벌 대기",
         updatedAt: new Date().toISOString(),
       });
       saveArchive(nextArchive);
       setArchive(nextArchive);
+      setSelectedFile(null);
+      setProgress(0);
+      setStep("idle");
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
       setMessage("업로드가 완료되었습니다. 속기사 1차 초벌 후 보관함 또는 작업번호로 문서를 열어 수정할 수 있습니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "업로드 실패");
