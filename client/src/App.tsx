@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   checkHealth,
   downloadTranscriptPdf,
+  downloadFinalTranscriptPdf,
   fetchClientJobs,
   fetchJob,
   resolveUrl,
@@ -270,8 +271,13 @@ export default function App() {
     setError("");
     setMessage("");
     try {
-      await downloadTranscriptPdf(job.job_id, currentTranscript);
-      setMessage("PDF를 다운로드했습니다.");
+      if (job.final_pdf_ready) {
+        await downloadFinalTranscriptPdf(job.job_id);
+        setMessage("저장된 최종 PDF를 다운로드했습니다.");
+      } else {
+        await downloadTranscriptPdf(job.job_id, currentTranscript);
+        setMessage("현재 문서 기준 PDF를 다운로드했습니다.");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "PDF 다운로드 실패");
     } finally {

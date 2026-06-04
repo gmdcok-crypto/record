@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  downloadTranscriptPdf,
+  downloadFinalTranscriptPdf,
   fetchJob,
+  finalizeTranscriptPdf,
   resolveUrl,
   saveTranscript,
   speakerLabel,
@@ -233,8 +234,11 @@ export default function App() {
     setError("");
     setMessage("");
     try {
-      await downloadTranscriptPdf(job.job_id, currentTranscript);
-      updateWorkStatus("PDF 전달 완료", "도장 날인본 PDF를 내려받았습니다. 의뢰인이 다운로드할 최종본으로 전달 가능합니다.");
+      await saveTranscript(job.job_id, currentTranscript);
+      await finalizeTranscriptPdf(job.job_id, currentTranscript);
+      await downloadFinalTranscriptPdf(job.job_id);
+      setJob({ ...job, transcript_json: currentTranscript, final_pdf_ready: true, status: "pdf_sent" });
+      updateWorkStatus("PDF 전달 완료", "최종 PDF를 R2에 저장하고 다운로드했습니다. 의뢰인은 저장된 최종 PDF를 받을 수 있습니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "PDF 다운로드 실패");
     } finally {

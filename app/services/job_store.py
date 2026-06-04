@@ -140,6 +140,8 @@ def set_job_status(db: Session, job: Job, next_status: str, note: str | None = N
     job.status = next_status
     if next_status == "final_done" and job.completed_at is None:
         job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        if job.finalized_at is None:
+            job.finalized_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.add(
         JobStatusLog(
             job_id=job.job_id,
@@ -158,6 +160,27 @@ def mark_transcript_saved(db: Session, job: Job, transcript_key: str, transcript
     job.r2_transcript_key = transcript_key
     job.transcript_version = (job.transcript_version or 0) + 1
     job.speaker_count = len((transcript_json or {}).get("speaker_labels") or {})
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def mark_final_pdf_saved(db: Session, job: Job, pdf_key: str, filename: str) -> Job:
+    job.final_pdf_r2_key = pdf_key
+    job.final_pdf_filename = filename
+    job.final_pdf_generated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    if job.finalized_at is None:
+        job.finalized_at = job.final_pdf_generated_at
+    job.status = "pdf_sent"
+    db.add(
+        JobStatusLog(
+            job_id=job.job_id,
+            from_status="final_done",
+            to_status="pdf_sent",
+            change_note="최종 PDF 저장 및 다운로드 가능 상태 전환",
+            changed_by_transcriber_id=job.assigned_transcriber_id,
+        )
+    )
     db.commit()
     db.refresh(job)
     return job
@@ -184,6 +207,7 @@ def serialize_job(job: Job, *, transcript_json: dict, audio_url: str) -> dict:
             "name": job.transcriber.name if job.transcriber else None,
         },
         "final_pdf_ready": job.status == "pdf_sent",
+        "final_pdf_filename": job.final_pdf_filename,
     }
 
 
@@ -200,6 +224,7 @@ def list_client_jobs(db: Session) -> list[dict]:
                 "updated_at": job.updated_at.isoformat() if job.updated_at else None,
                 "client_name": job.client.name if job.client else DEFAULT_CLIENT_NAME,
                 "pdf_ready": job.status == "pdf_sent",
+                "final_pdf_filename": job.final_pdf_filename,
             }
         )
     return result

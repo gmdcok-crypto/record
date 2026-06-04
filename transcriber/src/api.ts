@@ -44,6 +44,7 @@ export type JobResponse = {
     name: string | null;
   };
   final_pdf_ready?: boolean;
+  final_pdf_filename?: string | null;
 };
 
 export type AssignedWork = {
@@ -167,6 +168,41 @@ export async function downloadTranscriptPdf(jobId: string, transcript: Transcrip
   const filename = parseFilenameFromDisposition(
     res.headers.get("Content-Disposition"),
     "transcript.pdf",
+  );
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function finalizeTranscriptPdf(
+  jobId: string,
+  transcript: TranscriptJson,
+): Promise<{ download_url: string; filename: string; final_pdf_key: string }> {
+  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/transcript.pdf/finalize`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transcript_json: transcript }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err));
+  }
+  return res.json();
+}
+
+export async function downloadFinalTranscriptPdf(jobId: string): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/transcript.pdf/final`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err));
+  }
+  const blob = await res.blob();
+  const filename = parseFilenameFromDisposition(
+    res.headers.get("Content-Disposition"),
+    "final_transcript.pdf",
   );
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");

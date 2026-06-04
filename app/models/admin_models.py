@@ -83,6 +83,8 @@ class Job(Base):
     assigned_admin_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id"), nullable=True)
     r2_voice_key: Mapped[str] = mapped_column(String(255), nullable=False)
     r2_transcript_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    final_pdf_r2_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    final_pdf_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     transcript_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     speaker_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -94,6 +96,8 @@ class Job(Base):
     settlement_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     payment_status: Mapped[str] = mapped_column(String(20), nullable=False, default="unpaid", index=True)
     settlement_status: Mapped[str] = mapped_column(String(20), nullable=False, default="waiting", index=True)
+    finalized_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    final_pdf_generated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 

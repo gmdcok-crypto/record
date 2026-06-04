@@ -97,6 +97,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   assigned_admin_id BIGINT NULL,
   r2_voice_key VARCHAR(255) NOT NULL,
   r2_transcript_key VARCHAR(255) NULL,
+  final_pdf_r2_key VARCHAR(255) NULL,
+  final_pdf_filename VARCHAR(255) NULL,
   transcript_version INT NOT NULL DEFAULT 1,
   speaker_count INT NULL,
   memo TEXT NULL,
@@ -108,6 +110,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   settlement_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
   payment_status ENUM('unpaid', 'partial_paid', 'paid') NOT NULL DEFAULT 'unpaid',
   settlement_status ENUM('waiting', 'confirmed', 'paid') NOT NULL DEFAULT 'waiting',
+  finalized_at DATETIME NULL,
+  final_pdf_generated_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_jobs_client

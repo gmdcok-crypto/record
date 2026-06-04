@@ -69,6 +69,13 @@ def build_transcript_object_key(job_id: str) -> str:
     return f"{settings.r2_text_prefix}{job_id}/transcript.json"
 
 
+def build_final_pdf_object_key(job_id: str, filename: str) -> str:
+    safe_name = _safe_filename(filename)
+    if not safe_name.lower().endswith(".pdf"):
+        safe_name = f"{Path(safe_name).stem or 'final_transcript'}.pdf"
+    return f"{settings.r2_text_prefix}{job_id}/final/{safe_name}"
+
+
 def build_transcript_history_object_key(job_id: str, revision_id: str) -> str:
     return f"{settings.r2_text_prefix}{job_id}/history/{revision_id}.json"
 
@@ -192,6 +199,22 @@ def save_transcript_json(job_id: str, transcript: dict) -> str:
     )
 
     return object_key
+
+
+def save_final_pdf(job_id: str, pdf_bytes: bytes, filename: str) -> tuple[str, str]:
+    if not settings.r2_configured:
+        raise ValueError("R2 is not configured")
+
+    object_key = build_final_pdf_object_key(job_id, filename)
+    download_name = Path(object_key).name
+    client = _client()
+    client.put_object(
+        Bucket=settings.r2_bucket_name,
+        Key=object_key,
+        Body=pdf_bytes,
+        ContentType="application/pdf",
+    )
+    return object_key, download_name
 
 
 def save_transcript_history_snapshot(job_id: str, revision_id: str, transcript: dict) -> str:

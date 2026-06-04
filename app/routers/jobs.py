@@ -15,16 +15,19 @@ from app.services.job_store import (
     get_transcriber_by_code,
     list_client_jobs,
     list_transcriber_jobs,
+    mark_final_pdf_saved,
     mark_transcript_saved,
     serialize_job,
     set_job_status,
 )
 from app.services.pdf_export import build_transcript_pdf
 from app.services.r2 import (
+    create_download_url,
     get_object_bytes,
     get_transcript_json,
     get_voice_object_key,
     put_object_bytes,
+    save_final_pdf,
     save_transcript_json,
 )
 
@@ -209,6 +212,69 @@ def export_transcript_pdf_post(job_id: str, body: ExportTranscriptPdfRequest) ->
     if not transcript:
         raise HTTPException(status_code=404, detail="Transcript not found")
     return _pdf_response(transcript)
+
+
+@router.post("/{job_id}/transcript.pdf/finalize")
+def finalize_transcript_pdf(
+    job_id: str,
+    body: ExportTranscriptPdfRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    _ensure_job_exists(job_id)
+    transcript = body.transcript_json or get_transcript_json(job_id)
+    if not transcript:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    try:
+        pdf_bytes, filename = build_transcript_pdf(transcript)
+        pdf_key, stored_filename = save_final_pdf(job_id, pdf_bytes, filename)
+        mark_final_pdf_saved(db, job, pdf_key, stored_filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Final PDF save failed: {exc}") from exc
+
+    return {
+        "job_id": job_id,
+        "status": "pdf_sent",
+        "final_pdf_key": pdf_key,
+        "filename": stored_filename,
+        "download_url": f"/api/jobs/{job_id}/transcript.pdf/final",
+    }
+
+
+@router.get("/{job_id}/transcript.pdf/final")
+def download_final_transcript_pdf(
+    job_id: str,
+    db: Annotated[Session, Depends(get_db)],
+) -> Response:
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.final_pdf_r2_key:
+        raise HTTPException(status_code=404, detail="Final PDF is not ready")
+
+    try:
+        pdf_bytes = get_object_bytes(job.final_pdf_r2_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Final PDF load failed: {exc}") from exc
+
+    filename = job.final_pdf_filename or "final_transcript.pdf"
+    encoded = quote(filename)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{encoded}",
+            "Cache-Control": "no-cache",
+        },
+    )
 
 
 @router.put("/{job_id}/transcript")
