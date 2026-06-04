@@ -71,7 +71,7 @@ def create_job_record(
     transcript_key: str | None = None,
     transcript_json: dict | None = None,
 ) -> Job:
-    client, transcriber = ensure_seed_data(db)
+    client, _ = ensure_seed_data(db)
     admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     due_at = now + timedelta(hours=24)
@@ -88,8 +88,8 @@ def create_job_record(
         uploaded_at=now,
         due_at=due_at,
         priority="normal",
-        status="working" if transcript_json else "waiting_assignment",
-        assigned_transcriber_id=transcriber.id if transcript_json else None,
+        status="waiting_assignment",
+        assigned_transcriber_id=None,
         assigned_admin_id=admin.id if admin else None,
         r2_voice_key=voice_key,
         r2_transcript_key=transcript_key,
@@ -107,16 +107,6 @@ def create_job_record(
     )
     db.add(job)
     db.flush()
-
-    if job.assigned_transcriber_id:
-        db.add(
-            JobAssignment(
-                job_id=job.job_id,
-                to_transcriber_id=job.assigned_transcriber_id,
-                assignment_type="auto",
-                reason="AI 전사 완료 후 기본 속기사 배정",
-            )
-        )
 
     db.add(
         JobStatusLog(
