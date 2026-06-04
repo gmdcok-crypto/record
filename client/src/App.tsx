@@ -349,15 +349,6 @@ export default function App() {
                 업로드
               </button>
 
-              <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4 text-sm text-slate-400">
-                <p className="font-semibold text-slate-100">추가 제안 기능</p>
-                <ul className="mt-2 list-disc space-y-1 pl-5">
-                  <li>다중 파일을 하나의 사건으로 묶는 업로드</li>
-                  <li>의뢰인 표시명 자동 생성 규칙</li>
-                  <li>검수 요청 사유 / 메모 입력</li>
-                  <li>속기사 검수 완료 알림</li>
-                </ul>
-              </div>
             </div>
           </section>
 
