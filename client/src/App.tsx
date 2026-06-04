@@ -142,6 +142,8 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<JobArchiveItem | null>(null);
+  const [duplicateDialogMessage, setDuplicateDialogMessage] = useState("");
 
   const busy = step === "uploading" || loadingJob || saving || downloadingPdf;
   const archivedFilenames = useMemo(
@@ -205,12 +207,7 @@ export default function App() {
     const nextFiles = files ? Array.from(files) : [];
     const duplicateFile = nextFiles.find((file) => archivedFilenames.has(normalizeUploadFilename(file.name)));
     if (duplicateFile) {
-      setSelectedFiles([]);
-      setStep("error");
-      setProgress(0);
-      setError(`이미 업로드된 파일입니다: ${duplicateFile.name}`);
-      setMessage("");
-      if (inputRef.current) inputRef.current.value = "";
+      openDuplicateDialog(`이미 업로드된 파일입니다: ${duplicateFile.name}`);
       return;
     }
 
@@ -258,7 +255,13 @@ export default function App() {
       setJobIdInput(uploaded.job_id);
       await refreshArchive();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "업로드 실패");
+      const message = err instanceof Error ? err.message : "업로드 실패";
+      if (message.includes("이미 업로드된 파일입니다")) {
+        setError("");
+        openDuplicateDialog(message);
+      } else {
+        setError(message);
+      }
       setStep("error");
       throw err;
     }
@@ -270,9 +273,7 @@ export default function App() {
 
     const duplicateFile = filesToUpload.find((file) => archivedFilenames.has(normalizeUploadFilename(file.name)));
     if (duplicateFile) {
-      setStep("error");
-      setError(`이미 업로드된 파일입니다: ${duplicateFile.name}`);
-      setMessage("");
+      openDuplicateDialog(`이미 업로드된 파일입니다: ${duplicateFile.name}`);
       return;
     }
 
@@ -373,6 +374,26 @@ export default function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "업로드 취소 실패");
     }
+  };
+
+  const closeCancelDialog = () => {
+    setCancelTarget(null);
+  };
+
+  const openDuplicateDialog = (nextMessage: string) => {
+    resetUploadUi();
+    setDuplicateDialogMessage(nextMessage);
+  };
+
+  const closeDuplicateDialog = () => {
+    setDuplicateDialogMessage("");
+  };
+
+  const confirmCancelUpload = async () => {
+    if (!cancelTarget) return;
+    const jobId = cancelTarget.job_id;
+    setCancelTarget(null);
+    await onCancelUpload(jobId);
   };
 
   return (
@@ -526,7 +547,7 @@ export default function App() {
                         {item.status === "waiting_assignment" ? (
                           <button
                             type="button"
-                            onClick={() => void onCancelUpload(item.job_id)}
+                            onClick={() => setCancelTarget(item)}
                             className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-300"
                           >
                             업로드 취소
@@ -675,17 +696,55 @@ export default function App() {
           </section>
         </div>
 
-        {(message || error) && (
-          <div
-            className={`rounded-2xl px-4 py-3 text-sm ${
-              error
-                ? "border border-red-500/30 bg-red-500/10 text-red-300"
-                : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-            }`}
-          >
-            {error || message}
+        <div className="sr-only" aria-live="polite">
+          {error || message}
+        </div>
+
+        {cancelTarget ? (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-2xl shadow-black/40">
+              <h3 className="text-lg font-semibold text-white">업로드 취소</h3>
+              <p className="mt-3 text-sm leading-6 text-slate-300">
+                <span className="font-medium text-white">{cancelTarget.filename}</span> 업로드를 취소하시겠습니까?
+                배정 전 파일만 취소할 수 있으며, 취소하면 보관함과 저장된 원본 파일이 함께 삭제됩니다.
+              </p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeCancelDialog}
+                  className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-slate-800"
+                >
+                  닫기
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void confirmCancelUpload()}
+                  className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-500"
+                >
+                  취소 진행
+                </button>
+              </div>
+            </div>
           </div>
-        )}
+        ) : null}
+
+        {duplicateDialogMessage ? (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-2xl shadow-black/40">
+              <h3 className="text-lg font-semibold text-white">중복 업로드 안내</h3>
+              <p className="mt-3 text-sm leading-6 text-slate-300">{duplicateDialogMessage}</p>
+              <div className="mt-5 flex justify-end">
+                <button
+                  type="button"
+                  onClick={closeDuplicateDialog}
+                  className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+                >
+                  확인
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
