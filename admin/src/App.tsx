@@ -7,7 +7,6 @@ import {
   deleteTranscriber,
   fetchAdminOverview,
   fetchJob,
-  getApiBaseUrl,
   updateInvoiceStatus,
   updateJobStatus,
   updateSettlementStatus,
@@ -1309,9 +1308,6 @@ function App() {
                 >
                   새 배정 시작
                 </button>
-              </div>
-              <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-3 text-xs text-slate-400">
-                API: {getApiBaseUrl()}
               </div>
             </header>
 
