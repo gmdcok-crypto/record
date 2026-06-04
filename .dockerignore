@@ -9,4 +9,8 @@ client/.env
 client/node_modules
 client/dist
 client/dev-dist
+admin/node_modules
+admin/dist
+transcriber/node_modules
+transcriber/dist
 *.md

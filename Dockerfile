@@ -15,8 +15,8 @@ RUN npm run build
 
 FROM node:20-alpine AS transcriber-build
 WORKDIR /app/transcriber
-COPY transcriber/package.json ./
-RUN npm install
+COPY transcriber/package.json transcriber/package-lock.json ./
+RUN npm ci
 COPY transcriber/ ./
 RUN npm run build
 
