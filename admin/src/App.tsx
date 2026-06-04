@@ -5,6 +5,7 @@ import {
   createAdminEventsSource,
   fetchAdminOverview,
   fetchJob,
+  getApiBaseUrl,
   updateInvoiceStatus,
   updateJobStatus,
   updateSettlementStatus,
@@ -1225,6 +1226,9 @@ function App() {
                   전체 의뢰 {dashboardStats.totalJobs}건
                 </button>
                 <button className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-white/10">
+                  jobs 응답 {jobs.length}건
+                </button>
+                <button className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-white/10">
                   미수 {formatCurrency(dashboardStats.outstanding)}
                 </button>
                 <button
@@ -1234,6 +1238,9 @@ function App() {
                 >
                   새 배정 시작
                 </button>
+              </div>
+              <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-3 text-xs text-slate-400">
+                API: {getApiBaseUrl()}
               </div>
             </header>
 

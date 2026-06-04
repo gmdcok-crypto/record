@@ -109,6 +109,10 @@ function apiBase(): string {
   return configured || window.location.origin;
 }
 
+export function getApiBaseUrl(): string {
+  return apiBase();
+}
+
 async function parseApiError(res: Response, fallback: string): Promise<Error> {
   const contentType = res.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
