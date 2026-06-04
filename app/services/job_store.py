@@ -227,6 +227,7 @@ def mark_final_pdf_saved(db: Session, job: Job, pdf_key: str, filename: str) -> 
 
 
 def serialize_job(job: Job, *, transcript_json: dict, audio_url: str) -> dict:
+    visible_transcriber = job.transcriber if job.status not in {"uploaded", "waiting_assignment"} else None
     return {
         "job_id": job.job_id,
         "voice_key": job.r2_voice_key,
@@ -243,8 +244,8 @@ def serialize_job(job: Job, *, transcript_json: dict, audio_url: str) -> dict:
             "name": job.client.name if job.client else DEFAULT_CLIENT_NAME,
         },
         "transcriber": {
-            "id": job.transcriber.id if job.transcriber else None,
-            "name": job.transcriber.name if job.transcriber else None,
+            "id": visible_transcriber.id if visible_transcriber else None,
+            "name": visible_transcriber.name if visible_transcriber else None,
         },
         "final_pdf_ready": job.status == "pdf_sent",
         "final_pdf_filename": job.final_pdf_filename,
@@ -275,7 +276,9 @@ def list_transcriber_jobs(db: Session, transcriber_code: str = DEFAULT_TRANSCRIB
     if transcriber is None:
         return []
     rows = db.scalars(
-        select(Job).where(Job.assigned_transcriber_id == transcriber.id).order_by(Job.updated_at.desc())
+        select(Job)
+        .where(Job.assigned_transcriber_id == transcriber.id, Job.status.in_(ACTIVE_JOB_STATUSES))
+        .order_by(Job.updated_at.desc())
     ).all()
     return [
         {
@@ -439,7 +442,7 @@ def dashboard_overview(db: Session) -> dict:
                 "due_at": job.due_at.isoformat() if job.due_at else None,
                 "priority": job.priority,
                 "status": job.status,
-                "assignee": job.transcriber.name if job.transcriber else "-",
+                "assignee": job.transcriber.name if job.transcriber and job.status not in {"uploaded", "waiting_assignment"} else "-",
                 "progress": _progress_for_status(job.status),
                 "duration": _format_duration(job.duration_seconds),
                 "sales_amount": float(job.sales_amount or 0),
