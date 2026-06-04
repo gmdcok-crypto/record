@@ -309,6 +309,14 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/40 px-4 py-10 text-center text-sm text-slate-400">
+      {message}
+    </div>
+  );
+}
+
 function App() {
   const [activeMenu, setActiveMenu] = useState<MenuKey>("dashboard");
   const [query, setQuery] = useState("");
@@ -580,7 +588,10 @@ function App() {
           }
         >
           <div className="space-y-3">
-            {jobs.filter((job) => job.priority === "긴급").map((job) => (
+            {jobs.filter((job) => job.priority === "긴급").length === 0 ? (
+              <EmptyState message="표시할 긴급 작업이 없습니다." />
+            ) : (
+              jobs.filter((job) => job.priority === "긴급").map((job) => (
               <div
                 key={job.id}
                 className="rounded-2xl border border-white/8 bg-slate-950/60 p-4 transition hover:border-cyan-400/30"
@@ -611,13 +622,17 @@ function App() {
                   <ProgressBar value={job.progress} />
                 </div>
               </div>
-            ))}
+              ))
+            )}
           </div>
         </SectionCard>
 
         <SectionCard title="운영 피드">
           <div className="space-y-4">
-            {activityFeed.map((item) => (
+            {activityFeed.length === 0 ? (
+              <EmptyState message="표시할 최근 작업 이력이 없습니다." />
+            ) : (
+              activityFeed.map((item) => (
               <div key={`${item.time}-${item.title}`} className="flex gap-3">
                 <div className="mt-1 h-2.5 w-2.5 rounded-full bg-cyan-400" />
                 <div>
@@ -625,7 +640,8 @@ function App() {
                   <p className="mt-1 text-xs text-slate-500">{item.time}</p>
                 </div>
               </div>
-            ))}
+              ))
+            )}
           </div>
         </SectionCard>
       </div>
@@ -689,7 +705,7 @@ function App() {
           <span>동작</span>
         </div>
         <div className="divide-y divide-white/5">
-          {visibleJobs.map((job) => (
+          {visibleJobs.length === 0 ? <EmptyState message="표시할 의뢰/파일 데이터가 없습니다." /> : visibleJobs.map((job) => (
             <div key={job.id} className="grid gap-4 bg-slate-950/40 px-4 py-4 lg:grid-cols-[1.5fr_1fr_0.9fr_0.8fr_0.8fr_0.8fr] lg:items-center">
               <div>
                 <p className="font-semibold text-white">{job.title}</p>
@@ -745,7 +761,12 @@ function App() {
     <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
       <SectionCard title="배정 대기 작업">
         <div className="space-y-3">
-          {jobs.filter((job) => job.status === "배정 대기" || job.status === "재검수 대기").map((job) => (
+          {jobs.filter((job) => job.status === "배정 대기" || job.status === "재검수 대기").length === 0 ? (
+            <EmptyState message="배정이 필요한 작업이 없습니다." />
+          ) : (
+            jobs
+              .filter((job) => job.status === "배정 대기" || job.status === "재검수 대기")
+              .map((job) => (
             <div key={job.id} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -773,13 +794,17 @@ function App() {
                 </button>
               </div>
             </div>
-          ))}
+              ))
+          )}
         </div>
       </SectionCard>
 
       <SectionCard title="속기사 가용 현황">
         <div className="space-y-3">
-          {transcribers.map((person) => (
+          {transcribers.length === 0 ? (
+            <EmptyState message="등록된 속기사 데이터가 없습니다." />
+          ) : (
+            transcribers.map((person) => (
             <div key={person.id} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -804,7 +829,8 @@ function App() {
                 </div>
               </div>
             </div>
-          ))}
+            ))
+          )}
         </div>
       </SectionCard>
     </div>
@@ -824,7 +850,12 @@ function App() {
       }
     >
       <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
-        {transcribers.map((person) => (
+        {transcribers.length === 0 ? (
+          <div className="md:col-span-2 2xl:col-span-4">
+            <EmptyState message="속기사 관리 데이터가 없습니다." />
+          </div>
+        ) : (
+          transcribers.map((person) => (
           <div key={person.id} className="rounded-3xl border border-white/10 bg-slate-950/60 p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -874,7 +905,8 @@ function App() {
               </button>
             </div>
           </div>
-        ))}
+          ))
+        )}
       </div>
     </SectionCard>
   );
@@ -924,7 +956,10 @@ function App() {
       }
     >
       <div className="space-y-3">
-        {settlements.map((item) => (
+        {settlements.length === 0 ? (
+          <EmptyState message="정산 데이터가 없습니다." />
+        ) : (
+          settlements.map((item) => (
           <div key={`${item.month}-${item.transcriber}`} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/60 p-4 md:grid-cols-[0.9fr_1.1fr_0.8fr_1fr_0.8fr_1fr] md:items-center">
             <div className="text-sm text-slate-400">{item.month}</div>
             <div>
@@ -952,7 +987,8 @@ function App() {
               )}
             </div>
           </div>
-        ))}
+          ))
+        )}
       </div>
     </SectionCard>
   );
@@ -971,7 +1007,12 @@ function App() {
       }
     >
       <div className="grid gap-4 xl:grid-cols-3">
-        {sales.map((item) => (
+        {sales.length === 0 ? (
+          <div className="xl:col-span-3">
+            <EmptyState message="매출 데이터가 없습니다." />
+          </div>
+        ) : (
+          sales.map((item) => (
           <div key={`${item.month}-${item.client}`} className="rounded-3xl border border-white/10 bg-slate-950/60 p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -1006,7 +1047,8 @@ function App() {
               </button>
             </div>
           </div>
-        ))}
+          ))
+        )}
       </div>
     </SectionCard>
   );
@@ -1026,7 +1068,10 @@ function App() {
     <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
       <SectionCard title="매출 분석">
         <div className="space-y-4">
-          {sales.map((item, index) => (
+          {sales.length === 0 ? (
+            <EmptyState message="분석할 매출 데이터가 없습니다." />
+          ) : (
+            sales.map((item, index) => (
             <div key={item.client}>
               <div className="mb-2 flex items-center justify-between text-sm">
                 <span className="text-slate-300">{item.client}</span>
@@ -1034,13 +1079,17 @@ function App() {
               </div>
               <ProgressBar value={33 - index * 7} />
             </div>
-          ))}
+            ))
+          )}
         </div>
       </SectionCard>
 
       <SectionCard title="속기사 생산성 분석">
         <div className="space-y-3">
-          {transcribers.map((person) => (
+          {transcribers.length === 0 ? (
+            <EmptyState message="분석할 속기사 데이터가 없습니다." />
+          ) : (
+            transcribers.map((person) => (
             <div key={person.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
               <div>
                 <p className="font-medium text-white">{person.name}</p>
@@ -1050,7 +1099,8 @@ function App() {
                 <p className="mt-1 text-slate-500">품질 {person.qualityScore}</p>
               </div>
             </div>
-          ))}
+            ))
+          )}
         </div>
       </SectionCard>
     </div>
@@ -1169,7 +1219,7 @@ function App() {
               </section>
             ) : null}
 
-            {!loading && !error ? content : null}
+            {content}
           </main>
         </div>
       </div>

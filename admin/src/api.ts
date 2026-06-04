@@ -109,6 +109,20 @@ function apiBase(): string {
   return configured || window.location.origin;
 }
 
+async function parseApiError(res: Response, fallback: string): Promise<Error> {
+  const contentType = res.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    const err = await res.json().catch(() => ({}));
+    return new Error(err.detail || fallback);
+  }
+
+  const text = await res.text().catch(() => "");
+  if (text.trimStart().startsWith("<!doctype") || text.trimStart().startsWith("<html")) {
+    return new Error("API 대신 HTML이 반환되었습니다. VITE_API_URL 또는 배포 라우팅을 확인하세요.");
+  }
+  return new Error(fallback);
+}
+
 export function resolveUrl(path: string): string {
   if (path.startsWith("http")) return path;
   return `${apiBase()}${path}`;
@@ -117,8 +131,7 @@ export function resolveUrl(path: string): string {
 export async function fetchJob(jobId: string): Promise<JobResponse> {
   const res = await fetch(`${apiBase()}/api/jobs/${jobId}`);
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "작업을 불러올 수 없습니다");
+    throw await parseApiError(res, "작업을 불러올 수 없습니다");
   }
   return res.json();
 }
@@ -126,8 +139,7 @@ export async function fetchJob(jobId: string): Promise<JobResponse> {
 export async function fetchAdminOverview(): Promise<AdminOverview> {
   const res = await fetch(`${apiBase()}/api/jobs/admin/overview`);
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "관리자 데이터를 불러올 수 없습니다");
+    throw await parseApiError(res, "관리자 데이터를 불러올 수 없습니다");
   }
   return res.json();
 }
@@ -139,8 +151,7 @@ export async function assignJob(jobId: string, transcriberCode: string, note?: s
     body: JSON.stringify({ transcriber_code: transcriberCode, note }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "배정 실패");
+    throw await parseApiError(res, "배정 실패");
   }
 }
 
@@ -151,8 +162,7 @@ export async function updateJobStatus(jobId: string, status: string, note?: stri
     body: JSON.stringify({ status, note }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "상태 변경 실패");
+    throw await parseApiError(res, "상태 변경 실패");
   }
 }
 
@@ -166,8 +176,7 @@ export async function updateTranscriber(
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "속기사 수정 실패");
+    throw await parseApiError(res, "속기사 수정 실패");
   }
 }
 
@@ -178,8 +187,7 @@ export async function updateSettlementStatus(settlementId: number, status: strin
     body: JSON.stringify({ status }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "정산 상태 변경 실패");
+    throw await parseApiError(res, "정산 상태 변경 실패");
   }
 }
 
@@ -190,8 +198,7 @@ export async function updateInvoiceStatus(invoiceId: number, status: string): Pr
     body: JSON.stringify({ status }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "매출 상태 변경 실패");
+    throw await parseApiError(res, "매출 상태 변경 실패");
   }
 }
 
@@ -202,8 +209,7 @@ export async function saveTranscript(jobId: string, transcript: TranscriptJson):
     body: JSON.stringify({ transcript_json: transcript }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "저장 실패");
+    throw await parseApiError(res, "저장 실패");
   }
 }
 
@@ -228,8 +234,7 @@ export async function downloadTranscriptPdf(jobId: string, transcript: Transcrip
     body: JSON.stringify({ transcript_json: transcript }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "PDF 저장 실패");
+    throw await parseApiError(res, "PDF 저장 실패");
   }
 
   const blob = await res.blob();
