@@ -1183,27 +1183,20 @@ function App() {
 
           <main className="space-y-6">
             <header className="rounded-[28px] border border-white/10 bg-slate-950/60 px-5 py-5 backdrop-blur-xl">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                <div>
-                  <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white">
-                    파일 운영부터 매출 분석까지 이어지는 Admin Workspace
-                  </h2>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-white/10">
-                    전체 의뢰 {dashboardStats.totalJobs}건
-                  </button>
-                  <button className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-white/10">
-                    미수 {formatCurrency(dashboardStats.outstanding)}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveMenu("assignments")}
-                    className="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
-                  >
-                    새 배정 시작
-                  </button>
-                </div>
+              <div className="flex flex-wrap gap-2">
+                <button className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-white/10">
+                  전체 의뢰 {dashboardStats.totalJobs}건
+                </button>
+                <button className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-white/10">
+                  미수 {formatCurrency(dashboardStats.outstanding)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveMenu("assignments")}
+                  className="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+                >
+                  새 배정 시작
+                </button>
               </div>
             </header>
 
