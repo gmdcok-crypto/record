@@ -19,7 +19,10 @@ import {
 } from "./api";
 
 type Step = "idle" | "uploading" | "ready" | "error";
+type ClientTab = "upload" | "archive" | "edit";
 type EditableSegment = TranscriptSegment & { id: string };
+
+const EDITABLE_JOB_STATUSES = new Set(["first_done", "client_editing"]);
 
 const ACCEPT = "audio/*,video/mp4,video/webm,.wav,.mp3,.m4a,.flac,.ogg";
 const TEST_CLIENT_NAME = "홍길동";
@@ -105,8 +108,33 @@ function autoResizeTextarea(element: HTMLTextAreaElement) {
   element.style.height = `${element.scrollHeight}px`;
 }
 
+function mapClientJobStatus(status: string): string {
+  switch (status) {
+    case "waiting_assignment":
+    case "uploaded":
+      return "배정 대기";
+    case "assigned":
+    case "working":
+      return "작업 중";
+    case "first_done":
+      return "확인요청";
+    case "client_editing":
+      return "수정 중";
+    case "review_waiting":
+      return "재검수 요청";
+    case "final_done":
+    case "pdf_sent":
+      return "완료";
+    case "cancelled":
+      return "취소됨";
+    default:
+      return status;
+  }
+}
+
 function archiveStatusStyle(status: string): string {
   switch (status) {
+    case "first_done":
     case "review_waiting":
       return "bg-violet-500/15 text-violet-300";
     case "client_editing":
@@ -114,9 +142,16 @@ function archiveStatusStyle(status: string): string {
     case "final_done":
     case "pdf_sent":
       return "bg-emerald-500/15 text-emerald-300";
+    case "assigned":
+    case "working":
+      return "bg-blue-500/15 text-blue-300";
     default:
       return "bg-amber-500/15 text-amber-300";
   }
+}
+
+function isEditableArchiveStatus(status: string): boolean {
+  return EDITABLE_JOB_STATUSES.has(status);
 }
 
 function normalizeUploadFilename(filename: string): string {
@@ -147,9 +182,14 @@ export default function App() {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<JobArchiveItem | null>(null);
   const [duplicateDialogMessage, setDuplicateDialogMessage] = useState("");
+  const [activeTab, setActiveTab] = useState<ClientTab>("archive");
   const segmentEndRef = useRef<number | null>(null);
 
   const busy = step === "uploading" || loadingJob || saving || downloadingPdf;
+  const pendingReviewCount = useMemo(
+    () => archive.filter((item) => item.status === "first_done").length,
+    [archive],
+  );
   const archivedFilenames = useMemo(
     () => new Set(archive.map((item) => normalizeUploadFilename(item.filename))),
     [archive],
@@ -285,7 +325,7 @@ export default function App() {
     }
   };
 
-  const loadJobById = async (jobId: string) => {
+  const loadJobById = async (jobId: string, options?: { switchToEdit?: boolean }) => {
     if (!jobId.trim()) return;
     setLoadingJob(true);
     setError("");
@@ -296,13 +336,28 @@ export default function App() {
       setJobIdInput(data.job_id);
       setSegments(buildEditableSegments(data.transcript_json));
       setStep("ready");
-      setMessage("업로드된 작업을 불러왔습니다. 속기사 작업 후 보관함 상태가 갱신됩니다.");
+      const shouldOpenEdit =
+        options?.switchToEdit ?? isEditableArchiveStatus(data.status ?? "");
+      if (shouldOpenEdit) {
+        setActiveTab("edit");
+        setMessage(
+          data.status === "first_done"
+            ? "확인요청 문서를 불러왔습니다. 내용을 검토하고 수정하세요."
+            : "편집 문서를 불러왔습니다.",
+        );
+      } else {
+        setMessage("작업을 불러왔습니다.");
+      }
       await refreshArchive();
     } catch (err) {
       setError(err instanceof Error ? err.message : "작업을 불러오지 못했습니다.");
     } finally {
       setLoadingJob(false);
     }
+  };
+
+  const openArchiveJob = (item: JobArchiveItem) => {
+    void loadJobById(item.job_id, { switchToEdit: isEditableArchiveStatus(item.status) });
   };
 
   const performUpload = async (fileToUpload: File) => {
@@ -345,6 +400,7 @@ export default function App() {
         await performUpload(file);
       }
       resetUploadUi(`${filesToUpload.length}개 파일 업로드가 완료되었습니다. 업로드된 파일은 관리자 배정 후 속기사가 직접 녹취록을 작성합니다.`);
+      setActiveTab("archive");
     } catch {
       // Error state is already handled in performUpload.
     }
@@ -457,16 +513,66 @@ export default function App() {
     await onCancelUpload(jobId);
   };
 
+  const tabs: { id: ClientTab; label: string; badge?: number }[] = [
+    { id: "upload", label: "업로드" },
+    { id: "archive", label: "보관함", badge: pendingReviewCount || undefined },
+    { id: "edit", label: "편집", badge: pendingReviewCount || undefined },
+  ];
+
   return (
     <div className="min-h-dvh bg-slate-950 text-slate-100">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
-        <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr] lg:gap-6">
-          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20 lg:order-1">
+      <div className="mx-auto flex min-h-dvh max-w-3xl flex-col px-4 pb-6 pt-4 lg:max-w-4xl lg:px-6">
+        <header className="mb-4">
+          <p className="text-sm font-semibold text-blue-300">의뢰인 녹취록</p>
+          <h1 className="mt-1 text-2xl font-bold text-white">{TEST_CLIENT_NAME}</h1>
+        </header>
+
+        <nav className="sticky top-0 z-20 -mx-4 mb-4 border-b border-slate-800 bg-slate-950/95 px-4 backdrop-blur lg:-mx-6 lg:px-6">
+          <div className="grid grid-cols-3 gap-1 py-2">
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`relative rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                    isActive
+                      ? "bg-slate-800 text-white shadow-inner shadow-black/20"
+                      : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
+                  }`}
+                >
+                  {tab.label}
+                  {tab.badge ? (
+                    <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-500 px-1 text-[10px] font-bold text-white">
+                      {tab.badge}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+
+        {error ? (
+          <div className="mb-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+            {error}
+          </div>
+        ) : null}
+        {message ? (
+          <div className="mb-4 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
+            {message}
+          </div>
+        ) : null}
+
+        <main className="flex-1">
+          {activeTab === "upload" ? (
+          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
             <div className="mb-5">
-              <p className="text-sm font-semibold text-blue-300">1. 파일 업로드</p>
-              <h2 className="mt-1 text-xl font-bold text-white">{TEST_CLIENT_NAME} 의뢰 업로드</h2>
+              <p className="text-sm font-semibold text-blue-300">파일 업로드</p>
+              <h2 className="mt-1 text-xl font-bold text-white">새 녹취 의뢰</h2>
               <p className="mt-2 text-sm text-slate-400">
-                업로드와 보관함은 DB 연동형으로 동작합니다.
+                음성·영상 파일을 올리면 보관함에 저장되고 속기사 배정을 기다립니다.
               </p>
             </div>
 
@@ -553,13 +659,15 @@ export default function App() {
               </button>
             </div>
           </section>
+          ) : null}
 
-          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20 lg:order-3 lg:col-span-2">
+          {activeTab === "archive" ? (
+          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
             <div className="mb-5">
-              <p className="text-sm font-semibold text-emerald-300">3. 보관함</p>
-              <h2 className="mt-1 text-xl font-bold text-white">DB 저장 작업 목록</h2>
+              <p className="text-sm font-semibold text-emerald-300">보관함</p>
+              <h2 className="mt-1 text-xl font-bold text-white">작업 목록</h2>
               <p className="mt-1 text-sm text-slate-400">
-                의뢰인 업로드 이력과 상태는 DB에서 조회합니다.
+                확인요청 상태의 파일을 누르면 편집 탭으로 이동합니다.
               </p>
             </div>
 
@@ -576,7 +684,7 @@ export default function App() {
                 />
                 <button
                   type="button"
-                  onClick={() => void loadJobById(jobIdInput)}
+                  onClick={() => void loadJobById(jobIdInput, { switchToEdit: true })}
                   disabled={busy || !jobIdInput.trim()}
                   className="rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50"
                 >
@@ -593,12 +701,12 @@ export default function App() {
                     className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 transition hover:border-blue-500 hover:bg-slate-900"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <button type="button" onClick={() => void loadJobById(item.job_id)} className="min-w-0 flex-1 text-left">
+                      <button type="button" onClick={() => openArchiveJob(item)} className="min-w-0 flex-1 text-left">
                         <p className="truncate font-semibold text-slate-100">{item.title}</p>
                         <p className="mt-1 truncate text-sm text-slate-400">{item.filename}</p>
                       </button>
                       <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${archiveStatusStyle(item.status)}`}>
-                        {item.status}
+                        {mapClientJobStatus(item.status)}
                       </span>
                     </div>
                     <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
@@ -633,11 +741,13 @@ export default function App() {
               보관함 새로고침
             </button>
           </section>
+          ) : null}
 
-          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20 lg:order-2">
+          {activeTab === "edit" ? (
+          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
             <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-violet-300">2. 직접 편집</p>
+                <p className="text-sm font-semibold text-violet-300">편집</p>
                 <h2 className="mt-1 text-xl font-bold text-white">{currentTitle}</h2>
                 <p className="mt-1 text-sm text-slate-400">
                   구간 텍스트를 누르면 해당 오디오가 재생되고, 같은 영역에서 바로 수정할 수 있습니다.
@@ -746,11 +856,12 @@ export default function App() {
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-6 py-14 text-center text-sm text-slate-400">
-                업로드 후 보관함이나 작업번호로 문서를 불러오세요.
+                보관함에서 확인요청 항목을 선택하거나 작업번호로 문서를 불러오세요.
               </div>
             )}
           </section>
-        </div>
+          ) : null}
+        </main>
 
         <div className="sr-only" aria-live="polite">
           {error || message}
