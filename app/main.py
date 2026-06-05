@@ -23,7 +23,8 @@ async def lifespan(app: FastAPI):
         init_db(settings.resolved_database_url)
         create_tables()
         if engine is not None:
-            purge_all_data(engine)
+            if settings.purge_db_on_startup.lower() in {"1", "true", "yes"}:
+                purge_all_data(engine)
             run_startup_migrations(engine)
     yield
 
@@ -58,7 +59,6 @@ def health() -> dict:
         "speaker_diarization": settings.soniox_enable_speaker_diarization,
         "bucket": settings.r2_bucket_name,
         "database_configured": settings.database_configured,
-        "build": "019ba9c-purge",
     }
 
 
