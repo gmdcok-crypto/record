@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import {
   cancelClientJob,
   checkHealth,
@@ -98,6 +98,11 @@ function formatSegmentTime(ms: number | null | undefined): string {
   const minute = Math.floor(total / 60);
   const second = total % 60;
   return `${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}`;
+}
+
+function autoResizeTextarea(element: HTMLTextAreaElement) {
+  element.style.height = "auto";
+  element.style.height = `${element.scrollHeight}px`;
 }
 
 function archiveStatusStyle(status: string): string {
@@ -265,6 +270,19 @@ export default function App() {
     void audio.play().catch(() => {
       segmentEndRef.current = null;
     });
+  };
+
+  const handleSegmentTextMouseDown = (
+    event: MouseEvent<HTMLTextAreaElement>,
+    startMs: number | null | undefined,
+    endMs: number | null | undefined,
+  ) => {
+    const textarea = event.currentTarget;
+    if (document.activeElement !== textarea) {
+      event.preventDefault();
+      playSegment(startMs, endMs);
+      textarea.focus();
+    }
   };
 
   const loadJobById = async (jobId: string) => {
@@ -622,7 +640,7 @@ export default function App() {
                 <p className="text-sm font-semibold text-violet-300">2. 직접 편집</p>
                 <h2 className="mt-1 text-xl font-bold text-white">{currentTitle}</h2>
                 <p className="mt-1 text-sm text-slate-400">
-                  대화 텍스트를 눌러 오디오 구간을 들으면서 수정하고 재검수를 요청할 수 있습니다.
+                  구간 텍스트를 누르면 해당 오디오가 재생되고, 같은 영역에서 바로 수정할 수 있습니다.
                 </p>
               </div>
               {job && (
@@ -650,41 +668,36 @@ export default function App() {
                   <label className="mb-1 block text-sm font-medium text-slate-300">
                     녹취 초안 / 의뢰인 수정본
                   </label>
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {segments.length ? (
                       segments.map((segment, index) => (
-                        <div key={segment.id} className="rounded-2xl border border-slate-700 bg-slate-950/80 p-4">
-                          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex min-w-0 items-center gap-2">
-                              <input
-                                value={segment.speaker}
-                                onChange={(e) => updateSegment(index, { speaker: e.target.value })}
-                                className="w-28 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-semibold text-slate-100 outline-none transition focus:border-blue-500"
-                              />
-                              <span className="text-xs text-slate-500">
-                                {formatSegmentTime(segment.start_ms)} - {formatSegmentTime(segment.end_ms)}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => playSegment(segment.start_ms, segment.end_ms)}
-                              className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-300 transition hover:bg-cyan-500/20"
-                            >
-                              이 구간 재생
-                            </button>
+                        <div key={segment.id} className="rounded-xl border border-slate-700/80 bg-slate-950/80 px-3 py-2.5">
+                          <div className="mb-1.5 flex min-w-0 items-center gap-2">
+                            <input
+                              value={segment.speaker}
+                              onChange={(e) => updateSegment(index, { speaker: e.target.value })}
+                              className="w-24 shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs font-semibold text-slate-100 outline-none transition focus:border-blue-500"
+                            />
+                            <span className="text-[11px] text-slate-500">
+                              {formatSegmentTime(segment.start_ms)} - {formatSegmentTime(segment.end_ms)}
+                            </span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => playSegment(segment.start_ms, segment.end_ms)}
-                            className="block w-full rounded-2xl bg-slate-900/80 px-4 py-3 text-left text-sm leading-7 text-slate-200 transition hover:bg-slate-800"
-                          >
-                            {segment.text || "내용을 입력하세요."}
-                          </button>
                           <textarea
                             value={segment.text}
-                            onChange={(e) => updateSegment(index, { text: e.target.value })}
-                            placeholder="이 구간의 수정 내용을 입력하세요."
-                            className="mt-3 min-h-[120px] w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm leading-7 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-blue-500"
+                            rows={1}
+                            onChange={(e) => {
+                              updateSegment(index, { text: e.target.value });
+                              autoResizeTextarea(e.currentTarget);
+                            }}
+                            onMouseDown={(e) =>
+                              handleSegmentTextMouseDown(e, segment.start_ms, segment.end_ms)
+                            }
+                            onFocus={(e) => autoResizeTextarea(e.currentTarget)}
+                            ref={(element) => {
+                              if (element) autoResizeTextarea(element);
+                            }}
+                            placeholder="텍스트를 눌러 재생하고, 여기서 바로 수정하세요."
+                            className="w-full resize-none overflow-hidden rounded-lg border border-transparent bg-slate-900/60 px-3 py-2 text-sm leading-6 text-slate-100 outline-none transition placeholder:text-slate-500 hover:border-slate-700 focus:border-blue-500 focus:bg-slate-900"
                           />
                         </div>
                       ))
