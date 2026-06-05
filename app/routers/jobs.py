@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.db import engine, get_db
+from app.db import get_db, get_engine
 from app.services.audio import remux_faststart, should_faststart
 from app.services.admin_events import publish_admin_event, stream_admin_events
 from app.services.database_migrate import run_sql_migration
@@ -176,11 +176,12 @@ def admin_migrate_transcriber_profile(request: Request) -> dict:
     token = settings.maintenance_reset_token.strip()
     if token and request.headers.get("X-Maintenance-Token") != token:
         raise HTTPException(status_code=403, detail="Invalid maintenance token")
-    if engine is None:
+    db_engine = get_engine()
+    if db_engine is None:
         raise HTTPException(status_code=503, detail="Database is not configured")
 
     sql_path = Path(__file__).resolve().parents[2] / "scripts" / "migrate_transcriber_profile.sql"
-    run_sql_migration(engine, sql_path)
+    run_sql_migration(db_engine, sql_path)
     return {"migrated": True, "file": sql_path.name}
 
 
@@ -195,9 +196,10 @@ def _validate_maintenance_request(request: Request, body: DatabaseResetRequest) 
 @router.post("/admin/maintenance/purge-data")
 def admin_purge_data(request: Request, body: DatabaseResetRequest) -> dict:
     _validate_maintenance_request(request, body)
-    if engine is None:
+    db_engine = get_engine()
+    if db_engine is None:
         raise HTTPException(status_code=503, detail="Database is not configured")
-    purge_all_data(engine)
+    purge_all_data(db_engine)
     publish_admin_event("database_purged", {"status": "completed"})
     return {"purged": True}
 
@@ -205,9 +207,10 @@ def admin_purge_data(request: Request, body: DatabaseResetRequest) -> dict:
 @router.post("/admin/maintenance/reset-database")
 def admin_reset_database(request: Request, body: DatabaseResetRequest) -> dict:
     _validate_maintenance_request(request, body)
-    if engine is None:
+    db_engine = get_engine()
+    if db_engine is None:
         raise HTTPException(status_code=503, detail="Database is not configured")
-    reset_database_schema(engine)
+    reset_database_schema(db_engine)
     publish_admin_event("database_reset", {"status": "completed"})
     return {"reset": True}
 

@@ -7,7 +7,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.db import create_tables, engine, init_db
+from app.db import create_tables, get_engine, init_db
 from app.services.database_migrate import run_startup_migrations
 from app.services.database_reset import purge_all_data
 from app.routers import jobs, transcribe, upload
@@ -22,10 +22,11 @@ async def lifespan(app: FastAPI):
     if settings.database_configured:
         init_db(settings.resolved_database_url)
         create_tables()
-        if engine is not None:
+        db_engine = get_engine()
+        if db_engine is not None:
             if settings.purge_db_on_startup.lower() in {"1", "true", "yes"}:
-                purge_all_data(engine)
-            run_startup_migrations(engine)
+                purge_all_data(db_engine)
+            run_startup_migrations(db_engine)
     yield
 
 

@@ -30,6 +30,10 @@ def create_tables() -> None:
     Base.metadata.create_all(bind=engine)
 
 
+def get_engine():
+    return engine
+
+
 def get_db() -> Generator[Session, None, None]:
     if SessionLocal is None:
         raise RuntimeError("Database is not configured")
