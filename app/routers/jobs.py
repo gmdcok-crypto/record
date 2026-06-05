@@ -194,12 +194,13 @@ def _validate_maintenance_request(request: Request, body: DatabaseResetRequest) 
 
 
 @router.post("/admin/maintenance/purge-data")
-def admin_purge_data(request: Request, body: DatabaseResetRequest) -> dict:
+def admin_purge_data(
+    request: Request,
+    body: DatabaseResetRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
     _validate_maintenance_request(request, body)
-    db_engine = get_engine()
-    if db_engine is None:
-        raise HTTPException(status_code=503, detail="Database is not configured")
-    purge_all_data(db_engine)
+    purge_all_data(db.get_bind())
     publish_admin_event("database_purged", {"status": "completed"})
     return {"purged": True}
 
