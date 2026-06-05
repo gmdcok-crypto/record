@@ -55,6 +55,28 @@ def _run_sql_file(engine: Engine, path: Path) -> None:
             conn.execute(text(statement))
 
 
+PURGE_TABLES = [
+    "settlement_items",
+    "settlements",
+    "invoice_payments",
+    "invoices",
+    "job_notes",
+    "job_status_logs",
+    "job_assignments",
+    "jobs",
+    "transcribers",
+    "transcript_history",
+]
+
+
+def purge_all_data(engine: Engine) -> None:
+    with engine.begin() as conn:
+        conn.execute(text("SET FOREIGN_KEY_CHECKS = 0"))
+        for table in PURGE_TABLES:
+            conn.execute(text(f"DELETE FROM `{table}`"))
+        conn.execute(text("SET FOREIGN_KEY_CHECKS = 1"))
+
+
 def reset_database_schema(engine: Engine) -> None:
     with engine.begin() as conn:
         conn.execute(text("SET FOREIGN_KEY_CHECKS = 0"))

@@ -17,15 +17,13 @@ from app.models.admin_models import (
 
 DEFAULT_ADMIN_EMAIL = "ops@bluecom.local"
 DEFAULT_ADMIN_NAME = "운영관리자"
-DEFAULT_TRANSCRIBER_EMAIL = "transcriber@bluecom.local"
-DEFAULT_TRANSCRIBER_NAME = "김민서"
 DEFAULT_TRANSCRIBER_CODE = "TR-001"
 DEFAULT_CLIENT_CODE = "CLIENT-DEFAULT"
 DEFAULT_CLIENT_NAME = "일반 의뢰인"
 ACTIVE_JOB_STATUSES = {"assigned", "working", "first_done", "client_editing", "review_waiting"}
 
 
-def ensure_seed_data(db: Session) -> tuple[Client, Transcriber]:
+def ensure_seed_data(db: Session) -> Client:
     client = db.scalar(select(Client).where(Client.client_code == DEFAULT_CLIENT_CODE))
     if client is None:
         client = Client(client_code=DEFAULT_CLIENT_CODE, name=DEFAULT_CLIENT_NAME)
@@ -36,25 +34,9 @@ def ensure_seed_data(db: Session) -> tuple[Client, Transcriber]:
         admin = AdminUser(email=DEFAULT_ADMIN_EMAIL, name=DEFAULT_ADMIN_NAME, role="owner")
         db.add(admin)
 
-    transcriber = db.scalar(select(Transcriber).where(Transcriber.transcriber_code == DEFAULT_TRANSCRIBER_CODE))
-    if transcriber is None:
-        transcriber = Transcriber(
-            transcriber_code=DEFAULT_TRANSCRIBER_CODE,
-            name=DEFAULT_TRANSCRIBER_NAME,
-            email=DEFAULT_TRANSCRIBER_EMAIL,
-            status="available",
-            specialty="법률 / 인터뷰",
-            unit_price=1800,
-            monthly_capacity=30,
-            current_load=0,
-            quality_score=4.8,
-        )
-        db.add(transcriber)
-
     db.commit()
     db.refresh(client)
-    db.refresh(transcriber)
-    return client, transcriber
+    return client
 
 
 def infer_title(filename: str) -> str:
@@ -106,7 +88,7 @@ def create_job_record(
     transcript_key: str | None = None,
     transcript_json: dict | None = None,
 ) -> Job:
-    client, _ = ensure_seed_data(db)
+    client = ensure_seed_data(db)
     admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     due_at = now + timedelta(hours=24)

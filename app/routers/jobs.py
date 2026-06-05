@@ -13,7 +13,7 @@ from app.db import engine, get_db
 from app.services.audio import remux_faststart, should_faststart
 from app.services.admin_events import publish_admin_event, stream_admin_events
 from app.services.database_migrate import run_sql_migration
-from app.services.database_reset import reset_database_schema
+from app.services.database_reset import purge_all_data, reset_database_schema
 from app.services.job_store import (
     assign_job,
     create_transcriber,
@@ -184,6 +184,22 @@ def admin_migrate_transcriber_profile(request: Request) -> dict:
     sql_path = Path(__file__).resolve().parents[2] / "scripts" / "migrate_transcriber_profile.sql"
     run_sql_migration(engine, sql_path)
     return {"migrated": True, "file": sql_path.name}
+
+
+@router.post("/admin/maintenance/purge-data")
+def admin_purge_data(request: Request, body: DatabaseResetRequest) -> dict:
+    token = settings.maintenance_reset_token.strip()
+    if not token:
+        raise HTTPException(status_code=404, detail="Database maintenance is disabled")
+    if request.headers.get("X-Maintenance-Token") != token:
+        raise HTTPException(status_code=403, detail="Invalid maintenance token")
+    if body.confirm != "RESET":
+        raise HTTPException(status_code=400, detail="confirm must be RESET")
+    if engine is None:
+        raise HTTPException(status_code=503, detail="Database is not configured")
+    purge_all_data(engine)
+    publish_admin_event("database_purged", {"status": "completed"})
+    return {"purged": True}
 
 
 @router.post("/admin/maintenance/reset-database")
