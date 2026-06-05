@@ -7,7 +7,8 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.db import create_tables, init_db
+from app.db import create_tables, engine, init_db
+from app.services.database_migrate import run_startup_migrations
 from app.routers import jobs, transcribe, upload
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "client" / "dist"
@@ -20,6 +21,8 @@ async def lifespan(app: FastAPI):
     if settings.database_configured:
         init_db(settings.resolved_database_url)
         create_tables()
+        if engine is not None:
+            run_startup_migrations(engine)
     yield
 
 

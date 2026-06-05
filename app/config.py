@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     database_url: str = ""
     mysql_url: str = ""
+    maintenance_reset_token: str = ""
 
     @property
     def language_hint_list(self) -> list[str]:

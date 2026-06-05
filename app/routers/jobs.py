@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 from typing import Annotated
 from urllib.parse import quote
 
@@ -7,9 +8,12 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.db import get_db
+from app.config import settings
+from app.db import engine, get_db
 from app.services.audio import remux_faststart, should_faststart
 from app.services.admin_events import publish_admin_event, stream_admin_events
+from app.services.database_migrate import run_sql_migration
+from app.services.database_reset import reset_database_schema
 from app.services.job_store import (
     assign_job,
     create_transcriber,
@@ -74,6 +78,10 @@ class AdminTranscriberUpdateRequest(BaseModel):
     unit_price: float | None = None
     monthly_capacity: int | None = None
     status: str | None = None
+
+
+class DatabaseResetRequest(BaseModel):
+    confirm: str
 
 
 class AdminTranscriberCreateRequest(BaseModel):
@@ -161,6 +169,37 @@ def cancel_client_job(job_id: str, db: Annotated[Session, Depends(get_db)]) -> d
 
     publish_admin_event("job_deleted", {"job_id": job_id})
     return {"job_id": job_id, "deleted": True}
+
+
+@router.post("/admin/maintenance/migrate-transcriber-profile")
+def admin_migrate_transcriber_profile(request: Request) -> dict:
+    token = settings.maintenance_reset_token.strip()
+    if not token:
+        raise HTTPException(status_code=404, detail="Database maintenance is disabled")
+    if request.headers.get("X-Maintenance-Token") != token:
+        raise HTTPException(status_code=403, detail="Invalid maintenance token")
+    if engine is None:
+        raise HTTPException(status_code=503, detail="Database is not configured")
+
+    sql_path = Path(__file__).resolve().parents[2] / "scripts" / "migrate_transcriber_profile.sql"
+    run_sql_migration(engine, sql_path)
+    return {"migrated": True, "file": sql_path.name}
+
+
+@router.post("/admin/maintenance/reset-database")
+def admin_reset_database(request: Request, body: DatabaseResetRequest) -> dict:
+    token = settings.maintenance_reset_token.strip()
+    if not token:
+        raise HTTPException(status_code=404, detail="Database reset is disabled")
+    if request.headers.get("X-Maintenance-Token") != token:
+        raise HTTPException(status_code=403, detail="Invalid maintenance token")
+    if body.confirm != "RESET":
+        raise HTTPException(status_code=400, detail="confirm must be RESET")
+    if engine is None:
+        raise HTTPException(status_code=503, detail="Database is not configured")
+    reset_database_schema(engine)
+    publish_admin_event("database_reset", {"status": "completed"})
+    return {"reset": True}
 
 
 @router.get("/admin/overview")
