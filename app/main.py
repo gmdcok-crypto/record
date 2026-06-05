@@ -23,8 +23,7 @@ async def lifespan(app: FastAPI):
         init_db(settings.resolved_database_url)
         create_tables()
         if engine is not None:
-            if settings.purge_db_on_startup.lower() in {"1", "true", "yes"}:
-                purge_all_data(engine)
+            purge_all_data(engine)
             run_startup_migrations(engine)
     yield
 

@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     database_url: str = ""
     mysql_url: str = ""
     maintenance_reset_token: str = ""
-    purge_db_on_startup: str = "1"
+    purge_db_on_startup: str = ""
 
     @property
     def language_hint_list(self) -> list[str]:
