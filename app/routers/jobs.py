@@ -14,6 +14,7 @@ from app.services.job_store import (
     assign_job,
     create_transcriber,
     dashboard_overview,
+    generate_transcriber_code,
     delete_job_if_unassigned,
     delete_transcriber,
     get_job_record,
@@ -64,18 +65,26 @@ class JobAssignRequest(BaseModel):
 
 
 class AdminTranscriberUpdateRequest(BaseModel):
+    name: str | None = None
     specialty: str | None = None
+    phone: str | None = None
+    resident_id: str | None = None
+    bank_name: str | None = None
+    account_number: str | None = None
     unit_price: float | None = None
     monthly_capacity: int | None = None
     status: str | None = None
 
 
 class AdminTranscriberCreateRequest(BaseModel):
-    code: str
+    code: str | None = None
     name: str
     specialty: str | None = None
     email: str | None = None
     phone: str | None = None
+    resident_id: str | None = None
+    bank_name: str | None = None
+    account_number: str | None = None
     unit_price: float = 0
     monthly_capacity: int | None = None
     status: str = "available"
@@ -194,6 +203,11 @@ def admin_assign_job(
     return {"job_id": job.job_id, "status": job.status, "assigned_transcriber_id": job.assigned_transcriber_id}
 
 
+@router.get("/admin/transcribers/next-code")
+def admin_next_transcriber_code(db: Annotated[Session, Depends(get_db)]) -> dict:
+    return {"code": generate_transcriber_code(db)}
+
+
 @router.patch("/admin/transcribers/{transcriber_code}")
 def admin_update_transcriber(
     transcriber_code: str,
@@ -203,14 +217,22 @@ def admin_update_transcriber(
     transcriber = get_transcriber_by_code(db, transcriber_code)
     if transcriber is None:
         raise HTTPException(status_code=404, detail="Transcriber not found")
-    transcriber = update_transcriber(
-        db,
-        transcriber,
-        specialty=body.specialty,
-        unit_price=body.unit_price,
-        monthly_capacity=body.monthly_capacity,
-        status=body.status,
-    )
+    try:
+        transcriber = update_transcriber(
+            db,
+            transcriber,
+            name=body.name,
+            specialty=body.specialty,
+            phone=body.phone,
+            resident_id=body.resident_id,
+            bank_name=body.bank_name,
+            account_number=body.account_number,
+            unit_price=body.unit_price,
+            monthly_capacity=body.monthly_capacity,
+            status=body.status,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     publish_admin_event("transcriber_updated", {"transcriber_code": transcriber.transcriber_code})
     return {
         "code": transcriber.transcriber_code,
@@ -227,17 +249,23 @@ def admin_create_transcriber(
     body: AdminTranscriberCreateRequest,
     db: Annotated[Session, Depends(get_db)],
 ) -> dict:
-    transcriber = create_transcriber(
-        db,
-        code=body.code,
-        name=body.name,
-        specialty=body.specialty,
-        email=body.email,
-        phone=body.phone,
-        unit_price=body.unit_price,
-        monthly_capacity=body.monthly_capacity,
-        status=body.status,
-    )
+    try:
+        transcriber = create_transcriber(
+            db,
+            code=body.code,
+            name=body.name,
+            specialty=body.specialty,
+            email=body.email,
+            phone=body.phone,
+            resident_id=body.resident_id,
+            bank_name=body.bank_name,
+            account_number=body.account_number,
+            unit_price=body.unit_price,
+            monthly_capacity=body.monthly_capacity,
+            status=body.status,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     publish_admin_event("transcriber_created", {"transcriber_code": transcriber.transcriber_code})
     return {
         "code": transcriber.transcriber_code,

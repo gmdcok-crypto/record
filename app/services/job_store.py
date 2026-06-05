@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -330,6 +331,16 @@ def list_transcriber_jobs(db: Session, transcriber_code: str = DEFAULT_TRANSCRIB
     ]
 
 
+def generate_transcriber_code(db: Session) -> str:
+    rows = db.scalars(select(Transcriber.transcriber_code)).all()
+    max_num = 0
+    for code in rows:
+        match = re.fullmatch(r"TR-(\d+)", code or "")
+        if match:
+            max_num = max(max_num, int(match.group(1)))
+    return f"TR-{max_num + 1:03d}"
+
+
 def list_transcribers(db: Session) -> list[dict]:
     rows = db.scalars(select(Transcriber).order_by(Transcriber.name.asc())).all()
     return [
@@ -337,6 +348,10 @@ def list_transcribers(db: Session) -> list[dict]:
             "id": row.id,
             "code": row.transcriber_code,
             "name": row.name,
+            "phone": row.phone,
+            "resident_id": row.resident_id_masked,
+            "bank_name": row.bank_name,
+            "account_number": row.account_number,
             "specialty": row.specialty,
             "status": row.status,
             "monthly_capacity": row.monthly_capacity,
@@ -355,21 +370,33 @@ def get_transcriber_by_code(db: Session, transcriber_code: str = DEFAULT_TRANSCR
 def create_transcriber(
     db: Session,
     *,
-    code: str,
+    code: str | None = None,
     name: str,
     specialty: str | None = None,
     email: str | None = None,
     phone: str | None = None,
+    resident_id: str | None = None,
+    bank_name: str | None = None,
+    account_number: str | None = None,
     unit_price: float = 0,
     monthly_capacity: int | None = None,
     status: str = "available",
 ) -> Transcriber:
+    normalized_name = name.strip()
+    if not normalized_name:
+        raise ValueError("Transcriber name is required")
+
+    transcriber_code = (code or "").strip() or generate_transcriber_code(db)
     transcriber = Transcriber(
-        transcriber_code=code.strip(),
-        name=name.strip(),
+        transcriber_code=transcriber_code,
+        name=normalized_name,
         specialty=(specialty or "").strip() or None,
         email=(email or "").strip() or None,
         phone=(phone or "").strip() or None,
+        resident_id_masked=(resident_id or "").strip() or None,
+        bank_name=(bank_name or "").strip() or None,
+        account_number=(account_number or "").strip() or None,
+        account_holder=normalized_name,
         unit_price=unit_price,
         monthly_capacity=monthly_capacity,
         status=status,
@@ -385,13 +412,33 @@ def update_transcriber(
     db: Session,
     transcriber: Transcriber,
     *,
+    name: str | None = None,
     specialty: str | None = None,
+    phone: str | None = None,
+    resident_id: str | None = None,
+    bank_name: str | None = None,
+    account_number: str | None = None,
     unit_price: float | None = None,
     monthly_capacity: int | None = None,
     status: str | None = None,
 ) -> Transcriber:
+    if name is not None:
+        normalized_name = name.strip()
+        if not normalized_name:
+            raise ValueError("Transcriber name is required")
+        transcriber.name = normalized_name
+        if not transcriber.account_holder:
+            transcriber.account_holder = normalized_name
     if specialty is not None:
         transcriber.specialty = specialty.strip() or None
+    if phone is not None:
+        transcriber.phone = phone.strip() or None
+    if resident_id is not None:
+        transcriber.resident_id_masked = resident_id.strip() or None
+    if bank_name is not None:
+        transcriber.bank_name = bank_name.strip() or None
+    if account_number is not None:
+        transcriber.account_number = account_number.strip() or None
     if unit_price is not None:
         transcriber.unit_price = unit_price
     if monthly_capacity is not None:

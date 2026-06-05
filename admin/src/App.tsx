@@ -6,6 +6,7 @@ import {
   createAdminEventsSource,
   deleteTranscriber,
   fetchAdminOverview,
+  fetchNextTranscriberCode,
   fetchJob,
   updateInvoiceStatus,
   updateJobStatus,
@@ -65,6 +66,10 @@ type JobItem = {
 type Transcriber = {
   id: string;
   name: string;
+  phone: string;
+  residentId: string;
+  bankName: string;
+  accountNumber: string;
   specialty: string;
   status: TranscriberStatus;
   activeJobs: number;
@@ -76,12 +81,27 @@ type Transcriber = {
 type TranscriberForm = {
   code: string;
   name: string;
-  specialty: string;
-  email: string;
   phone: string;
+  residentId: string;
+  bankName: string;
+  accountNumber: string;
+  specialty: string;
   unitPrice: string;
   monthlyCapacity: string;
   status: "작업 가능" | "작업 중" | "휴무" | "비활성";
+};
+
+const EMPTY_TRANSCRIBER_FORM: TranscriberForm = {
+  code: "",
+  name: "",
+  phone: "",
+  residentId: "",
+  bankName: "",
+  accountNumber: "",
+  specialty: "",
+  unitPrice: "0",
+  monthlyCapacity: "",
+  status: "작업 가능",
 };
 
 type SettlementItem = {
@@ -345,16 +365,7 @@ function App() {
   const [selectedTranscriberCode, setSelectedTranscriberCode] = useState("");
   const [transcriberModalOpen, setTranscriberModalOpen] = useState(false);
   const [editingTranscriberId, setEditingTranscriberId] = useState<string | null>(null);
-  const [transcriberForm, setTranscriberForm] = useState<TranscriberForm>({
-    code: "",
-    name: "",
-    specialty: "",
-    email: "",
-    phone: "",
-    unitPrice: "0",
-    monthlyCapacity: "",
-    status: "작업 가능",
-  });
+  const [transcriberForm, setTranscriberForm] = useState<TranscriberForm>(EMPTY_TRANSCRIBER_FORM);
 
   const loadOverview = async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
@@ -450,6 +461,10 @@ function App() {
     return (overview?.transcribers ?? []).map((person) => ({
       id: person.code,
       name: person.name,
+      phone: person.phone || "",
+      residentId: person.resident_id || "",
+      bankName: person.bank_name || "",
+      accountNumber: person.account_number || "",
       specialty: person.specialty || "-",
       status: mapTranscriberStatus(person.status, person.current_load),
       activeJobs: person.current_load,
@@ -569,17 +584,15 @@ function App() {
 
   const openCreateTranscriberModal = () => {
     setEditingTranscriberId(null);
-    setTranscriberForm({
-      code: "",
-      name: "",
-      specialty: "",
-      email: "",
-      phone: "",
-      unitPrice: "0",
-      monthlyCapacity: "",
-      status: "작업 가능",
-    });
+    setTranscriberForm(EMPTY_TRANSCRIBER_FORM);
     setTranscriberModalOpen(true);
+    void fetchNextTranscriberCode()
+      .then((code) => {
+        setTranscriberForm((prev) => ({ ...prev, code }));
+      })
+      .catch(() => {
+        setTranscriberForm((prev) => ({ ...prev, code: "자동 생성" }));
+      });
   };
 
   const openEditTranscriberModal = (person: Transcriber) => {
@@ -587,9 +600,11 @@ function App() {
     setTranscriberForm({
       code: person.id,
       name: person.name,
+      phone: person.phone,
+      residentId: person.residentId,
+      bankName: person.bankName,
+      accountNumber: person.accountNumber,
       specialty: person.specialty === "-" ? "" : person.specialty,
-      email: "",
-      phone: "",
       unitPrice: person.unitPrice.replace(/[^\d]/g, ""),
       monthlyCapacity: person.monthlyCapacity ? String(person.monthlyCapacity) : "",
       status: person.status,
@@ -609,9 +624,19 @@ function App() {
       "휴무": "vacation",
       "비활성": "inactive",
     };
+    if (!transcriberForm.name.trim()) {
+      window.alert("이름을 입력해 주세요.");
+      return;
+    }
+
     await runAdminAction(editingTranscriberId ? "속기사 수정 중입니다." : "속기사 추가 중입니다.", async () => {
       if (editingTranscriberId) {
         await updateTranscriber(editingTranscriberId, {
+          name: transcriberForm.name.trim(),
+          phone: transcriberForm.phone.trim() || undefined,
+          resident_id: transcriberForm.residentId.trim() || undefined,
+          bank_name: transcriberForm.bankName.trim() || undefined,
+          account_number: transcriberForm.accountNumber.trim() || undefined,
           specialty: transcriberForm.specialty,
           unit_price: Number(transcriberForm.unitPrice || 0),
           monthly_capacity: transcriberForm.monthlyCapacity ? Number(transcriberForm.monthlyCapacity) : undefined,
@@ -619,11 +644,12 @@ function App() {
         });
       } else {
         await createTranscriber({
-          code: transcriberForm.code,
-          name: transcriberForm.name,
+          name: transcriberForm.name.trim(),
+          phone: transcriberForm.phone.trim() || undefined,
+          resident_id: transcriberForm.residentId.trim() || undefined,
+          bank_name: transcriberForm.bankName.trim() || undefined,
+          account_number: transcriberForm.accountNumber.trim() || undefined,
           specialty: transcriberForm.specialty,
-          email: transcriberForm.email,
-          phone: transcriberForm.phone,
           unit_price: Number(transcriberForm.unitPrice || 0),
           monthly_capacity: transcriberForm.monthlyCapacity ? Number(transcriberForm.monthlyCapacity) : undefined,
           status: statusMap[transcriberForm.status],
@@ -1478,64 +1504,107 @@ function App() {
             </div>
 
             <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <input
-                value={transcriberForm.code}
-                onChange={(e) => setTranscriberForm((prev) => ({ ...prev, code: e.target.value }))}
-                disabled={Boolean(editingTranscriberId)}
-                placeholder="코드"
-                className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100 disabled:opacity-50"
-              />
-              <input
-                value={transcriberForm.name}
-                onChange={(e) => setTranscriberForm((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="이름"
-                className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
-              />
-              <input
-                value={transcriberForm.specialty}
-                onChange={(e) => setTranscriberForm((prev) => ({ ...prev, specialty: e.target.value }))}
-                placeholder="전문분야"
-                className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
-              />
-              <input
-                value={transcriberForm.email}
-                onChange={(e) => setTranscriberForm((prev) => ({ ...prev, email: e.target.value }))}
-                placeholder="이메일"
-                className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
-              />
-              <input
-                value={transcriberForm.phone}
-                onChange={(e) => setTranscriberForm((prev) => ({ ...prev, phone: e.target.value }))}
-                placeholder="연락처"
-                className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
-              />
-              <input
-                value={transcriberForm.unitPrice}
-                onChange={(e) => setTranscriberForm((prev) => ({ ...prev, unitPrice: e.target.value }))}
-                placeholder="단가"
-                className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
-              />
-              <input
-                value={transcriberForm.monthlyCapacity}
-                onChange={(e) => setTranscriberForm((prev) => ({ ...prev, monthlyCapacity: e.target.value }))}
-                placeholder="월 용량"
-                className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
-              />
-              <select
-                value={transcriberForm.status}
-                onChange={(e) =>
-                  setTranscriberForm((prev) => ({
-                    ...prev,
-                    status: e.target.value as TranscriberForm["status"],
-                  }))
-                }
-                className="rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
-              >
-                <option value="작업 가능">작업 가능</option>
-                <option value="작업 중">작업 중</option>
-                <option value="휴무">휴무</option>
-                <option value="비활성">비활성</option>
-              </select>
+              <label className="md:col-span-2">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">코드</span>
+                <input
+                  value={transcriberForm.code || "자동 생성 중..."}
+                  readOnly
+                  className="w-full rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-slate-300"
+                />
+                {!editingTranscriberId ? (
+                  <span className="mt-1 block text-xs text-slate-500">저장 시 서버에서 자동 생성됩니다.</span>
+                ) : null}
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">이름</span>
+                <input
+                  value={transcriberForm.name}
+                  onChange={(e) => setTranscriberForm((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="이름"
+                  className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">휴대폰 번호</span>
+                <input
+                  value={transcriberForm.phone}
+                  onChange={(e) => setTranscriberForm((prev) => ({ ...prev, phone: e.target.value }))}
+                  placeholder="010-0000-0000"
+                  className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
+                />
+              </label>
+              <label className="md:col-span-2">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">주민등록번호</span>
+                <input
+                  value={transcriberForm.residentId}
+                  onChange={(e) => setTranscriberForm((prev) => ({ ...prev, residentId: e.target.value }))}
+                  placeholder="000000-0000000"
+                  className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">은행명</span>
+                <input
+                  value={transcriberForm.bankName}
+                  onChange={(e) => setTranscriberForm((prev) => ({ ...prev, bankName: e.target.value }))}
+                  placeholder="예: 국민은행"
+                  className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">계좌번호</span>
+                <input
+                  value={transcriberForm.accountNumber}
+                  onChange={(e) => setTranscriberForm((prev) => ({ ...prev, accountNumber: e.target.value }))}
+                  placeholder="계좌번호"
+                  className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">전문분야</span>
+                <input
+                  value={transcriberForm.specialty}
+                  onChange={(e) => setTranscriberForm((prev) => ({ ...prev, specialty: e.target.value }))}
+                  placeholder="전문분야"
+                  className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">단가</span>
+                <input
+                  value={transcriberForm.unitPrice}
+                  onChange={(e) => setTranscriberForm((prev) => ({ ...prev, unitPrice: e.target.value }))}
+                  placeholder="단가"
+                  className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">월 용량</span>
+                <input
+                  value={transcriberForm.monthlyCapacity}
+                  onChange={(e) => setTranscriberForm((prev) => ({ ...prev, monthlyCapacity: e.target.value }))}
+                  placeholder="월 용량"
+                  className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">상태</span>
+                <select
+                  value={transcriberForm.status}
+                  onChange={(e) =>
+                    setTranscriberForm((prev) => ({
+                      ...prev,
+                      status: e.target.value as TranscriberForm["status"],
+                    }))
+                  }
+                  className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100"
+                >
+                  <option value="작업 가능">작업 가능</option>
+                  <option value="작업 중">작업 중</option>
+                  <option value="휴무">휴무</option>
+                  <option value="비활성">비활성</option>
+                </select>
+              </label>
             </div>
 
             <div className="mt-6 flex justify-end gap-2">

@@ -67,6 +67,10 @@ export type AdminOverviewTranscriber = {
   id: number;
   code: string;
   name: string;
+  phone: string | null;
+  resident_id: string | null;
+  bank_name: string | null;
+  account_number: string | null;
   specialty: string | null;
   status: string;
   monthly_capacity: number | null;
@@ -174,9 +178,28 @@ export async function updateJobStatus(jobId: string, status: string, note?: stri
   }
 }
 
+export async function fetchNextTranscriberCode(): Promise<string> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/transcribers/next-code`);
+  if (!res.ok) {
+    throw await parseApiError(res, "속기사 코드 조회 실패");
+  }
+  const data = (await res.json()) as { code?: string };
+  return data.code || "";
+}
+
 export async function updateTranscriber(
   transcriberCode: string,
-  payload: { specialty?: string; unit_price?: number; monthly_capacity?: number; status?: string },
+  payload: {
+    name?: string;
+    specialty?: string;
+    phone?: string;
+    resident_id?: string;
+    bank_name?: string;
+    account_number?: string;
+    unit_price?: number;
+    monthly_capacity?: number;
+    status?: string;
+  },
 ): Promise<void> {
   const res = await fetch(`${apiBase()}/api/jobs/admin/transcribers/${encodeURIComponent(transcriberCode)}`, {
     method: "PATCH",
@@ -189,11 +212,12 @@ export async function updateTranscriber(
 }
 
 export async function createTranscriber(payload: {
-  code: string;
   name: string;
   specialty?: string;
-  email?: string;
   phone?: string;
+  resident_id?: string;
+  bank_name?: string;
+  account_number?: string;
   unit_price?: number;
   monthly_capacity?: number;
   status?: string;
