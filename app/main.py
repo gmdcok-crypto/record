@@ -58,6 +58,7 @@ def health() -> dict:
         "speaker_diarization": settings.soniox_enable_speaker_diarization,
         "bucket": settings.r2_bucket_name,
         "database_configured": settings.database_configured,
+        "build": "019ba9c-purge",
     }
 
 
