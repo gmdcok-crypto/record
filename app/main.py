@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -16,17 +17,22 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "client" / "dist"
 ADMIN_DIR = Path(__file__).resolve().parent.parent / "admin" / "dist"
 TRANSCRIBER_DIR = Path(__file__).resolve().parent.parent / "transcriber" / "dist"
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if settings.database_configured:
-        init_db(settings.resolved_database_url)
-        create_tables()
-        db_engine = get_engine()
-        if db_engine is not None:
-            if settings.purge_db_on_startup.lower() in {"1", "true", "yes"}:
-                purge_all_data(db_engine)
-            run_startup_migrations(db_engine)
+        try:
+            init_db(settings.resolved_database_url)
+            create_tables()
+            db_engine = get_engine()
+            if db_engine is not None:
+                if settings.purge_db_on_startup.lower() in {"1", "true", "yes"}:
+                    purge_all_data(db_engine)
+                run_startup_migrations(db_engine)
+        except Exception:
+            logger.exception("Database startup tasks failed; continuing without blocking app boot")
     yield
 
 
