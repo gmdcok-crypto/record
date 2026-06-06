@@ -498,6 +498,7 @@ function App() {
       await loadOverview();
     } catch (err) {
       console.error(err);
+      window.alert(err instanceof Error ? err.message : "요청 처리 중 오류가 발생했습니다.");
       setLoading(false);
     } finally {
       setBusyMessage("");
@@ -630,6 +631,7 @@ function App() {
   };
 
   const removeTranscriber = async (person: Transcriber) => {
+    if (!window.confirm(`${person.name}(${person.id}) 속기사를 삭제하시겠습니까?`)) return;
     await runAdminAction("속기사 삭제 중입니다.", async () => {
       await deleteTranscriber(person.id);
     });

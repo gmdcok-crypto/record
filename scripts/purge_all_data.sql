@@ -1,4 +1,4 @@
--- Delete all test jobs and transcribers (keeps clients/admin_users tables).
+-- Delete all application data for a fresh test start.
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
@@ -12,5 +12,7 @@ DELETE FROM job_assignments;
 DELETE FROM jobs;
 DELETE FROM transcribers;
 DELETE FROM transcript_history;
+DELETE FROM clients;
+DELETE FROM admin_users;
 
 SET FOREIGN_KEY_CHECKS = 1;

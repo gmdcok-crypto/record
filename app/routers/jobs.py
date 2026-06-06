@@ -338,7 +338,11 @@ def admin_delete_transcriber(
     transcriber = get_transcriber_by_code(db, transcriber_code)
     if transcriber is None:
         raise HTTPException(status_code=404, detail="Transcriber not found")
-    delete_transcriber(db, transcriber)
+    try:
+        delete_transcriber(db, transcriber)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=f"속기사 삭제 실패: {exc}") from exc
     publish_admin_event("transcriber_deleted", {"transcriber_code": transcriber_code})
     return {"code": transcriber_code, "deleted": True}
 

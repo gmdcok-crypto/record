@@ -66,6 +66,8 @@ PURGE_TABLES = [
     "jobs",
     "transcribers",
     "transcript_history",
+    "clients",
+    "admin_users",
 ]
 
 

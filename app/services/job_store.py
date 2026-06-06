@@ -1,7 +1,7 @@
 import re
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models.admin_models import (
@@ -12,6 +12,7 @@ from app.models.admin_models import (
     JobAssignment,
     JobStatusLog,
     Settlement,
+    SettlementItem,
     Transcriber,
 )
 
@@ -433,11 +434,33 @@ def update_transcriber(
 
 
 def delete_transcriber(db: Session, transcriber: Transcriber) -> None:
-    assigned_jobs = db.scalars(select(Job).where(Job.assigned_transcriber_id == transcriber.id)).all()
+    transcriber_id = transcriber.id
+
+    settlement_items = db.scalars(select(SettlementItem).where(SettlementItem.transcriber_id == transcriber_id)).all()
+    for item in settlement_items:
+        db.delete(item)
+
+    settlements = db.scalars(select(Settlement).where(Settlement.transcriber_id == transcriber_id)).all()
+    for settlement in settlements:
+        db.delete(settlement)
+
+    assignments = db.scalars(
+        select(JobAssignment).where(
+            or_(
+                JobAssignment.from_transcriber_id == transcriber_id,
+                JobAssignment.to_transcriber_id == transcriber_id,
+            )
+        )
+    ).all()
+    for assignment in assignments:
+        db.delete(assignment)
+
+    assigned_jobs = db.scalars(select(Job).where(Job.assigned_transcriber_id == transcriber_id)).all()
     for job in assigned_jobs:
         job.assigned_transcriber_id = None
-        if job.status == "assigned":
+        if job.status in ACTIVE_JOB_STATUSES or job.status == "assigned":
             job.status = "waiting_assignment"
+
     db.delete(transcriber)
     db.commit()
 
