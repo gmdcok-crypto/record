@@ -1,4 +1,10 @@
-const API_BASE = window.location.origin;
+const API_BASE = (() => {
+  const origin = window.location.origin;
+  if (origin && origin !== "null" && !origin.startsWith("file:")) {
+    return origin;
+  }
+  return "https://record-production.up.railway.app";
+})();
 const CLIENT_URL = `${API_BASE}/`;
 const TOKEN_KEY = "member_access_token";
 const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[#?!@$%^&*\-]).{8,16}$/;
@@ -157,6 +163,22 @@ termsNextBtn?.addEventListener("click", () => {
   openSignupModal();
 });
 
+function formatApiError(detail, fallback) {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail) && detail.length) {
+    return detail.map((item) => item.msg || item.message || String(item)).join(", ");
+  }
+  return fallback;
+}
+
+async function readJsonResponse(res) {
+  const contentType = res.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    throw new Error("invalid_response");
+  }
+  return res.json();
+}
+
 checkEmailBtn?.addEventListener("click", async () => {
   const email = emailInput?.value.trim().toLowerCase() || "";
   if (!EMAIL_PATTERN.test(email)) {
@@ -166,9 +188,15 @@ checkEmailBtn?.addEventListener("click", async () => {
   checkEmailBtn.disabled = true;
   try {
     const res = await fetch(`${API_BASE}/api/member/auth/check-email?email=${encodeURIComponent(email)}`);
-    const data = await res.json();
+    let data;
+    try {
+      data = await readJsonResponse(res);
+    } catch {
+      showEmailHint("서버 응답 오류입니다. 잠시 후 다시 시도해 주세요.", false);
+      return;
+    }
     if (!res.ok) {
-      showEmailHint(data.detail || "이메일 확인에 실패했습니다.", false);
+      showEmailHint(formatApiError(data.detail, "이메일 확인에 실패했습니다."), false);
       return;
     }
     if (data.available) {
@@ -229,9 +257,15 @@ signupForm?.addEventListener("submit", async (event) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password, name }),
     });
-    const data = await res.json();
+    let data;
+    try {
+      data = await readJsonResponse(res);
+    } catch {
+      showSignupError("서버 응답 오류입니다. 잠시 후 다시 시도해 주세요.");
+      return;
+    }
     if (!res.ok) {
-      showSignupError(typeof data.detail === "string" ? data.detail : "회원가입에 실패했습니다.");
+      showSignupError(formatApiError(data.detail, "회원가입에 실패했습니다."));
       return;
     }
     localStorage.setItem(TOKEN_KEY, data.access_token);
