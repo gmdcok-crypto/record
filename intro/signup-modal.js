@@ -1,3 +1,17 @@
+const API_FETCH_OPTIONS = {
+  cache: "no-store",
+  credentials: "omit",
+  headers: { Accept: "application/json" },
+};
+
+if (location.pathname.startsWith("/intro") && "serviceWorker" in navigator) {
+  void navigator.serviceWorker.getRegistrations().then((regs) => {
+    for (const reg of regs) {
+      void reg.unregister();
+    }
+  });
+}
+
 const API_BASE = (() => {
   const origin = window.location.origin;
   if (origin && origin !== "null" && !origin.startsWith("file:")) {
@@ -172,11 +186,26 @@ function formatApiError(detail, fallback) {
 }
 
 async function readJsonResponse(res) {
-  const contentType = res.headers.get("content-type") || "";
-  if (!contentType.includes("application/json")) {
+  const text = await res.text();
+  if (!text.trim()) {
+    throw new Error("empty_response");
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
     throw new Error("invalid_response");
   }
-  return res.json();
+}
+
+function memberFetch(url, options = {}) {
+  return fetch(url, {
+    ...API_FETCH_OPTIONS,
+    ...options,
+    headers: {
+      ...API_FETCH_OPTIONS.headers,
+      ...(options.headers || {}),
+    },
+  });
 }
 
 checkEmailBtn?.addEventListener("click", async () => {
@@ -187,7 +216,7 @@ checkEmailBtn?.addEventListener("click", async () => {
   }
   checkEmailBtn.disabled = true;
   try {
-    const res = await fetch(`${API_BASE}/api/member/auth/check-email?email=${encodeURIComponent(email)}`);
+    const res = await memberFetch(`${API_BASE}/api/member/auth/check-email?email=${encodeURIComponent(email)}`);
     let data;
     try {
       data = await readJsonResponse(res);
@@ -252,7 +281,7 @@ signupForm?.addEventListener("submit", async (event) => {
   submitBtn.disabled = true;
 
   try {
-    const res = await fetch(`${API_BASE}/api/member/auth/signup`, {
+    const res = await memberFetch(`${API_BASE}/api/member/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password, name }),
