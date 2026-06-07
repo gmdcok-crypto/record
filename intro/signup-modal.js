@@ -129,7 +129,10 @@ termsModal?.querySelectorAll("[data-terms-close]").forEach((el) => {
 });
 
 signupModal?.querySelectorAll("[data-signup-close]").forEach((el) => {
-  el.addEventListener("click", closeAllModals);
+  el.addEventListener("click", () => {
+    closeSignupModal();
+    setBodyLocked(false);
+  });
 });
 
 agreeAll?.addEventListener("change", () => {
@@ -280,10 +283,6 @@ signupForm?.addEventListener("submit", async (event) => {
 
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
-  if (!signupModal.hidden) {
-    closeAllModals();
-    return;
-  }
   if (!termsModal.hidden) {
     closeAllModals();
   }
