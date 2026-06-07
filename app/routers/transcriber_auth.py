@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,7 @@ from app.services.jwt_tokens import create_transcriber_access_token
 from app.services.transcriber_auth import (
     TranscriberAuthError,
     authenticate_transcriber,
+    get_transcriber_by_login_id,
     register_transcriber,
     serialize_transcriber_auth,
     validate_login_id,
@@ -79,6 +80,19 @@ def _auth_error_to_http(exc: TranscriberAuthError) -> HTTPException:
     if "비활성화" in message:
         return HTTPException(status_code=403, detail=message)
     return HTTPException(status_code=400, detail=message)
+
+
+@router.get("/check-login-id")
+def check_login_id_available(
+    db: Annotated[Session, Depends(get_db)],
+    login_id: str = Query(..., min_length=8, max_length=8),
+) -> dict:
+    try:
+        normalized = validate_login_id(login_id)
+    except TranscriberAuthError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    taken = get_transcriber_by_login_id(db, normalized) is not None
+    return {"available": not taken, "login_id": normalized}
 
 
 @router.post("/signup", response_model=AuthTokenResponse)

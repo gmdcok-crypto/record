@@ -17,6 +17,7 @@ from app.routers import jobs, transcribe, transcriber_auth, upload
 STATIC_DIR = Path(__file__).resolve().parent.parent / "client" / "dist"
 ADMIN_DIR = Path(__file__).resolve().parent.parent / "admin" / "dist"
 TRANSCRIBER_DIR = Path(__file__).resolve().parent.parent / "transcriber" / "dist"
+INTRO_DIR = Path(__file__).resolve().parent.parent / "intro"
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,9 @@ if ADMIN_DIR.is_dir():
 
 if TRANSCRIBER_DIR.is_dir():
     app.mount("/transcriber", StaticFiles(directory=TRANSCRIBER_DIR, html=True), name="transcriber")
+
+if INTRO_DIR.is_dir():
+    app.mount("/intro", StaticFiles(directory=INTRO_DIR, html=True), name="intro")
 
 if STATIC_DIR.is_dir():
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="frontend")

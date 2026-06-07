@@ -367,6 +367,88 @@
       </div>
     </div>
 
+    <div class="terms-modal signup-modal" id="signup-modal" hidden aria-hidden="true">
+      <div class="terms-modal__backdrop" data-signup-close></div>
+      <div
+        class="terms-modal__panel signup-modal__panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="signup-modal-title"
+        aria-describedby="signup-modal-desc"
+      >
+        <h2 class="terms-modal__title" id="signup-modal-title">회원가입</h2>
+        <p class="terms-modal__desc" id="signup-modal-desc">통합증거센터 녹취사무소 속기사 회원가입</p>
+
+        <form id="signup-form" class="signup-form" novalidate>
+          <label class="signup-field">
+            <input type="text" id="signup-name" name="name" placeholder="이름을 입력해 주세요." autocomplete="name" />
+            <button type="button" class="signup-clear" data-clear-for="signup-name" aria-label="이름 지우기">×</button>
+          </label>
+
+          <div class="signup-split">
+            <label class="signup-field signup-field--grow">
+              <input
+                type="text"
+                id="signup-login-id"
+                name="login_id"
+                placeholder="아이디 (영문·숫자 8자)"
+                maxlength="8"
+                autocomplete="username"
+              />
+              <button type="button" class="signup-clear" data-clear-for="signup-login-id" aria-label="아이디 지우기">×</button>
+            </label>
+            <button type="button" class="signup-side-btn" id="signup-check-id-btn">중복확인</button>
+          </div>
+          <p class="signup-hint" id="signup-id-hint" hidden></p>
+
+          <label class="signup-field">
+            <input type="password" id="signup-password" name="password" placeholder="비밀번호" autocomplete="new-password" />
+            <button type="button" class="signup-toggle-pw" data-toggle-for="signup-password" aria-label="비밀번호 표시">👁</button>
+          </label>
+
+          <label class="signup-field">
+            <input
+              type="password"
+              id="signup-password-confirm"
+              name="password_confirm"
+              placeholder="비밀번호 확인"
+              autocomplete="new-password"
+            />
+            <button type="button" class="signup-toggle-pw" data-toggle-for="signup-password-confirm" aria-label="비밀번호 확인 표시">👁</button>
+          </label>
+          <p class="signup-rule">✓ 영문, 숫자 포함 8자 이상</p>
+
+          <div class="signup-split">
+            <label class="signup-field signup-field--grow">
+              <input type="tel" id="signup-phone" name="phone" placeholder="'-'를 제외하고 입력" autocomplete="tel" />
+              <button type="button" class="signup-clear" data-clear-for="signup-phone" aria-label="휴대폰 지우기">×</button>
+            </label>
+            <button type="button" class="signup-side-btn" id="signup-phone-verify-btn">인증번호받기</button>
+          </div>
+
+          <label class="signup-field">
+            <input type="text" id="signup-verify-code" name="verify_code" placeholder="인증번호 6자리" inputmode="numeric" maxlength="6" />
+          </label>
+
+          <label class="signup-field">
+            <input type="text" id="signup-resident-id" name="resident_id" placeholder="주민등록번호 (- 없이)" inputmode="numeric" maxlength="13" />
+          </label>
+
+          <label class="signup-field">
+            <input type="text" id="signup-bank-name" name="bank_name" placeholder="은행명" />
+          </label>
+
+          <label class="signup-field">
+            <input type="text" id="signup-account-number" name="account_number" placeholder="계좌번호 (- 없이)" inputmode="numeric" />
+          </label>
+
+          <p class="signup-error" id="signup-error" hidden></p>
+
+          <button type="submit" class="terms-btn terms-btn--primary signup-submit" id="signup-submit-btn">가입하기</button>
+        </form>
+      </div>
+    </div>
+
     <script src="./signup-modal.js"></script>
   </body>
 </html>

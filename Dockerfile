@@ -35,6 +35,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY intro ./intro
 COPY scripts ./scripts
 COPY --from=client-build /app/client/dist ./client/dist
 COPY --from=admin-build /app/admin/dist ./admin/dist
