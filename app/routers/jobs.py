@@ -36,6 +36,7 @@ from app.services.job_store import (
     update_transcriber,
 )
 from app.services.pdf_export import build_transcript_pdf
+from app.services.transcriber_auth import TranscriberAuthError, revoke_transcriber_auth
 from app.services.r2 import (
     create_download_url,
     delete_object,
@@ -335,6 +336,26 @@ def admin_create_transcriber(
         "specialty": transcriber.specialty,
         "monthly_capacity": transcriber.monthly_capacity,
         "unit_price": float(transcriber.unit_price or 0),
+    }
+
+
+@router.post("/admin/transcribers/{transcriber_code}/revoke-auth")
+def admin_revoke_transcriber_auth(
+    transcriber_code: str,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    transcriber = get_transcriber_by_code(db, transcriber_code)
+    if transcriber is None:
+        raise HTTPException(status_code=404, detail="Transcriber not found")
+    try:
+        transcriber = revoke_transcriber_auth(db, transcriber)
+    except TranscriberAuthError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    publish_admin_event("transcriber_auth_revoked", {"transcriber_code": transcriber_code})
+    return {
+        "code": transcriber.transcriber_code,
+        "auth_status": transcriber.auth_status,
+        "revoked": True,
     }
 
 

@@ -77,6 +77,8 @@ export type AdminOverviewTranscriber = {
   current_load: number;
   unit_price: number;
   quality_score: number;
+  login_id: string | null;
+  auth_status: string;
 };
 
 export type AdminOverviewSettlement = {
@@ -238,6 +240,16 @@ export async function deleteTranscriber(transcriberCode: string): Promise<void> 
   });
   if (!res.ok) {
     throw await parseApiError(res, "속기사 삭제 실패");
+  }
+}
+
+export async function revokeTranscriberAuth(transcriberCode: string): Promise<void> {
+  const res = await fetch(
+    `${apiBase()}/api/jobs/admin/transcribers/${encodeURIComponent(transcriberCode)}/revoke-auth`,
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    throw await parseApiError(res, "로그인 초기화 실패");
   }
 }
 

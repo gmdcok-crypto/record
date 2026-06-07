@@ -33,7 +33,7 @@ def get_current_transcriber(
     transcriber = get_transcriber_by_id(db, transcriber_id)
     if transcriber is None or not transcriber.is_active:
         raise HTTPException(status_code=401, detail="Transcriber not found")
-    if not transcriber.login_id:
-        raise HTTPException(status_code=401, detail="Transcriber account is not activated")
+    if not transcriber.login_id or transcriber.auth_status != "active":
+        raise HTTPException(status_code=401, detail="로그인 초기화된 계정입니다. 다시 가입해 주세요")
 
     return transcriber

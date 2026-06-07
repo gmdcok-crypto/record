@@ -45,6 +45,7 @@ class Transcriber(Base):
     transcriber_code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     login_id: Mapped[str | None] = mapped_column(String(8), unique=True, nullable=True, index=True)
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    auth_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending_signup", index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     email: Mapped[str | None] = mapped_column(String(150), unique=True, nullable=True)

@@ -18,14 +18,15 @@ def create_transcriber_access_token(
         raise RuntimeError("JWT is not configured")
 
     now = datetime.now(timezone.utc)
-    payload = {
+    payload: dict[str, Any] = {
         "sub": str(transcriber_id),
         "login_id": login_id,
         "transcriber_code": transcriber_code,
         "role": "transcriber",
         "iat": now,
-        "exp": now + timedelta(minutes=settings.jwt_expire_minutes),
     }
+    if settings.jwt_expire_minutes > 0:
+        payload["exp"] = now + timedelta(minutes=settings.jwt_expire_minutes)
     return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)
 
 

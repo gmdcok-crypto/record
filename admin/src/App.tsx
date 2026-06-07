@@ -6,6 +6,7 @@ import {
   createAdminEventsSource,
   deleteTranscriber,
   fetchAdminOverview,
+  revokeTranscriberAuth,
   fetchNextTranscriberCode,
   fetchJob,
   updateInvoiceStatus,
@@ -76,6 +77,8 @@ type Transcriber = {
   monthlyCapacity: number;
   unitPrice: string;
   qualityScore: string;
+  loginId: string;
+  authStatus: "active" | "pending_signup";
 };
 
 type TranscriberForm = {
@@ -216,6 +219,16 @@ function mapTranscriberStatus(status: string, currentLoad: number): TranscriberS
   if (status === "vacation" || status === "off") return "휴무";
   if (status === "working" || currentLoad > 0) return "작업 중";
   return "작업 가능";
+}
+
+function mapAuthStatusLabel(authStatus: string): string {
+  return authStatus === "active" ? "로그인 활성" : "재가입 필요";
+}
+
+function authStatusTone(authStatus: string): string {
+  return authStatus === "active"
+    ? "bg-emerald-500/15 text-emerald-300"
+    : "bg-amber-500/15 text-amber-300";
 }
 
 function marginFromSale(billed: number, collected: number): string {
@@ -463,6 +476,8 @@ function App() {
       monthlyCapacity: person.monthly_capacity ?? 0,
       unitPrice: `분당 ${Math.round(person.unit_price).toLocaleString("ko-KR")}원`,
       qualityScore: `${person.quality_score.toFixed(1)} / 5`,
+      loginId: person.login_id || "-",
+      authStatus: person.auth_status === "active" ? "active" : "pending_signup",
     }));
   }, [overview]);
 
@@ -634,6 +649,19 @@ function App() {
     if (!window.confirm(`${person.name}(${person.id}) 속기사를 삭제하시겠습니까?`)) return;
     await runAdminAction("속기사 삭제 중입니다.", async () => {
       await deleteTranscriber(person.id);
+    });
+  };
+
+  const resetTranscriberLogin = async (person: Transcriber) => {
+    if (
+      !window.confirm(
+        `${person.name}(${person.id}) 속기사의 로그인을 초기화하시겠습니까?\n진행 중 배정은 해제되며, 속기사 PWA에서 다시 ID/비밀번호를 설정해야 합니다.`,
+      )
+    ) {
+      return;
+    }
+    await runAdminAction("로그인 초기화 중입니다.", async () => {
+      await revokeTranscriberAuth(person.id);
     });
   };
 
@@ -970,10 +998,11 @@ function App() {
           <EmptyState message="속기사 관리 데이터가 없습니다." />
         ) : (
           <>
-            <div className="hidden grid-cols-[0.9fr_1.1fr_1.2fr_0.9fr_0.7fr_0.8fr_1fr] gap-4 bg-slate-950/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 lg:grid">
+            <div className="hidden grid-cols-[0.8fr_1fr_0.9fr_0.8fr_0.8fr_0.7fr_0.7fr_1.2fr] gap-4 bg-slate-950/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 lg:grid">
               <span>코드</span>
               <span>이름</span>
-              <span>전문분야</span>
+              <span>로그인 ID</span>
+              <span>로그인</span>
               <span>상태</span>
               <span>진행중</span>
               <span>월 용량</span>
@@ -981,10 +1010,15 @@ function App() {
             </div>
             <div className="divide-y divide-white/5">
               {transcribers.map((person) => (
-                <div key={person.id} className="grid gap-4 bg-slate-950/40 px-4 py-4 lg:grid-cols-[0.9fr_1.1fr_1.2fr_0.9fr_0.7fr_0.8fr_1fr] lg:items-center">
+                <div key={person.id} className="grid gap-4 bg-slate-950/40 px-4 py-4 lg:grid-cols-[0.8fr_1fr_0.9fr_0.8fr_0.8fr_0.7fr_0.7fr_1.2fr] lg:items-center">
                   <div className="text-sm text-slate-300">{person.id}</div>
                   <div className="text-sm font-medium text-white">{person.name}</div>
-                  <div className="text-sm text-slate-300">{person.specialty}</div>
+                  <div className="text-sm text-slate-300">{person.loginId}</div>
+                  <div>
+                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${authStatusTone(person.authStatus)}`}>
+                      {mapAuthStatusLabel(person.authStatus)}
+                    </span>
+                  </div>
                   <div>
                     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(person.status)}`}>
                       {person.status}
@@ -999,6 +1033,14 @@ function App() {
                       className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200"
                     >
                       수정
+                    </button>
+                    <button
+                      type="button"
+                      disabled={person.authStatus !== "active"}
+                      onClick={() => void resetTranscriberLogin(person)}
+                      className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      로그인 초기화
                     </button>
                     <button
                       type="button"

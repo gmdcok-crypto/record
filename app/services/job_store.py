@@ -341,6 +341,8 @@ def list_transcribers(db: Session) -> list[dict]:
             "current_load": row.current_load,
             "unit_price": float(row.unit_price or 0),
             "quality_score": float(row.quality_score or 0),
+            "login_id": row.login_id,
+            "auth_status": row.auth_status,
         }
         for row in rows
     ]
@@ -384,6 +386,7 @@ def create_transcriber(
         monthly_capacity=monthly_capacity,
         status=status,
         current_load=0,
+        auth_status="pending_signup",
     )
     db.add(transcriber)
     db.commit()
