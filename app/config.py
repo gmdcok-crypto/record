@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     mysql_url: str = ""
     maintenance_reset_token: str = ""
     purge_db_on_startup: str = ""
+    jwt_secret: str = ""
+    jwt_expire_minutes: int = 60 * 24 * 7
 
     @property
     def language_hint_list(self) -> list[str]:
@@ -33,6 +35,10 @@ class Settings(BaseSettings):
     @property
     def database_configured(self) -> bool:
         return bool(self.resolved_database_url)
+
+    @property
+    def jwt_configured(self) -> bool:
+        return bool(self.jwt_secret.strip())
 
     @property
     def resolved_database_url(self) -> str:

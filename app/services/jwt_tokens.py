@@ -1,0 +1,39 @@
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+import jwt
+
+from app.config import settings
+
+ALGORITHM = "HS256"
+
+
+def create_transcriber_access_token(
+    *,
+    transcriber_id: int,
+    login_id: str,
+    transcriber_code: str,
+) -> str:
+    if not settings.jwt_configured:
+        raise RuntimeError("JWT is not configured")
+
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(transcriber_id),
+        "login_id": login_id,
+        "transcriber_code": transcriber_code,
+        "role": "transcriber",
+        "iat": now,
+        "exp": now + timedelta(minutes=settings.jwt_expire_minutes),
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)
+
+
+def decode_transcriber_access_token(token: str) -> dict[str, Any]:
+    if not settings.jwt_configured:
+        raise RuntimeError("JWT is not configured")
+
+    payload = jwt.decode(token, settings.jwt_secret, algorithms=[ALGORITHM])
+    if payload.get("role") != "transcriber":
+        raise jwt.InvalidTokenError("Invalid token role")
+    return payload

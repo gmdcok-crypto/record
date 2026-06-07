@@ -11,6 +11,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
 
 STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_transcriber_profile.sql",
+    SCRIPTS_DIR / "migrate_transcriber_auth.sql",
 ]
 
 
