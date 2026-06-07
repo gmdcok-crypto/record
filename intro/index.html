@@ -376,6 +376,7 @@
         aria-labelledby="signup-modal-title"
         aria-describedby="signup-modal-desc"
       >
+        <button type="button" class="modal-close-btn" data-signup-close aria-label="닫기">×</button>
         <h2 class="terms-modal__title" id="signup-modal-title">회원가입</h2>
         <p class="terms-modal__desc" id="signup-modal-desc">통합증거센터 녹취사무소</p>
 
@@ -431,7 +432,10 @@
 
           <p class="signup-error" id="signup-error" hidden></p>
 
-          <button type="submit" class="terms-btn terms-btn--primary signup-submit" id="signup-submit-btn">가입하기</button>
+          <div class="terms-modal__actions signup-modal__actions">
+            <button type="submit" class="terms-btn terms-btn--primary" id="signup-submit-btn">가입하기</button>
+            <button type="button" class="terms-btn terms-btn--ghost" data-signup-close>취소</button>
+          </div>
         </form>
       </div>
     </div>

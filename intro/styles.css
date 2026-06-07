@@ -823,9 +823,33 @@ body.terms-modal-open {
   cursor: pointer;
 }
 
+.modal-close-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modal-close-btn:hover {
+  background: rgba(148, 163, 184, 0.22);
+  color: #e2e8f0;
+}
+
 /* —— Signup form modal —— */
 .signup-modal__panel {
   width: min(460px, 100%);
+}
+
+.signup-modal__actions {
+  margin-top: 0.35rem;
 }
 
 .signup-form {
@@ -934,8 +958,4 @@ body.terms-modal-open {
   margin: 0;
   font-size: 0.86rem;
   color: #f87171;
-}
-
-.signup-submit {
-  margin-top: 0.35rem;
 }
