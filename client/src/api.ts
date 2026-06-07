@@ -266,6 +266,18 @@ export function getApiUrl(): string {
 
 export const MEMBER_TOKEN_KEY = "member_access_token";
 
+export function bootstrapMemberTokenFromUrl(): boolean {
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const hashToken = hashParams.get("token");
+  const queryToken = new URLSearchParams(window.location.search).get("token");
+  const token = hashToken || queryToken;
+  if (!token) return false;
+
+  localStorage.setItem(MEMBER_TOKEN_KEY, token);
+  window.history.replaceState(null, "", window.location.pathname);
+  return true;
+}
+
 export type MemberProfile = {
   id: number;
   email: string;

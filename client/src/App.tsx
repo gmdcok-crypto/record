@@ -7,6 +7,7 @@ import {
   fetchClientJobs,
   fetchJob,
   fetchMemberMe,
+  bootstrapMemberTokenFromUrl,
   resolveUrl,
   saveTranscript,
   speakerLabel,
@@ -184,7 +185,7 @@ export default function App() {
   const [cancelTarget, setCancelTarget] = useState<JobArchiveItem | null>(null);
   const [duplicateDialogMessage, setDuplicateDialogMessage] = useState("");
   const [activeTab, setActiveTab] = useState<ClientTab>("archive");
-  const [memberName, setMemberName] = useState(GUEST_CLIENT_NAME);
+  const [memberName, setMemberName] = useState<string | null>(null);
   const segmentEndRef = useRef<number | null>(null);
 
   const busy = step === "uploading" || loadingJob || saving || downloadingPdf;
@@ -224,6 +225,7 @@ export default function App() {
         setR2Ready(false);
         setDbReady(false);
       });
+    bootstrapMemberTokenFromUrl();
     void refreshArchive();
     void fetchMemberMe().then((member) => {
       if (member?.name) setMemberName(member.name);
@@ -529,7 +531,9 @@ export default function App() {
       <div className="mx-auto flex min-h-dvh max-w-3xl flex-col px-4 pb-6 pt-4 lg:max-w-4xl lg:px-6">
         <header className="mb-4">
           <p className="text-sm font-semibold text-blue-300">의뢰인 녹취록</p>
-          <h1 className="mt-1 text-2xl font-bold text-white">{memberName}</h1>
+          <h1 className="mt-1 text-2xl font-bold text-white">
+            {memberName ? `${memberName}님` : GUEST_CLIENT_NAME}
+          </h1>
         </header>
 
         <nav className="sticky top-0 z-20 -mx-4 mb-4 border-b border-slate-800 bg-slate-950/95 px-4 backdrop-blur lg:-mx-6 lg:px-6">

@@ -30,10 +30,20 @@ const API_BASE = (() => {
   }
   return origin || RAILWAY_API_BASE;
 })();
-const CLIENT_URL = `${API_BASE}/`;
 const TOKEN_KEY = "member_access_token";
+const CLIENT_URL = `${API_BASE}/`;
 const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[#?!@$%^&*\-]).{8,16}$/;
 const EMAIL_PATTERN = /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/;
+
+function redirectAfterSignup(token) {
+  localStorage.setItem(TOKEN_KEY, token);
+  const clientOrigin = new URL(CLIENT_URL).origin;
+  if (clientOrigin === window.location.origin) {
+    window.location.href = CLIENT_URL;
+    return;
+  }
+  window.location.href = `${CLIENT_URL}#token=${encodeURIComponent(token)}`;
+}
 
 const termsModal = document.getElementById("terms-modal");
 const signupModal = document.getElementById("signup-modal");
@@ -308,8 +318,7 @@ signupForm?.addEventListener("submit", async (event) => {
       showSignupError(formatApiError(data.detail, "회원가입에 실패했습니다."));
       return;
     }
-    localStorage.setItem(TOKEN_KEY, data.access_token);
-    window.location.href = CLIENT_URL;
+    redirectAfterSignup(data.access_token);
   } catch {
     showSignupError("서버 연결에 실패했습니다.");
   } finally {
