@@ -25,7 +25,7 @@
           <a href="#output">결과물</a>
         </nav>
         <div class="nav-actions">
-          <a class="btn btn-primary" href="https://record-production.up.railway.app/transcriber/" target="_blank" rel="noreferrer">회원가입</a>
+          <button type="button" class="btn btn-primary" id="signup-open-btn">회원가입</button>
         </div>
       </div>
     </header>
@@ -289,5 +289,84 @@
         </div>
       </div>
     </footer>
+
+    <div class="terms-modal" id="terms-modal" hidden aria-hidden="true">
+      <div class="terms-modal__backdrop" data-terms-close></div>
+      <div
+        class="terms-modal__panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="terms-modal-title"
+        aria-describedby="terms-modal-desc"
+      >
+        <h2 class="terms-modal__title" id="terms-modal-title">회원 약관 동의</h2>
+        <p class="terms-modal__desc" id="terms-modal-desc">
+          통합증거센터 녹취사무소 서비스 이용을 위하여 필수 약관 동의 확인이 필요합니다.
+        </p>
+
+        <div class="terms-list">
+          <label class="terms-row terms-row--all">
+            <input type="checkbox" id="terms-agree-all" class="terms-check" />
+            <span class="terms-row__label">전체동의</span>
+          </label>
+
+          <div class="terms-item">
+            <label class="terms-row">
+              <input type="checkbox" class="terms-check terms-required" data-terms-key="service" />
+              <span class="terms-row__label">(필수) 서비스 이용약관</span>
+            </label>
+            <button type="button" class="terms-toggle" data-terms-toggle="service" aria-expanded="false" aria-controls="terms-body-service">
+              <span class="sr-only">서비스 이용약관 보기</span>
+            </button>
+            <div class="terms-body" id="terms-body-service" hidden>
+              <p>
+                본 서비스는 AI 초벌 녹취와 속기사 검수를 결합한 녹취록 작성 플랫폼입니다. 회원은 업로드
+                파일의 권리를 보유하거나 적법한 이용 권한이 있어야 하며, 서비스는 작업 처리·보관·전달
+                목적으로만 사용됩니다.
+              </p>
+            </div>
+          </div>
+
+          <div class="terms-item">
+            <label class="terms-row">
+              <input type="checkbox" class="terms-check terms-required" data-terms-key="privacy" />
+              <span class="terms-row__label">(필수) 개인정보처리방침</span>
+            </label>
+            <button type="button" class="terms-toggle" data-terms-toggle="privacy" aria-expanded="false" aria-controls="terms-body-privacy">
+              <span class="sr-only">개인정보처리방침 보기</span>
+            </button>
+            <div class="terms-body" id="terms-body-privacy" hidden>
+              <p>
+                수집 항목: 이름, 휴대폰 번호, 주민등록번호, 계좌정보, 로그인 ID 등. 이용 목적: 회원
+                식별, 작업 배정, 정산, 고객 지원. 보관 기간: 관련 법령 및 서비스 이용 종료 시까지.
+              </p>
+            </div>
+          </div>
+
+          <div class="terms-item">
+            <label class="terms-row">
+              <input type="checkbox" class="terms-check terms-required" data-terms-key="collection" />
+              <span class="terms-row__label">(필수) 개인정보수집이용동의</span>
+            </label>
+            <button type="button" class="terms-toggle" data-terms-toggle="collection" aria-expanded="false" aria-controls="terms-body-collection">
+              <span class="sr-only">개인정보수집이용동의 보기</span>
+            </button>
+            <div class="terms-body" id="terms-body-collection" hidden>
+              <p>
+                속기사 회원가입 및 본인 확인, 작업 수행, 정산 지급을 위해 개인정보를 수집·이용합니다.
+                동의를 거부할 수 있으나, 거부 시 회원가입 및 서비스 이용이 제한될 수 있습니다.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="terms-modal__actions">
+          <button type="button" class="terms-btn terms-btn--primary" id="terms-next-btn" disabled>다음</button>
+          <button type="button" class="terms-btn terms-btn--ghost" data-terms-close>취소</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="./signup-modal.js"></script>
   </body>
 </html>
