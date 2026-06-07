@@ -4,7 +4,9 @@ const API_FETCH_OPTIONS = {
   headers: { Accept: "application/json" },
 };
 
-if (location.pathname.startsWith("/intro") && "serviceWorker" in navigator) {
+const RAILWAY_API_BASE = "https://record-production.up.railway.app";
+
+if ("serviceWorker" in navigator) {
   void navigator.serviceWorker.getRegistrations().then((regs) => {
     for (const reg of regs) {
       void reg.unregister();
@@ -14,10 +16,19 @@ if (location.pathname.startsWith("/intro") && "serviceWorker" in navigator) {
 
 const API_BASE = (() => {
   const origin = window.location.origin;
-  if (origin && origin !== "null" && !origin.startsWith("file:")) {
+  const host = window.location.hostname;
+
+  // Intro on Netlify/static host → API is on Railway.
+  if (host.endsWith(".netlify.app") || host.endsWith(".github.io")) {
+    return RAILWAY_API_BASE;
+  }
+  if (origin === "null" || origin.startsWith("file:")) {
+    return RAILWAY_API_BASE;
+  }
+  if (host === "record-production.up.railway.app") {
     return origin;
   }
-  return "https://record-production.up.railway.app";
+  return origin || RAILWAY_API_BASE;
 })();
 const CLIENT_URL = `${API_BASE}/`;
 const TOKEN_KEY = "member_access_token";
