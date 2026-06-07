@@ -414,17 +414,23 @@
           </label>
           <p class="signup-rule">✓ 영문, 숫자, 특수문자 (#?!@$%^&*-) 포함 8~16자리</p>
 
-          <div class="signup-split">
-            <label class="signup-field signup-field--grow">
-              <input type="tel" id="signup-phone" name="phone" placeholder="'-'를 제외하고 입력" autocomplete="tel" />
-              <button type="button" class="signup-clear" data-clear-for="signup-phone" aria-label="휴대폰 지우기">×</button>
+          <div class="signup-phone-preview" aria-label="본인인증 UI 미리보기">
+            <p class="signup-section-label">
+              본인인증 (통신사)
+              <span class="signup-badge">추후 연동</span>
+            </p>
+            <div class="signup-split">
+              <label class="signup-field signup-field--grow">
+                <input type="tel" id="signup-phone" name="phone" placeholder="'-'를 제외하고 입력" autocomplete="tel" disabled />
+                <button type="button" class="signup-clear" data-clear-for="signup-phone" aria-label="휴대폰 지우기" disabled>×</button>
+              </label>
+              <button type="button" class="signup-side-btn" id="signup-phone-verify-btn" disabled>인증번호받기</button>
+            </div>
+            <label class="signup-field">
+              <input type="text" id="signup-verify-code" name="verify_code" placeholder="인증번호 6자리" inputmode="numeric" maxlength="6" disabled />
             </label>
-            <button type="button" class="signup-side-btn" id="signup-phone-verify-btn">인증번호받기</button>
+            <p class="signup-preview-note">테스트 단계에서는 이름·이메일·비밀번호만 입력하면 가입됩니다.</p>
           </div>
-
-          <label class="signup-field">
-            <input type="text" id="signup-verify-code" name="verify_code" placeholder="인증번호 6자리" inputmode="numeric" maxlength="6" />
-          </label>
 
           <p class="signup-error" id="signup-error" hidden></p>
 

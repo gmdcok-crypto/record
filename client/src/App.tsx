@@ -6,6 +6,7 @@ import {
   downloadFinalTranscriptPdf,
   fetchClientJobs,
   fetchJob,
+  fetchMemberMe,
   resolveUrl,
   saveTranscript,
   speakerLabel,
@@ -25,7 +26,7 @@ type EditableSegment = TranscriptSegment & { id: string };
 const EDITABLE_JOB_STATUSES = new Set(["first_done", "client_editing"]);
 
 const ACCEPT = "audio/*,video/mp4,video/webm,.wav,.mp3,.m4a,.flac,.ogg";
-const TEST_CLIENT_NAME = "홍길동";
+const GUEST_CLIENT_NAME = "의뢰인";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -183,6 +184,7 @@ export default function App() {
   const [cancelTarget, setCancelTarget] = useState<JobArchiveItem | null>(null);
   const [duplicateDialogMessage, setDuplicateDialogMessage] = useState("");
   const [activeTab, setActiveTab] = useState<ClientTab>("archive");
+  const [memberName, setMemberName] = useState(GUEST_CLIENT_NAME);
   const segmentEndRef = useRef<number | null>(null);
 
   const busy = step === "uploading" || loadingJob || saving || downloadingPdf;
@@ -223,6 +225,9 @@ export default function App() {
         setDbReady(false);
       });
     void refreshArchive();
+    void fetchMemberMe().then((member) => {
+      if (member?.name) setMemberName(member.name);
+    });
   }, []);
 
   useEffect(() => {
@@ -524,7 +529,7 @@ export default function App() {
       <div className="mx-auto flex min-h-dvh max-w-3xl flex-col px-4 pb-6 pt-4 lg:max-w-4xl lg:px-6">
         <header className="mb-4">
           <p className="text-sm font-semibold text-blue-300">의뢰인 녹취록</p>
-          <h1 className="mt-1 text-2xl font-bold text-white">{TEST_CLIENT_NAME}</h1>
+          <h1 className="mt-1 text-2xl font-bold text-white">{memberName}</h1>
         </header>
 
         <nav className="sticky top-0 z-20 -mx-4 mb-4 border-b border-slate-800 bg-slate-950/95 px-4 backdrop-blur lg:-mx-6 lg:px-6">

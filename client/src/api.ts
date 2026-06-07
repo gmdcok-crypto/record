@@ -263,3 +263,27 @@ export function speakerLabel(speaker: string, labels?: Record<string, string>): 
 export function getApiUrl(): string {
   return apiBase();
 }
+
+export const MEMBER_TOKEN_KEY = "member_access_token";
+
+export type MemberProfile = {
+  id: number;
+  email: string;
+  name: string;
+  phone: string | null;
+};
+
+export async function fetchMemberMe(): Promise<MemberProfile | null> {
+  const token = localStorage.getItem(MEMBER_TOKEN_KEY);
+  if (!token) return null;
+
+  const res = await fetch(`${apiBase()}/api/member/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    if (res.status === 401) localStorage.removeItem(MEMBER_TOKEN_KEY);
+    return null;
+  }
+  const data = await res.json();
+  return data.member as MemberProfile;
+}

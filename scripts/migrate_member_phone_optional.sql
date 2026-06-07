@@ -1,0 +1,2 @@
+ALTER TABLE members
+    MODIFY COLUMN phone VARCHAR(30) NULL;

@@ -1,5 +1,5 @@
 const API_BASE = window.location.origin;
-const HOME_URL = `${API_BASE}/`;
+const CLIENT_URL = `${API_BASE}/`;
 const TOKEN_KEY = "member_access_token";
 const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[#?!@$%^&*\-]).{8,16}$/;
 const EMAIL_PATTERN = /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/;
@@ -14,12 +14,7 @@ const signupForm = document.getElementById("signup-form");
 const signupError = document.getElementById("signup-error");
 const signupEmailHint = document.getElementById("signup-email-hint");
 const checkEmailBtn = document.getElementById("signup-check-email-btn");
-const phoneVerifyBtn = document.getElementById("signup-phone-verify-btn");
 const emailInput = document.getElementById("signup-email");
-
-let emailAvailable = false;
-let phoneVerified = false;
-let mockVerifyCode = "";
 
 async function loadServiceTerms() {
   const body = document.getElementById("terms-body-service");
@@ -97,9 +92,6 @@ function resetTermsModal() {
 
 function resetSignupForm() {
   signupForm?.reset();
-  emailAvailable = false;
-  phoneVerified = false;
-  mockVerifyCode = "";
   signupError.hidden = true;
   signupError.textContent = "";
   signupEmailHint.hidden = true;
@@ -165,16 +157,10 @@ termsNextBtn?.addEventListener("click", () => {
   openSignupModal();
 });
 
-emailInput?.addEventListener("input", () => {
-  emailAvailable = false;
-  signupEmailHint.hidden = true;
-});
-
 checkEmailBtn?.addEventListener("click", async () => {
   const email = emailInput?.value.trim().toLowerCase() || "";
   if (!EMAIL_PATTERN.test(email)) {
     showEmailHint("올바른 이메일 형식이 아닙니다.", false);
-    emailAvailable = false;
     return;
   }
   checkEmailBtn.disabled = true;
@@ -183,44 +169,23 @@ checkEmailBtn?.addEventListener("click", async () => {
     const data = await res.json();
     if (!res.ok) {
       showEmailHint(data.detail || "이메일 확인에 실패했습니다.", false);
-      emailAvailable = false;
       return;
     }
     if (data.available) {
       showEmailHint("사용 가능한 이메일입니다.", true);
-      emailAvailable = true;
     } else {
       showEmailHint("이미 사용 중인 이메일입니다.", false);
-      emailAvailable = false;
     }
   } catch {
     showEmailHint("서버 연결에 실패했습니다.", false);
-    emailAvailable = false;
   } finally {
     checkEmailBtn.disabled = false;
   }
 });
 
-phoneVerifyBtn?.addEventListener("click", () => {
-  const phone = document.getElementById("signup-phone")?.value.replace(/\D/g, "") || "";
-  if (phone.length < 10) {
-    showSignupError("휴대폰 번호를 올바르게 입력해 주세요.");
-    return;
-  }
-  mockVerifyCode = String(Math.floor(100000 + Math.random() * 900000));
-  phoneVerified = false;
-  signupError.hidden = true;
-  window.alert(`인증번호가 발송되었습니다.\n(테스트용 인증번호: ${mockVerifyCode})`);
-});
-
-document.getElementById("signup-verify-code")?.addEventListener("input", (event) => {
-  const value = event.target.value.replace(/\D/g, "");
-  event.target.value = value;
-  phoneVerified = value.length === 6 && value === mockVerifyCode;
-});
-
 document.querySelectorAll("[data-clear-for]").forEach((button) => {
   button.addEventListener("click", () => {
+    if (button.disabled) return;
     const target = document.getElementById(button.getAttribute("data-clear-for"));
     if (target) {
       target.value = "";
@@ -247,16 +212,13 @@ signupForm?.addEventListener("submit", async (event) => {
   const email = emailInput?.value.trim().toLowerCase() || "";
   const password = document.getElementById("signup-password")?.value || "";
   const passwordConfirm = document.getElementById("signup-password-confirm")?.value || "";
-  const phone = document.getElementById("signup-phone")?.value.replace(/\D/g, "") || "";
 
   if (!name) return showSignupError("이름을 입력해 주세요.");
   if (!EMAIL_PATTERN.test(email)) return showSignupError("올바른 이메일 형식이 아닙니다.");
-  if (!emailAvailable) return showSignupError("이메일 중복확인을 해주세요.");
   if (!PASSWORD_PATTERN.test(password)) {
     return showSignupError("비밀번호는 영문, 숫자, 특수문자(#?!@$%^&*-) 포함 8~16자리여야 합니다.");
   }
   if (password !== passwordConfirm) return showSignupError("비밀번호가 일치하지 않습니다.");
-  if (!phoneVerified) return showSignupError("휴대폰 인증을 완료해 주세요.");
 
   const submitBtn = document.getElementById("signup-submit-btn");
   submitBtn.disabled = true;
@@ -265,7 +227,7 @@ signupForm?.addEventListener("submit", async (event) => {
     const res = await fetch(`${API_BASE}/api/member/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, name, phone }),
+      body: JSON.stringify({ email, password, name }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -273,7 +235,7 @@ signupForm?.addEventListener("submit", async (event) => {
       return;
     }
     localStorage.setItem(TOKEN_KEY, data.access_token);
-    window.location.href = HOME_URL;
+    window.location.href = CLIENT_URL;
   } catch {
     showSignupError("서버 연결에 실패했습니다.");
   } finally {

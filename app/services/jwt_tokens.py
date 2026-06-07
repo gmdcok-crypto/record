@@ -54,3 +54,13 @@ def create_member_access_token(*, member_id: int, email: str) -> str:
     if settings.jwt_expire_minutes > 0:
         payload["exp"] = now + timedelta(minutes=settings.jwt_expire_minutes)
     return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)
+
+
+def decode_member_access_token(token: str) -> dict[str, Any]:
+    if not settings.jwt_configured:
+        raise RuntimeError("JWT is not configured")
+
+    payload = jwt.decode(token, settings.jwt_secret, algorithms=[ALGORITHM])
+    if payload.get("role") != "member":
+        raise jwt.InvalidTokenError("Invalid token role")
+    return payload

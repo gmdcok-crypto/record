@@ -14,6 +14,7 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_transcriber_auth.sql",
     SCRIPTS_DIR / "migrate_transcriber_auth_status.sql",
     SCRIPTS_DIR / "migrate_member_auth.sql",
+    SCRIPTS_DIR / "migrate_member_phone_optional.sql",
 ]
 
 

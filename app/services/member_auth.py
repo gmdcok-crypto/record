@@ -56,17 +56,19 @@ def register_member(
     email: str,
     password: str,
     name: str,
-    phone: str,
+    phone: str | None = None,
 ) -> Member:
     normalized_email = validate_email(email)
     normalized_password = validate_password(password)
     normalized_name = name.strip()
-    normalized_phone = re.sub(r"\D", "", phone.strip())
+    normalized_phone: str | None = None
+    if phone:
+        digits = re.sub(r"\D", "", phone.strip())
+        if len(digits) >= 10:
+            normalized_phone = digits
 
     if not normalized_name:
         raise MemberAuthError("이름을 입력해 주세요")
-    if len(normalized_phone) < 10:
-        raise MemberAuthError("휴대폰 번호를 올바르게 입력해 주세요")
 
     if get_member_by_email(db, normalized_email) is not None:
         raise MemberAuthError("이미 사용 중인 이메일입니다")

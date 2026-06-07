@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
+from app.dependencies.member_auth import get_current_member
+from app.models.admin_models import Member
 from app.services.jwt_tokens import create_member_access_token
 from app.services.member_auth import (
     MemberAuthError,
@@ -22,7 +24,7 @@ class MemberSignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=16)
     name: str
-    phone: str
+    phone: str | None = None
 
 
 class MemberLoginRequest(BaseModel):
@@ -89,6 +91,11 @@ def member_signup(body: MemberSignupRequest, db: Annotated[Session, Depends(get_
         raise _auth_error_to_http(exc) from exc
 
     return _issue_token(member)
+
+
+@router.get("/me")
+def member_me(current: Annotated[Member, Depends(get_current_member)]) -> dict:
+    return {"member": serialize_member(current)}
 
 
 @router.post("/login", response_model=MemberAuthTokenResponse)
