@@ -775,6 +775,43 @@ body.terms-modal-open {
   color: #cbd5e1;
 }
 
+.terms-body--long {
+  max-height: min(42vh, 320px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+
+.terms-body--long p {
+  margin: 0.35rem 0;
+}
+
+.terms-loading {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.terms-doc-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.terms-chapter {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #7dd3fc;
+}
+
+.terms-article {
+  margin: 0.75rem 0 0.35rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
 .terms-modal__actions {
   display: grid;
   gap: 0.65rem;

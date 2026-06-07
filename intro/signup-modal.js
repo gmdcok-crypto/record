@@ -21,6 +21,19 @@ let emailAvailable = false;
 let phoneVerified = false;
 let mockVerifyCode = "";
 
+async function loadServiceTerms() {
+  const body = document.getElementById("terms-body-service");
+  if (!body || body.dataset.loaded === "1") return;
+  try {
+    const res = await fetch("./service-terms-content.html");
+    if (!res.ok) throw new Error("terms fetch failed");
+    body.innerHTML = await res.text();
+    body.dataset.loaded = "1";
+  } catch {
+    body.innerHTML = "<p>약관을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</p>";
+  }
+}
+
 function allRequiredChecked() {
   return requiredChecks.every((input) => input.checked);
 }
@@ -276,4 +289,5 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+loadServiceTerms();
 closeAllModals();
