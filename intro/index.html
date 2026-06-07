@@ -337,8 +337,8 @@
             </button>
             <div class="terms-body" id="terms-body-privacy" hidden>
               <p>
-                수집 항목: 이름, 휴대폰 번호, 주민등록번호, 계좌정보, 로그인 ID 등. 이용 목적: 회원
-                식별, 작업 배정, 정산, 고객 지원. 보관 기간: 관련 법령 및 서비스 이용 종료 시까지.
+                수집 항목: 이름, 이메일, 휴대폰 번호 등. 이용 목적: 회원 식별, 녹취 업로드·
+                결과 확인, 고객 지원. 보관 기간: 관련 법령 및 서비스 이용 종료 시까지.
               </p>
             </div>
           </div>
@@ -353,7 +353,7 @@
             </button>
             <div class="terms-body" id="terms-body-collection" hidden>
               <p>
-                속기사 회원가입 및 본인 확인, 작업 수행, 정산 지급을 위해 개인정보를 수집·이용합니다.
+                일반 회원가입 및 본인 확인, 녹취 서비스 이용을 위해 개인정보를 수집·이용합니다.
                 동의를 거부할 수 있으나, 거부 시 회원가입 및 서비스 이용이 제한될 수 있습니다.
               </p>
             </div>
@@ -377,7 +377,7 @@
         aria-describedby="signup-modal-desc"
       >
         <h2 class="terms-modal__title" id="signup-modal-title">회원가입</h2>
-        <p class="terms-modal__desc" id="signup-modal-desc">통합증거센터 녹취사무소 속기사 회원가입</p>
+        <p class="terms-modal__desc" id="signup-modal-desc">통합증거센터 녹취사무소</p>
 
         <form id="signup-form" class="signup-form" novalidate>
           <label class="signup-field">
@@ -388,18 +388,17 @@
           <div class="signup-split">
             <label class="signup-field signup-field--grow">
               <input
-                type="text"
-                id="signup-login-id"
-                name="login_id"
-                placeholder="아이디 (영문·숫자 8자)"
-                maxlength="8"
-                autocomplete="username"
+                type="email"
+                id="signup-email"
+                name="email"
+                placeholder="이메일을 입력해 주세요."
+                autocomplete="email"
               />
-              <button type="button" class="signup-clear" data-clear-for="signup-login-id" aria-label="아이디 지우기">×</button>
+              <button type="button" class="signup-clear" data-clear-for="signup-email" aria-label="이메일 지우기">×</button>
             </label>
-            <button type="button" class="signup-side-btn" id="signup-check-id-btn">중복확인</button>
+            <button type="button" class="signup-side-btn" id="signup-check-email-btn">중복확인</button>
           </div>
-          <p class="signup-hint" id="signup-id-hint" hidden></p>
+          <p class="signup-hint" id="signup-email-hint" hidden></p>
 
           <label class="signup-field">
             <input type="password" id="signup-password" name="password" placeholder="비밀번호" autocomplete="new-password" />
@@ -416,7 +415,7 @@
             />
             <button type="button" class="signup-toggle-pw" data-toggle-for="signup-password-confirm" aria-label="비밀번호 확인 표시">👁</button>
           </label>
-          <p class="signup-rule">✓ 영문, 숫자 포함 8자 이상</p>
+          <p class="signup-rule">✓ 영문, 숫자, 특수문자 (#?!@$%^&*-) 포함 8~16자리</p>
 
           <div class="signup-split">
             <label class="signup-field signup-field--grow">
@@ -428,18 +427,6 @@
 
           <label class="signup-field">
             <input type="text" id="signup-verify-code" name="verify_code" placeholder="인증번호 6자리" inputmode="numeric" maxlength="6" />
-          </label>
-
-          <label class="signup-field">
-            <input type="text" id="signup-resident-id" name="resident_id" placeholder="주민등록번호 (- 없이)" inputmode="numeric" maxlength="13" />
-          </label>
-
-          <label class="signup-field">
-            <input type="text" id="signup-bank-name" name="bank_name" placeholder="은행명" />
-          </label>
-
-          <label class="signup-field">
-            <input type="text" id="signup-account-number" name="account_number" placeholder="계좌번호 (- 없이)" inputmode="numeric" />
           </label>
 
           <p class="signup-error" id="signup-error" hidden></p>

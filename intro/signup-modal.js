@@ -1,6 +1,8 @@
 const API_BASE = window.location.origin;
-const TRANSCRIBER_URL = `${API_BASE}/transcriber/`;
-const TOKEN_KEY = "transcriber_access_token";
+const HOME_URL = `${API_BASE}/`;
+const TOKEN_KEY = "member_access_token";
+const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[#?!@$%^&*\-]).{8,16}$/;
+const EMAIL_PATTERN = /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/;
 
 const termsModal = document.getElementById("terms-modal");
 const signupModal = document.getElementById("signup-modal");
@@ -10,12 +12,12 @@ const requiredChecks = Array.from(document.querySelectorAll(".terms-required"));
 const termsNextBtn = document.getElementById("terms-next-btn");
 const signupForm = document.getElementById("signup-form");
 const signupError = document.getElementById("signup-error");
-const signupIdHint = document.getElementById("signup-id-hint");
-const checkIdBtn = document.getElementById("signup-check-id-btn");
+const signupEmailHint = document.getElementById("signup-email-hint");
+const checkEmailBtn = document.getElementById("signup-check-email-btn");
 const phoneVerifyBtn = document.getElementById("signup-phone-verify-btn");
-const loginIdInput = document.getElementById("signup-login-id");
+const emailInput = document.getElementById("signup-email");
 
-let loginIdAvailable = false;
+let emailAvailable = false;
 let phoneVerified = false;
 let mockVerifyCode = "";
 
@@ -82,14 +84,14 @@ function resetTermsModal() {
 
 function resetSignupForm() {
   signupForm?.reset();
-  loginIdAvailable = false;
+  emailAvailable = false;
   phoneVerified = false;
   mockVerifyCode = "";
   signupError.hidden = true;
   signupError.textContent = "";
-  signupIdHint.hidden = true;
-  signupIdHint.textContent = "";
-  signupIdHint.className = "signup-hint";
+  signupEmailHint.hidden = true;
+  signupEmailHint.textContent = "";
+  signupEmailHint.className = "signup-hint";
 }
 
 function showSignupError(message) {
@@ -97,16 +99,15 @@ function showSignupError(message) {
   signupError.hidden = false;
 }
 
-function showIdHint(message, ok) {
-  signupIdHint.textContent = message;
-  signupIdHint.hidden = false;
-  signupIdHint.className = ok ? "signup-hint signup-hint--ok" : "signup-hint signup-hint--error";
+function showEmailHint(message, ok) {
+  signupEmailHint.textContent = message;
+  signupEmailHint.hidden = false;
+  signupEmailHint.className = ok ? "signup-hint signup-hint--ok" : "signup-hint signup-hint--error";
 }
 
 openBtn?.addEventListener("click", () => {
-  resetTermsModal();
   resetSignupForm();
-  openTermsModal();
+  openSignupModal();
 });
 
 termsModal?.querySelectorAll("[data-terms-close]").forEach((el) => {
@@ -147,39 +148,39 @@ termsNextBtn?.addEventListener("click", () => {
   openSignupModal();
 });
 
-loginIdInput?.addEventListener("input", () => {
-  loginIdAvailable = false;
-  signupIdHint.hidden = true;
+emailInput?.addEventListener("input", () => {
+  emailAvailable = false;
+  signupEmailHint.hidden = true;
 });
 
-checkIdBtn?.addEventListener("click", async () => {
-  const loginId = loginIdInput?.value.trim() || "";
-  if (!/^[A-Za-z0-9]{8}$/.test(loginId)) {
-    showIdHint("아이디는 영문·숫자 8자여야 합니다.", false);
-    loginIdAvailable = false;
+checkEmailBtn?.addEventListener("click", async () => {
+  const email = emailInput?.value.trim().toLowerCase() || "";
+  if (!EMAIL_PATTERN.test(email)) {
+    showEmailHint("올바른 이메일 형식이 아닙니다.", false);
+    emailAvailable = false;
     return;
   }
-  checkIdBtn.disabled = true;
+  checkEmailBtn.disabled = true;
   try {
-    const res = await fetch(`${API_BASE}/api/transcriber/auth/check-login-id?login_id=${encodeURIComponent(loginId)}`);
+    const res = await fetch(`${API_BASE}/api/member/auth/check-email?email=${encodeURIComponent(email)}`);
     const data = await res.json();
     if (!res.ok) {
-      showIdHint(data.detail || "아이디 확인에 실패했습니다.", false);
-      loginIdAvailable = false;
+      showEmailHint(data.detail || "이메일 확인에 실패했습니다.", false);
+      emailAvailable = false;
       return;
     }
     if (data.available) {
-      showIdHint("사용 가능한 아이디입니다.", true);
-      loginIdAvailable = true;
+      showEmailHint("사용 가능한 이메일입니다.", true);
+      emailAvailable = true;
     } else {
-      showIdHint("이미 사용 중인 아이디입니다.", false);
-      loginIdAvailable = false;
+      showEmailHint("이미 사용 중인 이메일입니다.", false);
+      emailAvailable = false;
     }
   } catch {
-    showIdHint("서버 연결에 실패했습니다.", false);
-    loginIdAvailable = false;
+    showEmailHint("서버 연결에 실패했습니다.", false);
+    emailAvailable = false;
   } finally {
-    checkIdBtn.disabled = false;
+    checkEmailBtn.disabled = false;
   }
 });
 
@@ -226,40 +227,28 @@ signupForm?.addEventListener("submit", async (event) => {
   signupError.hidden = true;
 
   const name = document.getElementById("signup-name")?.value.trim() || "";
-  const loginId = document.getElementById("signup-login-id")?.value.trim() || "";
+  const email = emailInput?.value.trim().toLowerCase() || "";
   const password = document.getElementById("signup-password")?.value || "";
   const passwordConfirm = document.getElementById("signup-password-confirm")?.value || "";
   const phone = document.getElementById("signup-phone")?.value.replace(/\D/g, "") || "";
-  const residentId = document.getElementById("signup-resident-id")?.value.replace(/\D/g, "") || "";
-  const bankName = document.getElementById("signup-bank-name")?.value.trim() || "";
-  const accountNumber = document.getElementById("signup-account-number")?.value.replace(/\D/g, "") || "";
 
   if (!name) return showSignupError("이름을 입력해 주세요.");
-  if (!/^[A-Za-z0-9]{8}$/.test(loginId)) return showSignupError("아이디는 영문·숫자 8자여야 합니다.");
-  if (!loginIdAvailable) return showSignupError("아이디 중복확인을 해주세요.");
-  if (password.length < 8) return showSignupError("비밀번호는 8자 이상이어야 합니다.");
+  if (!EMAIL_PATTERN.test(email)) return showSignupError("올바른 이메일 형식이 아닙니다.");
+  if (!emailAvailable) return showSignupError("이메일 중복확인을 해주세요.");
+  if (!PASSWORD_PATTERN.test(password)) {
+    return showSignupError("비밀번호는 영문, 숫자, 특수문자(#?!@$%^&*-) 포함 8~16자리여야 합니다.");
+  }
   if (password !== passwordConfirm) return showSignupError("비밀번호가 일치하지 않습니다.");
   if (!phoneVerified) return showSignupError("휴대폰 인증을 완료해 주세요.");
-  if (!residentId) return showSignupError("주민등록번호를 입력해 주세요.");
-  if (!bankName) return showSignupError("은행명을 입력해 주세요.");
-  if (!accountNumber) return showSignupError("계좌번호를 입력해 주세요.");
 
   const submitBtn = document.getElementById("signup-submit-btn");
   submitBtn.disabled = true;
 
   try {
-    const res = await fetch(`${API_BASE}/api/transcriber/auth/signup`, {
+    const res = await fetch(`${API_BASE}/api/member/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        login_id: loginId,
-        password,
-        name,
-        phone,
-        resident_id: residentId,
-        bank_name: bankName,
-        account_number: accountNumber,
-      }),
+      body: JSON.stringify({ email, password, name, phone }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -267,7 +256,7 @@ signupForm?.addEventListener("submit", async (event) => {
       return;
     }
     localStorage.setItem(TOKEN_KEY, data.access_token);
-    window.location.href = TRANSCRIBER_URL;
+    window.location.href = HOME_URL;
   } catch {
     showSignupError("서버 연결에 실패했습니다.");
   } finally {
@@ -285,3 +274,5 @@ document.addEventListener("keydown", (event) => {
     closeAllModals();
   }
 });
+
+closeAllModals();

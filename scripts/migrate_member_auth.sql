@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS members (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(150) NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    phone VARCHAR(30) NOT NULL,
+    is_active TINYINT NOT NULL DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_members_email (email),
+    KEY idx_members_phone (phone)
+);

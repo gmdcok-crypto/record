@@ -13,6 +13,7 @@ DELETE FROM jobs;
 DELETE FROM transcribers;
 DELETE FROM transcript_history;
 DELETE FROM clients;
+DELETE FROM members;
 DELETE FROM admin_users;
 
 SET FOREIGN_KEY_CHECKS = 1;

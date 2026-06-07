@@ -38,3 +38,19 @@ def decode_transcriber_access_token(token: str) -> dict[str, Any]:
     if payload.get("role") != "transcriber":
         raise jwt.InvalidTokenError("Invalid token role")
     return payload
+
+
+def create_member_access_token(*, member_id: int, email: str) -> str:
+    if not settings.jwt_configured:
+        raise RuntimeError("JWT is not configured")
+
+    now = datetime.now(timezone.utc)
+    payload: dict[str, Any] = {
+        "sub": str(member_id),
+        "email": email,
+        "role": "member",
+        "iat": now,
+    }
+    if settings.jwt_expire_minutes > 0:
+        payload["exp"] = now + timedelta(minutes=settings.jwt_expire_minutes)
+    return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)
