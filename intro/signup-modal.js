@@ -106,8 +106,9 @@ function showEmailHint(message, ok) {
 }
 
 openBtn?.addEventListener("click", () => {
+  resetTermsModal();
   resetSignupForm();
-  openSignupModal();
+  openTermsModal();
 });
 
 termsModal?.querySelectorAll("[data-terms-close]").forEach((el) => {
