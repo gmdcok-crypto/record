@@ -165,6 +165,10 @@ function isEditableArchiveStatus(status: string): boolean {
   return EDITABLE_JOB_STATUSES.has(status);
 }
 
+function jobWorkflowStatus(job: { status?: string; workflow_status?: string } | null | undefined): string {
+  return job?.workflow_status ?? job?.status ?? "";
+}
+
 function mapProjectStatus(status: string): string {
   switch (status) {
     case "waiting_assignment":
@@ -200,7 +204,7 @@ function projectFileToArchiveItem(file: ProjectFile, clientName: string): JobArc
     job_id: file.job_id,
     title: file.title,
     filename: file.filename,
-    status: file.status,
+    status: file.workflow_status ?? file.status,
     updated_at: file.uploaded_at,
     client_name: clientName,
     pdf_ready: file.pdf_ready,
@@ -249,7 +253,9 @@ export default function App() {
   const busy = step === "uploading" || loadingJob || saving || downloadingPdf;
   const pendingReviewCount = useMemo(() => {
     const fromProjects = projects.reduce(
-      (count, project) => count + (project.files?.filter((file) => file.status === "first_done").length ?? 0),
+      (count, project) =>
+        count +
+        (project.files?.filter((file) => (file.workflow_status ?? file.status) === "first_done").length ?? 0),
       0,
     );
     return fromProjects || archive.filter((item) => item.status === "first_done").length;
@@ -492,16 +498,16 @@ export default function App() {
       setJobIdInput(data.job_id);
       setSegments(buildEditableSegments(data.transcript_json));
       setStep("ready");
-      const shouldOpenEdit =
-        options?.switchToEdit ?? isEditableArchiveStatus(data.status ?? "");
+      const workflowStatus = jobWorkflowStatus(data);
+      const shouldOpenEdit = options?.switchToEdit ?? isEditableArchiveStatus(workflowStatus);
       if (shouldOpenEdit) {
         setActiveTab("edit");
         setMessage(
-          data.status === "first_done"
+          workflowStatus === "first_done"
             ? "확인요청 문서를 불러왔습니다. 내용을 검토하고 수정하세요."
             : "편집 문서를 불러왔습니다.",
         );
-      } else if (data.status === "assigned" || data.status === "working") {
+      } else if (workflowStatus === "assigned" || workflowStatus === "working") {
         setActiveTab("archive");
         setMessage("속기사가 초벌 작업 중입니다. 초벌 전달 후 편집 화면에서 확인할 수 있습니다.");
       } else {
@@ -1017,6 +1023,7 @@ export default function App() {
                       {expanded && files.length ? (
                         <div className="space-y-2 border-t border-slate-800 px-4 pb-4 pt-2">
                           {files.map((file) => {
+                            const fileStatus = file.workflow_status ?? file.status;
                             const item = projectFileToArchiveItem(file, memberName || GUEST_CLIENT_NAME);
                             return (
                               <div
@@ -1033,9 +1040,9 @@ export default function App() {
                                     <p className="mt-1 truncate text-xs text-slate-500">{file.title}</p>
                                   </button>
                                   <span
-                                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${archiveStatusStyle(file.status)}`}
+                                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${archiveStatusStyle(fileStatus)}`}
                                   >
-                                    {mapClientJobStatus(file.status)}
+                                    {mapClientJobStatus(fileStatus)}
                                   </span>
                                 </div>
                                 <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
@@ -1104,9 +1111,9 @@ export default function App() {
               )}
             </div>
 
-            {job && !isEditableArchiveStatus(job.status ?? "") ? (
+            {job && !isEditableArchiveStatus(jobWorkflowStatus(job)) ? (
               <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-5 py-10 text-center text-sm text-slate-400">
-                {job.status === "assigned" || job.status === "working" ? (
+                {jobWorkflowStatus(job) === "assigned" || jobWorkflowStatus(job) === "working" ? (
                   <>
                     속기사가 초벌 작업 중입니다.
                     <br />

@@ -44,6 +44,7 @@ export type JobResponse = {
   transcript_json: TranscriptJson;
   title?: string;
   status?: string;
+  workflow_status?: string;
   priority?: string;
   uploaded_at?: string | null;
   due_at?: string | null;
@@ -64,6 +65,7 @@ export type JobArchiveItem = {
   title: string;
   filename: string;
   status: string;
+  workflow_status?: string;
   updated_at: string | null;
   client_name: string;
   pdf_ready: boolean;
@@ -121,6 +123,7 @@ export type ProjectFile = {
   title: string;
   filename: string;
   status: string;
+  workflow_status?: string;
   uploaded_at: string | null;
   due_at: string | null;
   assignee: string | null;
