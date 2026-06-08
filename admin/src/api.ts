@@ -47,6 +47,7 @@ export type AdminOverviewStats = {
 
 export type AdminOverviewJob = {
   id: string;
+  project_id?: string | null;
   client: string;
   title: string;
   filename: string;
@@ -102,8 +103,34 @@ export type AdminOverviewSale = {
   status: string;
 };
 
+export type AdminOverviewProjectFile = {
+  job_id: string;
+  title: string;
+  filename: string;
+  status: string;
+  uploaded_at: string | null;
+  due_at: string | null;
+  assignee: string | null;
+  pdf_ready: boolean;
+};
+
+export type AdminOverviewProject = {
+  project_id: string;
+  title: string;
+  client: { id: number; name: string };
+  status: string;
+  file_count: number;
+  completed_count: number;
+  due_at: string | null;
+  memo?: string | null;
+  priority?: string;
+  assignee?: string;
+  files?: AdminOverviewProjectFile[];
+};
+
 export type AdminOverview = {
   stats: AdminOverviewStats;
+  projects?: AdminOverviewProject[];
   jobs: AdminOverviewJob[];
   transcribers: AdminOverviewTranscriber[];
   settlements: AdminOverviewSettlement[];
@@ -156,6 +183,22 @@ export async function fetchAdminOverview(): Promise<AdminOverview> {
     throw await parseApiError(res, "관리자 데이터를 불러올 수 없습니다");
   }
   return res.json();
+}
+
+export async function assignProject(
+  projectId: string,
+  transcriberCode: string,
+  jobIds?: string[],
+  note?: string,
+): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/projects/${projectId}/assign`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transcriber_code: transcriberCode, job_ids: jobIds, note }),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "프로젝트 배정 실패");
+  }
 }
 
 export async function assignJob(jobId: string, transcriberCode: string, note?: string): Promise<void> {

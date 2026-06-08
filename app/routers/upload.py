@@ -68,6 +68,7 @@ class PresignResponse(BaseModel):
 
 class VoiceUploadResponse(BaseModel):
     job_id: str
+    project_id: str | None = None
     object_key: str
     bucket: str
     status: str
@@ -156,6 +157,7 @@ async def upload_voice(
         {"job_id": job.job_id, "status": job.status, "project_id": job.project_id},
     )
 
+    response.project_id = job.project_id
     return response
 
 

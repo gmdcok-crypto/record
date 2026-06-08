@@ -1,64 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   downloadFinalTranscriptPdf,
+  fetchAssignedProjects,
   fetchJob,
   finalizeTranscriptPdf,
   resolveUrl,
   saveTranscript,
   speakerLabel,
   type JobResponse,
+  type TranscriberProject,
+  type TranscriberProjectFile,
   type TranscriptJson,
   type TranscriptSegment,
 } from "./api";
 
-type WorkStatus =
-  | "배정 완료"
-  | "초벌 작성 중"
-  | "의뢰인 수정 확인"
-  | "최종본 확정"
-  | "PDF 전달 완료";
-
-type AssignedWork = {
-  jobId: string;
-  client: string;
-  title: string;
-  filename: string;
-  dueAt: string;
-  status: WorkStatus;
-  priority: "일반" | "긴급";
-};
-
-const WORKS: AssignedWork[] = [
-  {
-    jobId: "REC-20260604-001",
-    client: "세종법무법인",
-    title: "형사사건 녹취 초안",
-    filename: "meeting_0604_client01.m4a",
-    dueAt: "2026-06-04 18:00",
-    status: "초벌 작성 중",
-    priority: "긴급",
-  },
-  {
-    jobId: "REC-20260603-118",
-    client: "케이메디컬",
-    title: "의료 자문 회의록",
-    filename: "medical_roundtable.mp3",
-    dueAt: "2026-06-04 16:00",
-    status: "의뢰인 수정 확인",
-    priority: "일반",
-  },
-  {
-    jobId: "REC-20260602-094",
-    client: "블루컴 본사",
-    title: "제품 전략 회의",
-    filename: "strategy_room_0602.mp4",
-    dueAt: "2026-06-03 17:00",
-    status: "최종본 확정",
-    priority: "일반",
-  },
-];
-
-function formatDateTime(value: string): string {
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return "-";
   try {
     return new Date(value).toLocaleString("ko-KR", {
       year: "numeric",
@@ -69,6 +26,75 @@ function formatDateTime(value: string): string {
     });
   } catch {
     return value;
+  }
+}
+
+function projectKey(project: TranscriberProject): string {
+  return project.project_id || `solo-${project.files[0]?.job_id || project.title}`;
+}
+
+function mapProjectStatus(status: string): string {
+  switch (status) {
+    case "waiting_assignment":
+      return "배정 대기";
+    case "working":
+      return "작업 중";
+    case "client_review":
+      return "의뢰인 확인";
+    case "completed":
+      return "완료";
+    default:
+      return status;
+  }
+}
+
+function mapFileStatusLabel(status: string): string {
+  switch (status) {
+    case "assigned":
+      return "배정 완료";
+    case "working":
+      return "초벌 작성 중";
+    case "first_done":
+      return "의뢰인 확인";
+    case "client_editing":
+      return "의뢰인 수정 중";
+    case "review_waiting":
+      return "재검수";
+    case "final_done":
+    case "pdf_sent":
+      return "PDF 완료";
+    default:
+      return status;
+  }
+}
+
+function fileStatusStyle(status: string): string {
+  switch (status) {
+    case "final_done":
+    case "pdf_sent":
+      return "bg-emerald-500/15 text-emerald-300";
+    case "first_done":
+    case "review_waiting":
+    case "client_editing":
+      return "bg-violet-500/15 text-violet-300";
+    case "assigned":
+    case "working":
+      return "bg-cyan-500/15 text-cyan-300";
+    default:
+      return "bg-amber-500/15 text-amber-300";
+  }
+}
+
+function projectStatusStyle(status: string): string {
+  switch (status) {
+    case "completed":
+      return "bg-emerald-500/15 text-emerald-300";
+    case "client_review":
+      return "bg-violet-500/15 text-violet-300";
+    case "working":
+      return "bg-cyan-500/15 text-cyan-300";
+    default:
+      return "bg-amber-500/15 text-amber-300";
   }
 }
 
@@ -111,44 +137,29 @@ function draftToTranscript(base: TranscriptJson | null, draft: string): Transcri
   };
 }
 
-function formatTime(ms: number | null | undefined): string {
-  if (ms == null) return "--:--";
-  const total = Math.floor(ms / 1000);
-  const minute = Math.floor(total / 60);
-  const second = total % 60;
-  return `${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}`;
-}
-
-function statusStyle(status: WorkStatus): string {
-  switch (status) {
-    case "PDF 전달 완료":
-    case "최종본 확정":
-      return "bg-emerald-500/15 text-emerald-300";
-    case "의뢰인 수정 확인":
-      return "bg-violet-500/15 text-violet-300";
-    case "초벌 작성 중":
-      return "bg-cyan-500/15 text-cyan-300";
-    default:
-      return "bg-amber-500/15 text-amber-300";
-  }
-}
-
 export default function App() {
   const audioRef = useRef<HTMLAudioElement>(null);
-  const [works, setWorks] = useState<AssignedWork[]>(WORKS);
-  const [selectedJobId, setSelectedJobId] = useState<string>(WORKS[0]?.jobId ?? "");
+  const [projects, setProjects] = useState<TranscriberProject[]>([]);
+  const [selectedProjectKey, setSelectedProjectKey] = useState("");
+  const [selectedJobId, setSelectedJobId] = useState("");
   const [job, setJob] = useState<JobResponse | null>(null);
   const [draft, setDraft] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [loadingJob, setLoadingJob] = useState(false);
   const [saving, setSaving] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const currentWork = useMemo(
-    () => works.find((item) => item.jobId === selectedJobId) ?? null,
-    [works, selectedJobId],
+  const currentProject = useMemo(
+    () => projects.find((project) => projectKey(project) === selectedProjectKey) ?? null,
+    [projects, selectedProjectKey],
   );
+
+  const currentFile = useMemo<TranscriberProjectFile | null>(() => {
+    if (!currentProject) return null;
+    return currentProject.files.find((file) => file.job_id === selectedJobId) ?? currentProject.files[0] ?? null;
+  }, [currentProject, selectedJobId]);
 
   const currentTranscript = useMemo(
     () => draftToTranscript(job?.transcript_json ?? null, draft),
@@ -156,8 +167,30 @@ export default function App() {
   );
 
   useEffect(() => {
-    if (!selectedJobId) return;
-    setLoading(true);
+    setLoadingProjects(true);
+    fetchAssignedProjects()
+      .then((data) => {
+        setProjects(data);
+        const first = data[0];
+        if (first) {
+          const key = projectKey(first);
+          setSelectedProjectKey(key);
+          setSelectedJobId(first.files[0]?.job_id ?? "");
+        }
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "배정 프로젝트를 불러오지 못했습니다.");
+      })
+      .finally(() => setLoadingProjects(false));
+  }, []);
+
+  useEffect(() => {
+    if (!selectedJobId) {
+      setJob(null);
+      setDraft("");
+      return;
+    }
+    setLoadingJob(true);
     setMessage("");
     setError("");
     fetchJob(selectedJobId)
@@ -168,16 +201,13 @@ export default function App() {
       .catch((err) => {
         setError(err instanceof Error ? err.message : "작업을 불러오지 못했습니다.");
       })
-      .finally(() => {
-        setLoading(false);
-      });
+      .finally(() => setLoadingJob(false));
   }, [selectedJobId]);
 
-  const updateWorkStatus = (status: WorkStatus, nextMessage: string) => {
-    setWorks((prev) =>
-      prev.map((item) => (item.jobId === selectedJobId ? { ...item, status } : item)),
-    );
-    setMessage(nextMessage);
+  const selectProject = (project: TranscriberProject) => {
+    const key = projectKey(project);
+    setSelectedProjectKey(key);
+    setSelectedJobId(project.files[0]?.job_id ?? "");
   };
 
   const onSaveDraft = async () => {
@@ -188,7 +218,7 @@ export default function App() {
     try {
       await saveTranscript(job.job_id, currentTranscript);
       setJob({ ...job, transcript_json: currentTranscript });
-      updateWorkStatus("초벌 작성 중", "초벌 문서를 저장했습니다.");
+      setMessage("초벌 임시 저장이 완료되었습니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "저장 실패");
     } finally {
@@ -204,9 +234,9 @@ export default function App() {
     try {
       await saveTranscript(job.job_id, currentTranscript);
       setJob({ ...job, transcript_json: currentTranscript });
-      updateWorkStatus("의뢰인 수정 확인", "의뢰인 검토용 초벌본을 저장했습니다.");
+      setMessage("의뢰인 검토용 초벌본을 저장했습니다.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "전송 실패");
+      setError(err instanceof Error ? err.message : "전달 실패");
     } finally {
       setSaving(false);
     }
@@ -220,9 +250,9 @@ export default function App() {
     try {
       await saveTranscript(job.job_id, currentTranscript);
       setJob({ ...job, transcript_json: currentTranscript });
-      updateWorkStatus("최종본 확정", "최종 문서를 확정했습니다. PDF 날인본 전달 단계로 이동할 수 있습니다.");
+      setMessage("최종본이 저장되었습니다.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "최종 확정 실패");
+      setError(err instanceof Error ? err.message : "확정 실패");
     } finally {
       setSaving(false);
     }
@@ -238,7 +268,7 @@ export default function App() {
       await finalizeTranscriptPdf(job.job_id, currentTranscript);
       await downloadFinalTranscriptPdf(job.job_id);
       setJob({ ...job, transcript_json: currentTranscript, final_pdf_ready: true, status: "pdf_sent" });
-      updateWorkStatus("PDF 전달 완료", "최종 PDF를 R2에 저장하고 다운로드했습니다. 의뢰인은 저장된 최종 PDF를 받을 수 있습니다.");
+      setMessage("최종 PDF를 R2에 저장하고 다운로드했습니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "PDF 다운로드 실패");
     } finally {
@@ -250,69 +280,96 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="relative min-h-screen overflow-hidden">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.12),transparent_24%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.12),transparent_22%),linear-gradient(to_bottom,rgba(15,23,42,0.84),rgba(2,6,23,0.98))]" />
-        <div className="relative mx-auto grid min-h-screen max-w-[1680px] gap-6 px-4 py-4 lg:grid-cols-[320px_minmax(0,1fr)] lg:px-6">
-          <aside className="rounded-[28px] border border-white/10 bg-slate-950/70 p-5 backdrop-blur-xl">
-            <div className="border-b border-white/10 pb-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-300">Bluecom Transcriber</p>
-              <h1 className="mt-2 text-2xl font-semibold text-white">속기사 작업함</h1>
-              <p className="mt-3 text-sm leading-6 text-slate-400">
-                배정된 음성 파일을 들으면서 초벌을 직접 작성하고, 의뢰인 수정 확인 후 최종 PDF까지 처리합니다.
-              </p>
-            </div>
-
-            <div className="mt-6 space-y-3">
-              {works.map((item) => {
-                const active = item.jobId === selectedJobId;
-                return (
-                  <button
-                    key={item.jobId}
-                    type="button"
-                    onClick={() => setSelectedJobId(item.jobId)}
-                    className={`block w-full rounded-3xl border px-4 py-4 text-left transition ${
-                      active
-                        ? "border-cyan-500/40 bg-cyan-500/10"
-                        : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-white">{item.title}</p>
-                        <p className="mt-1 truncate text-sm text-slate-400">{item.client}</p>
+        <div className="relative mx-auto grid min-h-screen max-w-[1680px] gap-4 px-4 py-4 lg:grid-cols-[220px_240px_minmax(0,1fr)] lg:px-6">
+          <aside className="rounded-[28px] border border-white/10 bg-slate-950/70 p-4 backdrop-blur-xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-300">프로젝트</p>
+            <h1 className="mt-2 text-lg font-semibold text-white">배정 사건</h1>
+            <div className="mt-4 space-y-2">
+              {loadingProjects ? (
+                <p className="text-sm text-slate-400">불러오는 중…</p>
+              ) : projects.length === 0 ? (
+                <p className="text-sm text-slate-400">배정된 프로젝트가 없습니다.</p>
+              ) : (
+                projects.map((project) => {
+                  const key = projectKey(project);
+                  const active = key === selectedProjectKey;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => selectProject(project)}
+                      className={`block w-full rounded-2xl border px-3 py-3 text-left transition ${
+                        active
+                          ? "border-cyan-500/40 bg-cyan-500/10"
+                          : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
+                      }`}
+                    >
+                      <p className="truncate text-sm font-semibold text-white">{project.title}</p>
+                      <p className="mt-1 truncate text-xs text-slate-400">{project.client.name}</p>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${projectStatusStyle(project.status)}`}>
+                          {mapProjectStatus(project.status)}
+                        </span>
+                        <span className="text-[10px] text-slate-500">
+                          {project.completed_count}/{project.file_count}
+                        </span>
                       </div>
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                          item.priority === "긴급" ? "bg-rose-500/15 text-rose-300" : "bg-slate-800 text-slate-300"
-                        }`}
-                      >
-                        {item.priority}
-                      </span>
-                    </div>
-                    <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-                      <span>{item.jobId}</span>
-                      <span>{item.dueAt}</span>
-                    </div>
-                    <div className="mt-3">
-                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyle(item.status)}`}>
-                        {item.status}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+                    </button>
+                  );
+                })
+              )}
             </div>
           </aside>
 
-          <main className="space-y-6">
+          <aside className="rounded-[28px] border border-white/10 bg-slate-950/70 p-4 backdrop-blur-xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-violet-300">파일</p>
+            <h2 className="mt-2 text-lg font-semibold text-white">녹음 목록</h2>
+            <p className="mt-1 truncate text-xs text-slate-400">{currentProject?.title || "프로젝트 선택"}</p>
+            <div className="mt-4 space-y-2">
+              {currentProject?.files.length ? (
+                currentProject.files.map((file) => {
+                  const active = file.job_id === selectedJobId;
+                  return (
+                    <button
+                      key={file.job_id}
+                      type="button"
+                      onClick={() => setSelectedJobId(file.job_id)}
+                      className={`block w-full rounded-2xl border px-3 py-3 text-left transition ${
+                        active
+                          ? "border-violet-500/40 bg-violet-500/10"
+                          : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
+                      }`}
+                    >
+                      <p className="truncate text-sm font-medium text-white">{file.filename}</p>
+                      <p className="mt-1 text-[10px] text-slate-500">{formatDateTime(file.due_at)}</p>
+                      <span className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${fileStatusStyle(file.status)}`}>
+                        {mapFileStatusLabel(file.status)}
+                      </span>
+                    </button>
+                  );
+                })
+              ) : (
+                <p className="text-sm text-slate-400">선택한 프로젝트에 파일이 없습니다.</p>
+              )}
+            </div>
+          </aside>
+
+          <main className="space-y-4">
             <header className="rounded-[28px] border border-white/10 bg-slate-950/60 px-5 py-5 backdrop-blur-xl">
               <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                 <div>
-                  <p className="text-sm font-medium text-cyan-300">Assigned Transcript Workflow</p>
-                  <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white">
-                    초벌 작성부터 최종 PDF 전달까지 한 화면에서 처리
+                  <p className="text-sm font-medium text-cyan-300">속기사 편집</p>
+                  {currentProject && currentFile ? (
+                    <p className="mt-2 text-sm text-slate-400">
+                      {currentProject.title} &gt; {currentFile.filename}
+                    </p>
+                  ) : null}
+                  <h2 className="mt-1 text-2xl font-semibold tracking-tight text-white">
+                    {currentFile?.title || "파일을 선택하세요"}
                   </h2>
-                  {currentWork ? (
-                    <p className="mt-3 text-sm leading-6 text-slate-400">
-                      {currentWork.client} · {currentWork.filename} · 마감 {formatDateTime(currentWork.dueAt)}
+                  {currentProject ? (
+                    <p className="mt-2 text-sm text-slate-400">
+                      {currentProject.client.name} · 마감 {formatDateTime(currentProject.due_at)}
                     </p>
                   ) : null}
                 </div>
@@ -365,123 +422,58 @@ export default function App() {
               </div>
             )}
 
-            {loading ? (
+            {loadingJob ? (
               <div className="rounded-[28px] border border-white/10 bg-slate-900/70 p-12 text-center text-slate-400 backdrop-blur-xl">
-                배정 작업을 불러오는 중입니다...
+                파일을 불러오는 중입니다...
               </div>
             ) : job ? (
               <div className="grid gap-6 xl:grid-cols-[1.2fr_0.85fr]">
                 <section className="space-y-6">
                   <div className="rounded-[28px] border border-white/10 bg-slate-900/70 p-5 backdrop-blur-xl">
-                    <div className="mb-4 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-cyan-300">원본 음성</p>
-                        <p className="mt-1 text-sm text-slate-400">
-                          오디오를 들으면서 초벌/최종 문서를 작성하는 작업 영역
-                        </p>
-                      </div>
-                      {currentWork ? (
-                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyle(currentWork.status)}`}>
-                          {currentWork.status}
-                        </span>
-                      ) : null}
-                    </div>
+                    <p className="text-sm font-semibold text-cyan-300">원본 음성</p>
                     <audio
                       ref={audioRef}
                       controls
                       preload="metadata"
                       src={resolveUrl(job.audio_url)}
-                      className="w-full rounded-2xl"
+                      className="mt-4 w-full rounded-2xl"
                     />
-                    <div className="mt-4 grid gap-3 md:grid-cols-4">
-                      <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3">
-                        <p className="text-xs text-slate-500">작업번호</p>
-                        <p className="mt-2 break-all text-sm font-medium text-white">{job.job_id}</p>
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3">
-                        <p className="text-xs text-slate-500">파일명</p>
-                        <p className="mt-2 text-sm font-medium text-white">
-                          {job.transcript_json.filename || currentWork?.filename || "원본 파일"}
-                        </p>
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3">
-                        <p className="text-xs text-slate-500">구간 수</p>
-                        <p className="mt-2 text-sm font-medium text-white">{job.transcript_json.segments?.length ?? 0}개</p>
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3">
-                        <p className="text-xs text-slate-500">예상 최종 단계</p>
-                        <p className="mt-2 text-sm font-medium text-white">PDF 날인본 전달</p>
-                      </div>
-                    </div>
                   </div>
-
                   <div className="rounded-[28px] border border-white/10 bg-slate-900/70 p-5 backdrop-blur-xl">
-                    <div className="mb-4">
-                      <p className="text-sm font-semibold text-violet-300">문서 편집</p>
-                      <h3 className="mt-1 text-xl font-bold text-white">초벌본 / 최종본 작성</h3>
-                      <p className="mt-2 text-sm leading-6 text-slate-400">
-                        속기사는 이 편집 화면에서 빈 초안부터 직접 작성하고, 의뢰인에게 전달한 뒤 수정 요청을 반영한 최종본을
-                        다시 확정합니다. 최종 확인이 끝나면 날인본 PDF를 생성합니다.
-                      </p>
-                    </div>
+                    <p className="text-sm font-semibold text-violet-300">문서 편집</p>
                     <textarea
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
-                      placeholder="오디오를 들으며 화자명: 발언 내용 형식으로 초벌 문서를 직접 작성하세요."
-                      className="min-h-[520px] w-full rounded-3xl border border-slate-700 bg-slate-950 px-5 py-4 text-sm leading-7 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
+                      placeholder="화자명: 발언 내용 형식으로 초벌을 작성하세요."
+                      className="mt-4 min-h-[480px] w-full rounded-3xl border border-slate-700 bg-slate-950 px-5 py-4 text-sm leading-7 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
                     />
                   </div>
                 </section>
-
-                <section className="space-y-6">
-                  <div className="rounded-[28px] border border-white/10 bg-slate-900/70 p-5 backdrop-blur-xl">
-                    <p className="text-sm font-semibold text-emerald-300">업무 단계</p>
-                    <div className="mt-4 space-y-3">
-                      {[
-                        "1. 배정된 음성 확인",
-                        "2. 초벌 녹취록 작성",
-                        "3. 의뢰인에게 초벌 전달",
-                        "4. 의뢰인 수정 사항 반영",
-                        "5. 최종 문서 확정",
-                        "6. 도장 날인 PDF 생성",
-                        "7. 의뢰인 다운로드용 최종본 전달",
-                      ].map((step) => (
-                        <div key={step} className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-200">
-                          {step}
-                        </div>
-                      ))}
+                <section className="rounded-[28px] border border-white/10 bg-slate-900/70 p-5 backdrop-blur-xl">
+                  <p className="text-sm font-semibold text-emerald-300">작업 정보</p>
+                  <dl className="mt-4 space-y-3 text-sm">
+                    <div>
+                      <dt className="text-slate-500">작업번호</dt>
+                      <dd className="mt-1 break-all font-mono text-white">{job.job_id}</dd>
                     </div>
-                  </div>
-
-                  <div className="rounded-[28px] border border-white/10 bg-slate-900/70 p-5 backdrop-blur-xl">
-                    <p className="text-sm font-semibold text-blue-300">문서 미리보기</p>
-                    <div className="mt-4 max-h-[520px] overflow-y-auto rounded-3xl border border-white/10 bg-slate-950/60 p-4">
-                      {currentTranscript.segments?.length ? (
-                        <div className="space-y-4">
-                          {currentTranscript.segments.map((segment, index) => (
-                            <div key={`${segment.speaker}-${index}`} className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
-                              <div className="flex items-center justify-between gap-3">
-                                <p className="font-semibold text-cyan-300">
-                                  {speakerLabel(segment.speaker, currentTranscript.speaker_labels)}
-                                </p>
-                                <span className="text-xs text-slate-500">
-                                  {formatTime(segment.start_ms)} - {formatTime(segment.end_ms)}
-                                </span>
-                              </div>
-                              <p className="mt-3 text-sm leading-7 text-slate-200">{segment.text}</p>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-slate-500">미리볼 대화 구간이 없습니다.</p>
-                      )}
+                    <div>
+                      <dt className="text-slate-500">파일명</dt>
+                      <dd className="mt-1 text-white">{currentFile?.filename || "-"}</dd>
                     </div>
-                  </div>
+                    <div>
+                      <dt className="text-slate-500">상태</dt>
+                      <dd className="mt-1">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${fileStatusStyle(job.status || "")}`}>
+                          {mapFileStatusLabel(job.status || "")}
+                        </span>
+                      </dd>
+                    </div>
+                  </dl>
                 </section>
               </div>
             ) : (
-              <div className="rounded-[28px] border border-white/10 bg-slate-900/70 p-12 text-center text-slate-400 backdrop-blur-xl">
-                불러온 작업이 없습니다.
+              <div className="rounded-[28px] border border-dashed border-white/10 bg-slate-900/40 p-12 text-center text-slate-400">
+                왼쪽에서 프로젝트와 파일을 선택하세요.
               </div>
             )}
           </main>

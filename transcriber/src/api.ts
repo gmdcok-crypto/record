@@ -57,6 +57,28 @@ export type AssignedWork = {
   priority: string;
 };
 
+export type TranscriberProjectFile = {
+  job_id: string;
+  title: string;
+  filename: string;
+  status: string;
+  uploaded_at: string | null;
+  due_at: string | null;
+  assignee: string | null;
+  pdf_ready: boolean;
+};
+
+export type TranscriberProject = {
+  project_id: string | null;
+  title: string;
+  client: { id: number | null; name: string };
+  due_at: string | null;
+  status: string;
+  file_count: number;
+  completed_count: number;
+  files: TranscriberProjectFile[];
+};
+
 export type TranscriberProfile = {
   id: number;
   code: string;
@@ -108,6 +130,18 @@ export async function fetchJob(jobId: string): Promise<JobResponse> {
     throw new Error(parseErrorDetail(err));
   }
   return res.json();
+}
+
+export async function fetchAssignedProjects(transcriberCode = "TR-001"): Promise<TranscriberProject[]> {
+  const res = await fetch(
+    `${apiBase()}/api/jobs/transcriber/projects?transcriber_code=${encodeURIComponent(transcriberCode)}`,
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err));
+  }
+  const data = (await res.json()) as { projects?: TranscriberProject[] };
+  return data.projects || [];
 }
 
 export async function fetchAssignedJobs(transcriberCode = "TR-001"): Promise<AssignedWork[]> {

@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import {
   cancelClientJob,
   checkHealth,
+  createProject,
   downloadTranscriptPdf,
   downloadFinalTranscriptPdf,
-  fetchClientJobs,
   fetchJob,
   fetchMemberMe,
+  fetchProjects,
   bootstrapMemberTokenFromUrl,
   clearMemberSession,
   resolveUrl,
@@ -16,16 +17,18 @@ import {
   uploadVoice,
   type JobArchiveItem,
   type JobResponse,
+  type ProjectFile,
+  type ProjectSummary,
   type TranscriptJson,
   type TranscriptSegment,
   type MemberProfile,
-  type UploadResponse,
 } from "./api";
 import MemberLogin from "./MemberLogin";
 
 type Step = "idle" | "uploading" | "ready" | "error";
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 type ClientTab = "upload" | "archive" | "edit";
+type UploadProjectMode = "existing" | "new";
 type EditableSegment = TranscriptSegment & { id: string };
 
 const EDITABLE_JOB_STATUSES = new Set(["first_done", "client_editing"]);
@@ -162,6 +165,53 @@ function isEditableArchiveStatus(status: string): boolean {
   return EDITABLE_JOB_STATUSES.has(status);
 }
 
+function inferProjectTitle(filename: string): string {
+  const stem = filename.replace(/\.[^.]+$/, "").replace(/_/g, " ").trim();
+  return stem || "새 녹취 프로젝트";
+}
+
+function mapProjectStatus(status: string): string {
+  switch (status) {
+    case "waiting_assignment":
+      return "배정 대기";
+    case "working":
+      return "작업 중";
+    case "client_review":
+      return "확인 대기";
+    case "completed":
+      return "완료";
+    case "empty":
+      return "파일 없음";
+    default:
+      return status;
+  }
+}
+
+function projectStatusStyle(status: string): string {
+  switch (status) {
+    case "completed":
+      return "bg-emerald-500/15 text-emerald-300";
+    case "client_review":
+      return "bg-violet-500/15 text-violet-300";
+    case "working":
+      return "bg-blue-500/15 text-blue-300";
+    default:
+      return "bg-amber-500/15 text-amber-300";
+  }
+}
+
+function projectFileToArchiveItem(file: ProjectFile, clientName: string): JobArchiveItem {
+  return {
+    job_id: file.job_id,
+    title: file.title,
+    filename: file.filename,
+    status: file.status,
+    updated_at: file.uploaded_at,
+    client_name: clientName,
+    pdf_ready: file.pdf_ready,
+  };
+}
+
 function normalizeUploadFilename(filename: string): string {
   return filename.trim();
 }
@@ -185,6 +235,12 @@ export default function App() {
   const [segments, setSegments] = useState<EditableSegment[]>([]);
   const [jobIdInput, setJobIdInput] = useState("");
   const [archive, setArchive] = useState<JobArchiveItem[]>([]);
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [uploadProjectMode, setUploadProjectMode] = useState<UploadProjectMode>("new");
+  const [selectedUploadProjectId, setSelectedUploadProjectId] = useState("");
+  const [newProjectTitle, setNewProjectTitle] = useState("");
+  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
+  const [editContext, setEditContext] = useState<{ projectTitle: string; filename: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
@@ -196,10 +252,13 @@ export default function App() {
   const segmentEndRef = useRef<number | null>(null);
 
   const busy = step === "uploading" || loadingJob || saving || downloadingPdf;
-  const pendingReviewCount = useMemo(
-    () => archive.filter((item) => item.status === "first_done").length,
-    [archive],
-  );
+  const pendingReviewCount = useMemo(() => {
+    const fromProjects = projects.reduce(
+      (count, project) => count + (project.files?.filter((file) => file.status === "first_done").length ?? 0),
+      0,
+    );
+    return fromProjects || archive.filter((item) => item.status === "first_done").length;
+  }, [projects, archive]);
   const archivedFilenames = useMemo(
     () => new Set(archive.map((item) => normalizeUploadFilename(item.filename))),
     [archive],
@@ -213,13 +272,37 @@ export default function App() {
     [job, selectedFiles],
   );
 
-  const refreshArchive = async () => {
+  const refreshWorkspace = async () => {
     try {
-      const jobs = await fetchClientJobs();
-      setArchive(jobs);
+      const projectList = await fetchProjects(true);
+      setProjects(projectList);
+      const clientLabel = memberName || GUEST_CLIENT_NAME;
+      const flatArchive = projectList.flatMap((project) =>
+        (project.files ?? []).map((file) => projectFileToArchiveItem(file, clientLabel)),
+      );
+      setArchive(flatArchive);
+      if (projectList.length > 0 && !selectedUploadProjectId) {
+        setSelectedUploadProjectId(projectList[0].project_id);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "보관함을 불러오지 못했습니다.");
     }
+  };
+
+  const isProjectExpanded = (projectId: string) => expandedProjects[projectId] ?? true;
+
+  const toggleProjectExpanded = (projectId: string) => {
+    setExpandedProjects((prev) => ({ ...prev, [projectId]: !(prev[projectId] ?? true) }));
+  };
+
+  const resolveEditContext = (jobId: string, projectList: ProjectSummary[]) => {
+    for (const project of projectList) {
+      const file = project.files?.find((item) => item.job_id === jobId);
+      if (file) {
+        return { projectTitle: project.title, filename: file.filename };
+      }
+    }
+    return null;
   };
 
   const restoreSession = async () => {
@@ -239,14 +322,20 @@ export default function App() {
     setMemberName(member.name);
     setAuthStatus("authenticated");
     setError("");
-    void refreshArchive();
+    void refreshWorkspace();
   };
 
   const handleLogout = () => {
     clearMemberSession();
     setMemberName(null);
     setAuthStatus("unauthenticated");
+    setProjects([]);
     setArchive([]);
+    setSelectedUploadProjectId("");
+    setNewProjectTitle("");
+    setUploadProjectMode("new");
+    setExpandedProjects({});
+    setEditContext(null);
     setJob(null);
     setSegments([]);
     setSelectedFiles([]);
@@ -268,7 +357,7 @@ export default function App() {
         setDbReady(false);
       });
     void restoreSession().then((member) => {
-      if (member) void refreshArchive();
+      if (member) void refreshWorkspace();
     });
   }, []);
 
@@ -395,7 +484,9 @@ export default function App() {
       } else {
         setMessage("작업을 불러왔습니다.");
       }
-      await refreshArchive();
+      const context = resolveEditContext(data.job_id, projects);
+      setEditContext(context);
+      await refreshWorkspace();
     } catch (err) {
       setError(err instanceof Error ? err.message : "작업을 불러오지 못했습니다.");
     } finally {
@@ -403,20 +494,22 @@ export default function App() {
     }
   };
 
-  const openArchiveJob = (item: JobArchiveItem) => {
+  const openArchiveJob = (item: JobArchiveItem, projectTitle?: string) => {
+    if (projectTitle) {
+      setEditContext({ projectTitle, filename: item.filename });
+    }
     void loadJobById(item.job_id, { switchToEdit: isEditableArchiveStatus(item.status) });
   };
 
-  const performUpload = async (fileToUpload: File) => {
+  const performUpload = async (fileToUpload: File, projectId?: string) => {
     setStep("uploading");
     setProgress(0);
     setError("");
     try {
-      const uploaded: UploadResponse = await uploadVoice(fileToUpload, setProgress);
+      await uploadVoice(fileToUpload, setProgress, undefined, projectId);
       setJob(null);
       setSegments([]);
-      setJobIdInput(uploaded.job_id);
-      await refreshArchive();
+      await refreshWorkspace();
     } catch (err) {
       const message = err instanceof Error ? err.message : "업로드 실패";
       if (message.includes("이미 업로드된 파일입니다")) {
@@ -441,10 +534,25 @@ export default function App() {
     }
 
     try {
+      let targetProjectId: string | undefined;
+      if (uploadProjectMode === "existing") {
+        if (!selectedUploadProjectId) {
+          setError("업로드할 프로젝트를 선택해 주세요.");
+          return;
+        }
+        targetProjectId = selectedUploadProjectId;
+      } else {
+        const title = newProjectTitle.trim() || inferProjectTitle(filesToUpload[0].name);
+        const created = await createProject(title);
+        targetProjectId = created.project_id;
+        setSelectedUploadProjectId(created.project_id);
+        setUploadProjectMode("existing");
+      }
+
       for (let index = 0; index < filesToUpload.length; index += 1) {
         const file = filesToUpload[index];
         setMessage(`업로드 중 ${index + 1}/${filesToUpload.length}: ${file.name}`);
-        await performUpload(file);
+        await performUpload(file, targetProjectId);
       }
       resetUploadUi(`${filesToUpload.length}개 파일 업로드가 완료되었습니다. 업로드된 파일은 관리자 배정 후 속기사가 직접 녹취록을 작성합니다.`);
       setActiveTab("archive");
@@ -463,7 +571,7 @@ export default function App() {
       await updateJobStatus(job.job_id, "client_editing", "의뢰인 수정본 저장");
       setJob({ ...job, transcript_json: currentTranscript, status: "client_editing" });
       setMessage("의뢰인 수정본이 DB와 R2에 저장되었습니다.");
-      await refreshArchive();
+      await refreshWorkspace();
     } catch (err) {
       setError(err instanceof Error ? err.message : "저장 실패");
     } finally {
@@ -481,7 +589,7 @@ export default function App() {
       await updateJobStatus(job.job_id, "review_waiting", "의뢰인 수정 후 속기사 재검수 요청");
       setJob({ ...job, transcript_json: currentTranscript, status: "review_waiting" });
       setMessage("재검수 요청이 DB에 반영되었습니다.");
-      await refreshArchive();
+      await refreshWorkspace();
     } catch (err) {
       setError(err instanceof Error ? err.message : "검수 요청 실패");
     } finally {
@@ -533,7 +641,7 @@ export default function App() {
         setJobIdInput("");
         setStep("idle");
       }
-      await refreshArchive();
+      await refreshWorkspace();
       setMessage("배정 전 업로드를 취소했습니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "업로드 취소 실패");
@@ -642,8 +750,65 @@ export default function App() {
               <p className="text-sm font-semibold text-blue-300">파일 업로드</p>
               <h2 className="mt-1 text-xl font-bold text-white">새 녹취 의뢰</h2>
               <p className="mt-2 text-sm text-slate-400">
-                음성·영상 파일을 올리면 보관함에 저장되고 속기사 배정을 기다립니다.
+                프로젝트(사건)를 선택한 뒤 파일을 올리면 같은 프로젝트에 묶여 관리됩니다.
               </p>
+            </div>
+
+            <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">업로드 프로젝트</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUploadProjectMode("existing")}
+                  disabled={!projects.length}
+                  className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
+                    uploadProjectMode === "existing"
+                      ? "bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/40"
+                      : "bg-slate-900 text-slate-400 hover:text-slate-200 disabled:opacity-40"
+                  }`}
+                >
+                  기존 프로젝트
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUploadProjectMode("new")}
+                  className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
+                    uploadProjectMode === "new"
+                      ? "bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/40"
+                      : "bg-slate-900 text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  새 프로젝트
+                </button>
+              </div>
+              {uploadProjectMode === "existing" ? (
+                projects.length ? (
+                  <select
+                    value={selectedUploadProjectId}
+                    onChange={(event) => setSelectedUploadProjectId(event.target.value)}
+                    className="mt-3 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-cyan-500/50"
+                  >
+                    {projects.map((project) => (
+                      <option key={project.project_id} value={project.project_id}>
+                        {project.title} ({project.file_count}개 파일)
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="mt-3 text-sm text-slate-400">등록된 프로젝트가 없습니다. 새 프로젝트로 업로드하세요.</p>
+                )
+              ) : (
+                <input
+                  value={newProjectTitle}
+                  onChange={(event) => setNewProjectTitle(event.target.value)}
+                  placeholder={
+                    selectedFiles[0]
+                      ? inferProjectTitle(selectedFiles[0].name)
+                      : "프로젝트 이름 (예: ○○사건 통화녹취)"
+                  }
+                  className="mt-3 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-cyan-500/50"
+                />
+              )}
             </div>
 
             <div className="space-y-4">
@@ -735,9 +900,9 @@ export default function App() {
           <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
             <div className="mb-5">
               <p className="text-sm font-semibold text-emerald-300">보관함</p>
-              <h2 className="mt-1 text-xl font-bold text-white">작업 목록</h2>
+              <h2 className="mt-1 text-xl font-bold text-white">프로젝트 보관함</h2>
               <p className="mt-1 text-sm text-slate-400">
-                확인요청 상태의 파일을 누르면 편집 탭으로 이동합니다.
+                프로젝트(사건)별로 묶여 있습니다. 확인요청 파일을 누르면 편집 탭으로 이동합니다.
               </p>
             </div>
 
@@ -764,48 +929,96 @@ export default function App() {
             </div>
 
             <div className="space-y-3">
-              {archive.length ? (
-                archive.map((item) => (
-                  <div
-                    key={item.job_id}
-                    className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 transition hover:border-blue-500 hover:bg-slate-900"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <button type="button" onClick={() => openArchiveJob(item)} className="min-w-0 flex-1 text-left">
-                        <p className="truncate font-semibold text-slate-100">{item.title}</p>
-                        <p className="mt-1 truncate text-sm text-slate-400">{item.filename}</p>
-                      </button>
-                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${archiveStatusStyle(item.status)}`}>
-                        {mapClientJobStatus(item.status)}
-                      </span>
-                    </div>
-                    <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-                      <span className="font-mono">{item.job_id}</span>
-                      <div className="flex items-center gap-2">
-                        <span>{formatDateTime(item.updated_at)}</span>
-                        {item.status === "waiting_assignment" ? (
-                          <button
-                            type="button"
-                            onClick={() => setCancelTarget(item)}
-                            className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-300"
+              {projects.length ? (
+                projects.map((project) => {
+                  const expanded = isProjectExpanded(project.project_id);
+                  const files = project.files ?? [];
+                  return (
+                    <div
+                      key={project.project_id}
+                      className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/60"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleProjectExpanded(project.project_id)}
+                        className="flex w-full items-start justify-between gap-3 p-4 text-left transition hover:bg-slate-900"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-slate-100">{project.title}</p>
+                          <p className="mt-1 text-sm text-slate-400">
+                            진행 {project.completed_count}/{project.file_count} · 마감{" "}
+                            {formatDateTime(project.due_at)}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${projectStatusStyle(project.status)}`}
                           >
-                            업로드 취소
-                          </button>
-                        ) : null}
-                      </div>
+                            {mapProjectStatus(project.status)}
+                          </span>
+                          <span className="text-slate-500">{expanded ? "▾" : "▸"}</span>
+                        </div>
+                      </button>
+                      {expanded && files.length ? (
+                        <div className="space-y-2 border-t border-slate-800 px-4 pb-4 pt-2">
+                          {files.map((file) => {
+                            const item = projectFileToArchiveItem(file, memberName || GUEST_CLIENT_NAME);
+                            return (
+                              <div
+                                key={file.job_id}
+                                className="rounded-xl border border-slate-800 bg-slate-900/80 p-3 transition hover:border-blue-500/50"
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => openArchiveJob(item, project.title)}
+                                    className="min-w-0 flex-1 text-left"
+                                  >
+                                    <p className="truncate text-sm font-semibold text-slate-100">{file.filename}</p>
+                                    <p className="mt-1 truncate text-xs text-slate-500">{file.title}</p>
+                                  </button>
+                                  <span
+                                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${archiveStatusStyle(file.status)}`}
+                                  >
+                                    {mapClientJobStatus(file.status)}
+                                  </span>
+                                </div>
+                                <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                                  <span className="font-mono">{file.job_id}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span>{formatDateTime(file.uploaded_at)}</span>
+                                    {file.status === "waiting_assignment" ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => setCancelTarget(item)}
+                                        className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-300"
+                                      >
+                                        취소
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                      {expanded && !files.length ? (
+                        <p className="border-t border-slate-800 px-4 py-3 text-sm text-slate-500">파일이 없습니다.</p>
+                      ) : null}
                     </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-5 py-10 text-center text-sm text-slate-400">
-                  아직 저장된 작업이 없습니다.
+                  아직 프로젝트가 없습니다. 업로드 탭에서 파일을 올려 주세요.
                 </div>
               )}
             </div>
 
             <button
               type="button"
-              onClick={() => void refreshArchive()}
+              onClick={() => void refreshWorkspace()}
               className="mt-4 w-full rounded-xl border border-slate-700 bg-slate-950 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-800"
             >
               보관함 새로고침
@@ -818,6 +1031,11 @@ export default function App() {
             <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-violet-300">편집</p>
+                {editContext ? (
+                  <p className="mt-1 text-sm text-cyan-300/90">
+                    {editContext.projectTitle} &gt; {editContext.filename}
+                  </p>
+                ) : null}
                 <h2 className="mt-1 text-xl font-bold text-white">{currentTitle}</h2>
                 <p className="mt-1 text-sm text-slate-400">
                   구간 텍스트를 누르면 해당 오디오가 재생되고, 같은 영역에서 바로 수정할 수 있습니다.

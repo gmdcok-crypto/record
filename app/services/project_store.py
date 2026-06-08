@@ -200,6 +200,74 @@ def resolve_upload_project(
     return create_project_for_upload(db, client=client, filename=filename, title=project_title)
 
 
+def list_transcriber_projects(db: Session, transcriber_code: str) -> list[dict]:
+    from app.models.admin_models import Transcriber
+    from app.services.job_store import ACTIVE_JOB_STATUSES, DEFAULT_CLIENT_NAME, _display_status_for_job, _has_manual_assignment
+
+    transcriber = db.scalar(select(Transcriber).where(Transcriber.transcriber_code == transcriber_code))
+    if transcriber is None:
+        return []
+
+    rows = db.scalars(
+        select(Job)
+        .where(Job.assigned_transcriber_id == transcriber.id, Job.status.in_(ACTIVE_JOB_STATUSES))
+        .order_by(Job.updated_at.desc())
+    ).all()
+
+    assigned_jobs = [job for job in rows if _has_manual_assignment(db, job.job_id)]
+    grouped: dict[str, list[Job]] = {}
+    standalone: list[Job] = []
+
+    for job in assigned_jobs:
+        if job.project_id:
+            grouped.setdefault(job.project_id, []).append(job)
+        else:
+            standalone.append(job)
+
+    result: list[dict] = []
+    for project_id, project_jobs in grouped.items():
+        project = get_project_record(db, project_id)
+        if project is None:
+            continue
+        display_statuses = [_display_status_for_job(db, job) for job in project_jobs]
+        result.append(
+            {
+                "project_id": project.project_id,
+                "title": project.title,
+                "client": {
+                    "id": project.client.id if project.client else project.client_id,
+                    "name": project.client.name if project.client else DEFAULT_CLIENT_NAME,
+                },
+                "due_at": project.due_at.isoformat() if project.due_at else None,
+                "status": compute_project_status(display_statuses),
+                "file_count": len(project_jobs),
+                "completed_count": sum(1 for status in display_statuses if status in FINAL_JOB_STATUSES),
+                "files": [serialize_project_file(db, job) for job in project_jobs],
+            }
+        )
+
+    for job in standalone:
+        display_status = _display_status_for_job(db, job)
+        result.append(
+            {
+                "project_id": None,
+                "title": job.title,
+                "client": {
+                    "id": job.client.id if job.client else None,
+                    "name": job.client.name if job.client else DEFAULT_CLIENT_NAME,
+                },
+                "due_at": job.due_at.isoformat() if job.due_at else None,
+                "status": compute_project_status([display_status]),
+                "file_count": 1,
+                "completed_count": 1 if display_status in FINAL_JOB_STATUSES else 0,
+                "files": [serialize_project_file(db, job)],
+            }
+        )
+
+    result.sort(key=lambda item: item.get("due_at") or "", reverse=True)
+    return result
+
+
 def assign_project_jobs(
     db: Session,
     project: Project,

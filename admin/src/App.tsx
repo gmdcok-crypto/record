@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 import {
   assignJob,
+  assignProject,
   createTranscriber,
   createAdminEventsSource,
   deleteTranscriber,
@@ -48,6 +49,7 @@ type MenuItem = {
 
 type JobItem = {
   id: string;
+  projectId: string | null;
   client: string;
   title: string;
   filename: string;
@@ -62,6 +64,30 @@ type JobItem = {
   settlementAmount: number;
   paymentStatus: PaymentStatus;
   settlementStatus: SettlementStatus;
+};
+
+type ProjectFileItem = {
+  id: string;
+  title: string;
+  filename: string;
+  status: JobStatus;
+  assignee: string;
+  dueAt: string;
+  salesAmount: number;
+  paymentStatus: PaymentStatus;
+};
+
+type ProjectItem = {
+  id: string;
+  title: string;
+  client: string;
+  dueAt: string;
+  statusLabel: string;
+  rawStatus: string;
+  fileCount: number;
+  completedCount: number;
+  assignee: string;
+  files: ProjectFileItem[];
 };
 
 type Transcriber = {
@@ -167,6 +193,36 @@ function formatCompactDateTime(value: string | null | undefined): string {
     });
   } catch {
     return value;
+  }
+}
+
+function mapProjectStatusLabel(status: string): string {
+  switch (status) {
+    case "waiting_assignment":
+      return "배정 대기";
+    case "working":
+      return "작업 중";
+    case "client_review":
+      return "의뢰인 확인";
+    case "completed":
+      return "완료";
+    case "empty":
+      return "파일 없음";
+    default:
+      return status;
+  }
+}
+
+function projectStatusTone(rawStatus: string): string {
+  switch (rawStatus) {
+    case "completed":
+      return "bg-emerald-500/15 text-emerald-300";
+    case "client_review":
+      return "bg-violet-500/15 text-violet-300";
+    case "working":
+      return "bg-blue-500/15 text-blue-300";
+    default:
+      return "bg-amber-500/15 text-amber-300";
   }
 }
 
@@ -367,6 +423,8 @@ function App() {
   const [detailJob, setDetailJob] = useState<JobResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [assignTarget, setAssignTarget] = useState<JobItem | null>(null);
+  const [assignProjectTarget, setAssignProjectTarget] = useState<ProjectItem | null>(null);
+  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [selectedTranscriberCode, setSelectedTranscriberCode] = useState("");
   const [transcriberModalOpen, setTranscriberModalOpen] = useState(false);
   const [editingTranscriberId, setEditingTranscriberId] = useState<string | null>(null);
@@ -445,6 +503,7 @@ function App() {
   const jobs = useMemo<JobItem[]>(() => {
     return (overview?.jobs ?? []).map((job) => ({
       id: job.id,
+      projectId: (job as { project_id?: string | null }).project_id ?? null,
       client: job.client,
       title: job.title,
       filename: job.filename,
@@ -461,6 +520,34 @@ function App() {
       settlementStatus: mapSettlementStatus(job.settlement_status),
     }));
   }, [overview]);
+
+  const projects = useMemo<ProjectItem[]>(() => {
+    const jobById = new Map(jobs.map((job) => [job.id, job]));
+    return (overview?.projects ?? []).map((project) => ({
+      id: project.project_id,
+      title: project.title,
+      client: project.client.name,
+      dueAt: formatDateTime(project.due_at),
+      statusLabel: mapProjectStatusLabel(project.status),
+      rawStatus: project.status,
+      fileCount: project.file_count,
+      completedCount: project.completed_count,
+      assignee: project.assignee || "-",
+      files: (project.files ?? []).map((file) => {
+        const job = jobById.get(file.job_id);
+        return {
+          id: file.job_id,
+          title: file.title,
+          filename: file.filename,
+          status: mapJobStatus(file.status),
+          assignee: file.assignee || job?.assignee || "-",
+          dueAt: formatDateTime(file.due_at),
+          salesAmount: job?.salesAmount ?? 0,
+          paymentStatus: job?.paymentStatus ?? "미수",
+        };
+      }),
+    }));
+  }, [overview, jobs]);
 
   const transcribers = useMemo<Transcriber[]>(() => {
     return (overview?.transcribers ?? []).map((person) => ({
@@ -548,16 +635,37 @@ function App() {
 
   const openAssignModal = (job: JobItem) => {
     setAssignTarget(job);
+    setAssignProjectTarget(null);
+    setSelectedTranscriberCode(transcribers[0]?.id ?? "TR-001");
+  };
+
+  const openAssignProjectModal = (project: ProjectItem) => {
+    setAssignProjectTarget(project);
+    setAssignTarget(null);
     setSelectedTranscriberCode(transcribers[0]?.id ?? "TR-001");
   };
 
   const closeAssignModal = () => {
     setAssignTarget(null);
+    setAssignProjectTarget(null);
     setSelectedTranscriberCode("");
   };
 
   const confirmAssignModal = async () => {
-    if (!assignTarget || !selectedTranscriberCode) return;
+    if (!selectedTranscriberCode) return;
+    if (assignProjectTarget) {
+      await runAdminAction("프로젝트 배정 중입니다.", async () => {
+        await assignProject(
+          assignProjectTarget.id,
+          selectedTranscriberCode,
+          undefined,
+          "관리자 프로젝트 일괄 배정",
+        );
+      });
+      closeAssignModal();
+      return;
+    }
+    if (!assignTarget) return;
     await handleAssign(assignTarget.id, selectedTranscriberCode);
     closeAssignModal();
   };
@@ -692,18 +800,35 @@ function App() {
     });
   }, [jobs, transcribers]);
 
-  const visibleJobs = useMemo(() => {
-    return jobs.filter((job) => {
-      const matchesQuery =
-        !query.trim() ||
-        [job.id, job.client, job.title, job.filename, job.assignee]
-          .join(" ")
-          .toLowerCase()
-          .includes(query.trim().toLowerCase());
-      const matchesStatus = statusFilter === "전체" || job.status === statusFilter;
-      return matchesQuery && matchesStatus;
+  const visibleProjects = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return projects.filter((project) => {
+      const matchesStatus =
+        statusFilter === "전체" ||
+        project.files.some((file) => file.status === statusFilter) ||
+        (statusFilter === "배정 대기" && project.rawStatus === "waiting_assignment");
+      if (!matchesStatus) return false;
+      if (!q) return true;
+      const haystack = [
+        project.id,
+        project.title,
+        project.client,
+        project.assignee,
+        ...project.files.map((file) => file.id),
+        ...project.files.map((file) => file.filename),
+        ...project.files.map((file) => file.title),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
     });
-  }, [jobs, query, statusFilter]);
+  }, [projects, query, statusFilter]);
+
+  const isProjectExpanded = (projectId: string) => expandedProjects[projectId] ?? true;
+
+  const toggleProjectExpanded = (projectId: string) => {
+    setExpandedProjects((prev) => ({ ...prev, [projectId]: !(prev[projectId] ?? true) }));
+  };
 
   const dashboardStats = useMemo(() => {
     return {
@@ -802,18 +927,20 @@ function App() {
 
   const renderJobs = () => (
     <SectionCard
-      title="의뢰 / 파일 관리"
+      title="의뢰 / 프로젝트 관리"
       action={
         <div className="flex gap-2">
           <button
             type="button"
             onClick={() => {
-              const firstWaiting = visibleJobs.find((job) => job.status === "배정 대기" || job.status === "재검수 대기");
-              if (firstWaiting) openAssignModal(firstWaiting);
+              const firstWaiting = visibleProjects.find(
+                (project) => project.rawStatus === "waiting_assignment" || project.files.some((f) => f.status === "재검수 대기"),
+              );
+              if (firstWaiting) openAssignProjectModal(firstWaiting);
             }}
             className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10"
           >
-            일괄 배정
+            프로젝트 일괄 배정
           </button>
           <button
             type="button"
@@ -829,7 +956,7 @@ function App() {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="작업번호, 의뢰인, 파일명, 담당자 검색"
+          placeholder="프로젝트명, 의뢰인, 파일명, 작업번호 검색"
           className="min-w-[280px] flex-1 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-cyan-400"
         />
         <select
@@ -848,70 +975,123 @@ function App() {
       </div>
 
       <div className="overflow-x-auto rounded-3xl border border-white/10">
-        {visibleJobs.length === 0 ? (
-          <EmptyState message="표시할 의뢰/파일 데이터가 없습니다." />
+        {visibleProjects.length === 0 ? (
+          <EmptyState message="표시할 프로젝트가 없습니다." />
         ) : (
           <table className="w-full min-w-[1080px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-white/10 bg-slate-950/80 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                <th className="whitespace-nowrap px-4 py-3">작업번호</th>
+                <th className="whitespace-nowrap px-4 py-3" />
+                <th className="whitespace-nowrap px-4 py-3">프로젝트</th>
                 <th className="whitespace-nowrap px-4 py-3">의뢰인</th>
-                <th className="whitespace-nowrap px-4 py-3">제목</th>
-                <th className="whitespace-nowrap px-4 py-3">파일명</th>
+                <th className="whitespace-nowrap px-4 py-3">진행</th>
                 <th className="whitespace-nowrap px-4 py-3">담당</th>
                 <th className="whitespace-nowrap px-4 py-3">마감</th>
                 <th className="whitespace-nowrap px-4 py-3">상태</th>
-                <th className="whitespace-nowrap px-4 py-3">매출</th>
-                <th className="whitespace-nowrap px-4 py-3">결제</th>
                 <th className="whitespace-nowrap px-4 py-3">동작</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
-              {visibleJobs.map((job) => (
-                <tr key={job.id} className="bg-slate-950/40 text-slate-200">
-                  <td className="max-w-[120px] truncate whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-400" title={job.id}>
-                    {job.id}
-                  </td>
-                  <td className="max-w-[120px] truncate whitespace-nowrap px-4 py-3 text-white" title={job.client}>
-                    {job.client}
-                  </td>
-                  <td className="max-w-[160px] truncate whitespace-nowrap px-4 py-3" title={job.title}>
-                    {job.title}
-                  </td>
-                  <td className="max-w-[180px] truncate whitespace-nowrap px-4 py-3 text-slate-300" title={job.filename}>
-                    {job.filename}
-                  </td>
-                  <td className="max-w-[100px] truncate whitespace-nowrap px-4 py-3" title={job.assignee}>
-                    {job.assignee}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-400">{job.dueAt}</td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(job.status)}`}>
-                      {job.status}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 font-medium text-white">{formatCurrency(job.salesAmount)}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-400">{job.paymentStatus}</td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void openDetailModal(job.id)}
-                        className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/5"
-                      >
-                        상세
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openAssignModal(job)}
-                        className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-300 transition hover:bg-cyan-500/20"
-                      >
-                        배정
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+            <tbody>
+              {visibleProjects.map((project) => {
+                const expanded = isProjectExpanded(project.id);
+                return (
+                  <Fragment key={project.id}>
+                    <tr className="border-t border-white/5 bg-slate-950/40 text-slate-200">
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => toggleProjectExpanded(project.id)}
+                          className="text-slate-400 hover:text-white"
+                        >
+                          {expanded ? "▾" : "▸"}
+                        </button>
+                      </td>
+                      <td className="max-w-[200px] truncate whitespace-nowrap px-4 py-3 font-semibold text-white" title={project.title}>
+                        {project.title}
+                      </td>
+                      <td className="max-w-[120px] truncate whitespace-nowrap px-4 py-3" title={project.client}>
+                        {project.client}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-300">
+                        {project.completedCount}/{project.fileCount}
+                      </td>
+                      <td className="max-w-[100px] truncate whitespace-nowrap px-4 py-3">{project.assignee}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-400">{project.dueAt}</td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${projectStatusTone(project.rawStatus)}`}>
+                          {project.statusLabel}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => openAssignProjectModal(project)}
+                          className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-300 transition hover:bg-cyan-500/20"
+                        >
+                          프로젝트 배정
+                        </button>
+                      </td>
+                    </tr>
+                    {expanded
+                      ? project.files.map((file) => (
+                          <tr key={`${project.id}-${file.id}`} className="bg-slate-950/20 text-slate-300">
+                            <td />
+                            <td className="px-4 py-2 pl-8 font-mono text-xs text-slate-500" title={file.id}>
+                              {file.id}
+                            </td>
+                            <td colSpan={2} className="max-w-[220px] truncate px-4 py-2" title={file.filename}>
+                              {file.filename}
+                            </td>
+                            <td className="px-4 py-2">{file.assignee}</td>
+                            <td className="px-4 py-2 text-slate-400">{file.dueAt}</td>
+                            <td className="px-4 py-2">
+                              <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(file.status)}`}>
+                                {file.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2">
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => void openDetailModal(file.id)}
+                                  className="rounded-xl border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-200"
+                                >
+                                  상세
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openAssignModal({
+                                      id: file.id,
+                                      projectId: project.id,
+                                      client: project.client,
+                                      title: file.title,
+                                      filename: file.filename,
+                                      uploadedAt: "-",
+                                      dueAt: file.dueAt,
+                                      priority: "일반",
+                                      status: file.status,
+                                      assignee: file.assignee,
+                                      progress: 0,
+                                      duration: "-",
+                                      salesAmount: file.salesAmount,
+                                      settlementAmount: 0,
+                                      paymentStatus: file.paymentStatus,
+                                      settlementStatus: "정산 대기",
+                                    })
+                                  }
+                                  className="rounded-xl border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-200"
+                                >
+                                  파일 배정
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      : null}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -921,38 +1101,31 @@ function App() {
 
   const renderAssignments = () => (
     <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-      <SectionCard title="배정 대기 작업">
+      <SectionCard title="배정 대기 프로젝트">
         <div className="space-y-3">
-          {jobs.filter((job) => job.status === "배정 대기" || job.status === "재검수 대기").length === 0 ? (
-            <EmptyState message="배정이 필요한 작업이 없습니다." />
+          {projects.filter((project) => project.rawStatus === "waiting_assignment" || project.files.some((f) => f.status === "재검수 대기")).length === 0 ? (
+            <EmptyState message="배정이 필요한 프로젝트가 없습니다." />
           ) : (
-            jobs
-              .filter((job) => job.status === "배정 대기" || job.status === "재검수 대기")
-              .map((job) => (
-            <div key={job.id} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+            projects
+              .filter((project) => project.rawStatus === "waiting_assignment" || project.files.some((f) => f.status === "재검수 대기"))
+              .map((project) => (
+            <div key={project.id} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-base font-semibold text-white">{job.title}</p>
-                  <p className="mt-1 text-sm text-slate-300">{job.client}</p>
+                  <p className="text-base font-semibold text-white">{project.title}</p>
+                  <p className="mt-1 text-sm text-slate-300">{project.client} · {project.fileCount}개 파일</p>
                 </div>
-                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(job.status)}`}>
-                  {job.status}
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${projectStatusTone(project.rawStatus)}`}>
+                  {project.statusLabel}
                 </span>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => openAssignModal(job)}
+                  onClick={() => openAssignProjectModal(project)}
                   className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950"
                 >
-                  배정
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void openDetailModal(job.id)}
-                  className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200"
-                >
-                  상세
+                  프로젝트 배정
                 </button>
               </div>
             </div>
@@ -1463,13 +1636,19 @@ function App() {
         </div>
       ) : null}
 
-      {assignTarget ? (
+      {assignTarget || assignProjectTarget ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
           <div className="w-full max-w-xl rounded-[28px] border border-white/10 bg-slate-950 p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-2xl font-semibold text-white">속기사 배정</h3>
-                <p className="mt-2 text-sm text-slate-400">{assignTarget.title}</p>
+                <h3 className="text-2xl font-semibold text-white">
+                  {assignProjectTarget ? "프로젝트 일괄 배정" : "파일 배정"}
+                </h3>
+                <p className="mt-2 text-sm text-slate-400">
+                  {assignProjectTarget
+                    ? `${assignProjectTarget.title} (${assignProjectTarget.fileCount}개 파일)`
+                    : assignTarget?.title}
+                </p>
               </div>
               <button
                 type="button"
@@ -1495,8 +1674,17 @@ function App() {
                 </select>
               </div>
               <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-300">
-                <p>{assignTarget.client}</p>
-                <p className="mt-1">{assignTarget.id}</p>
+                {assignProjectTarget ? (
+                  <>
+                    <p>{assignProjectTarget.client}</p>
+                    <p className="mt-1">대기·재검수 파일을 선택 속기사에게 일괄 배정합니다.</p>
+                  </>
+                ) : assignTarget ? (
+                  <>
+                    <p>{assignTarget.client}</p>
+                    <p className="mt-1">{assignTarget.id}</p>
+                  </>
+                ) : null}
               </div>
               <div className="flex justify-end gap-2">
                 <button

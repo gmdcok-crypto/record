@@ -16,6 +16,7 @@ from app.services.audio import remux_faststart, should_faststart
 from app.services.admin_events import publish_admin_event, stream_admin_events
 from app.services.database_migrate import run_sql_migration
 from app.services.database_reset import purge_all_data, reset_database_schema
+from app.services.project_store import list_transcriber_projects
 from app.services.job_store import (
     assign_job,
     create_transcriber,
@@ -415,6 +416,14 @@ def list_transcriber_assigned_jobs(
     transcriber_code: str = Query("TR-001"),
 ) -> dict:
     return {"jobs": list_transcriber_jobs(db, transcriber_code)}
+
+
+@router.get("/transcriber/projects")
+def list_transcriber_assigned_projects(
+    db: Annotated[Session, Depends(get_db)],
+    transcriber_code: str = Query("TR-001"),
+) -> dict:
+    return {"projects": list_transcriber_projects(db, transcriber_code)}
 
 
 @router.get("/transcriber/profile")

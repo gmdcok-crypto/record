@@ -26,6 +26,7 @@ export type TranscriptJson = {
 
 export type UploadResponse = {
   job_id: string;
+  project_id?: string | null;
   object_key: string;
   bucket: string;
   status: string;
