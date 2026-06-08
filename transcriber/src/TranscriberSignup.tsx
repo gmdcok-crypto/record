@@ -1,4 +1,15 @@
 import { useState, type FormEvent } from "react";
+import { AuthShell } from "./AuthShell";
+import {
+  PhoneVerifyPreview,
+  SignupActions,
+  SignupError,
+  SignupField,
+  SignupHint,
+  SignupRule,
+  SignupSideButton,
+  SignupSplit,
+} from "./SignupFields";
 import { checkTranscriberLoginId, signupTranscriber, type TranscriberAuthProfile } from "./api";
 
 type TranscriberSignupProps = {
@@ -6,19 +17,12 @@ type TranscriberSignupProps = {
   onLogin: () => void;
 };
 
-const inputClassName =
-  "w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none ring-cyan-500/0 transition focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20";
-
 function normalizeLoginId(value: string): string {
   return value.replace(/[^A-Za-z0-9]/g, "").slice(0, 8);
 }
 
 function normalizePhone(value: string): string {
   return value.replace(/\D/g, "").slice(0, 11);
-}
-
-function normalizeResidentId(value: string): string {
-  return value.replace(/[^\d-]/g, "").slice(0, 14);
 }
 
 export default function TranscriberSignup({ onSuccess, onLogin }: TranscriberSignupProps) {
@@ -30,21 +34,33 @@ export default function TranscriberSignup({ onSuccess, onLogin }: TranscriberSig
   const [residentId, setResidentId] = useState("");
   const [bankName, setBankName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
-  const [loginIdHint, setLoginIdHint] = useState("");
+  const [loginIdHint, setLoginIdHint] = useState<{ text: string; tone: "ok" | "error" | "neutral" } | null>(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [checkingLoginId, setCheckingLoginId] = useState(false);
 
-  const verifyLoginId = async (value: string) => {
-    const normalized = normalizeLoginId(value);
+  const verifyLoginId = async () => {
+    const normalized = normalizeLoginId(loginId);
+    setLoginId(normalized);
     if (normalized.length !== 8) {
-      setLoginIdHint("");
+      setLoginIdHint({ text: "로그인 ID는 영문·숫자 8자여야 합니다.", tone: "error" });
       return;
     }
+    setCheckingLoginId(true);
     try {
       const available = await checkTranscriberLoginId(normalized);
-      setLoginIdHint(available ? "사용 가능한 로그인 ID입니다." : "이미 사용 중인 로그인 ID입니다.");
-    } catch {
-      setLoginIdHint("");
+      setLoginIdHint(
+        available
+          ? { text: "사용 가능한 로그인 ID입니다.", tone: "ok" }
+          : { text: "이미 사용 중인 로그인 ID입니다.", tone: "error" },
+      );
+    } catch (err) {
+      setLoginIdHint({
+        text: err instanceof Error ? err.message : "로그인 ID 확인에 실패했습니다.",
+        tone: "error",
+      });
+    } finally {
+      setCheckingLoginId(false);
     }
   };
 
@@ -77,12 +93,8 @@ export default function TranscriberSignup({ onSuccess, onLogin }: TranscriberSig
       setError("주민등록번호를 입력해 주세요.");
       return;
     }
-    if (!bankName.trim()) {
-      setError("은행명을 입력해 주세요.");
-      return;
-    }
-    if (!accountNumber.trim()) {
-      setError("계좌번호를 입력해 주세요.");
+    if (!bankName.trim() || !accountNumber.trim()) {
+      setError("은행명과 계좌번호를 입력해 주세요.");
       return;
     }
 
@@ -111,170 +123,102 @@ export default function TranscriberSignup({ onSuccess, onLogin }: TranscriberSig
   };
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-slate-950 px-4 py-8 text-slate-100">
-      <div className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-3xl border border-white/10 bg-slate-950/80 p-6 shadow-2xl shadow-black/30 backdrop-blur-xl">
-        <p className="text-sm font-semibold text-violet-300">속기사 녹취</p>
-        <h1 className="mt-1 text-2xl font-bold text-white">회원가입</h1>
-        <p className="mt-2 text-sm text-slate-400">
-          관리자에 사전 등록된 속기사만 가입할 수 있습니다. 휴대폰·주민등록번호가 관리자 정보와 일치해야 합니다.
-        </p>
+    <AuthShell title="회원가입" desc="통합증거센터 녹취사무소">
+      <form className="grid gap-3" onSubmit={onSubmit}>
+        <SignupField
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          onClear={() => setName("")}
+          placeholder="이름을 입력해 주세요."
+          autoComplete="name"
+          required
+        />
 
-        <form className="mt-6 space-y-4" onSubmit={onSubmit}>
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-300">
-              로그인 ID <span className="text-rose-400">*</span>
-            </span>
-            <input
-              type="text"
-              value={loginId}
-              onChange={(event) => {
-                const next = normalizeLoginId(event.target.value);
-                setLoginId(next);
-                setLoginIdHint("");
-              }}
-              onBlur={() => void verifyLoginId(loginId)}
-              autoComplete="username"
-              required
-              minLength={8}
-              maxLength={8}
-              className={`${inputClassName} font-mono tracking-[0.2em]`}
-              placeholder="영문·숫자 8자"
-            />
-            {loginIdHint ? (
-              <p className={`mt-1.5 text-xs ${loginIdHint.includes("사용 가능") ? "text-emerald-300" : "text-amber-300"}`}>
-                {loginIdHint}
-              </p>
-            ) : null}
-          </label>
+        <SignupSplit>
+          <SignupField
+            value={loginId}
+            onChange={(event) => {
+              setLoginId(normalizeLoginId(event.target.value));
+              setLoginIdHint(null);
+            }}
+            onClear={() => {
+              setLoginId("");
+              setLoginIdHint(null);
+            }}
+            placeholder="로그인 ID (영문·숫자 8자)"
+            autoComplete="username"
+            required
+            maxLength={8}
+          />
+          <SignupSideButton disabled={checkingLoginId} onClick={() => void verifyLoginId()}>
+            중복확인
+          </SignupSideButton>
+        </SignupSplit>
+        {loginIdHint ? <SignupHint tone={loginIdHint.tone}>{loginIdHint.text}</SignupHint> : null}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-300">
-                비밀번호 <span className="text-rose-400">*</span>
-              </span>
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="new-password"
-                required
-                minLength={8}
-                className={inputClassName}
-                placeholder="8자 이상"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-300">
-                비밀번호 확인 <span className="text-rose-400">*</span>
-              </span>
-              <input
-                type="password"
-                value={passwordConfirm}
-                onChange={(event) => setPasswordConfirm(event.target.value)}
-                autoComplete="new-password"
-                required
-                minLength={8}
-                className={inputClassName}
-                placeholder="비밀번호 재입력"
-              />
-            </label>
-          </div>
+        <SignupField
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          placeholder="비밀번호"
+          autoComplete="new-password"
+          showPasswordToggle
+          required
+          minLength={8}
+        />
 
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-300">
-              이름 <span className="text-rose-400">*</span>
-            </span>
-            <input
-              type="text"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              autoComplete="name"
-              required
-              className={inputClassName}
-              placeholder="실명"
-            />
-          </label>
+        <SignupField
+          value={passwordConfirm}
+          onChange={(event) => setPasswordConfirm(event.target.value)}
+          placeholder="비밀번호 확인"
+          autoComplete="new-password"
+          showPasswordToggle
+          required
+          minLength={8}
+        />
+        <SignupRule>✓ 8자 이상 입력해 주세요</SignupRule>
 
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-300">
-              휴대폰 <span className="text-rose-400">*</span>
-            </span>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(event) => setPhone(normalizePhone(event.target.value))}
-              autoComplete="tel"
-              required
-              className={inputClassName}
-              placeholder="01012345678"
-            />
-          </label>
+        <SignupField
+          value={phone}
+          onChange={(event) => setPhone(normalizePhone(event.target.value))}
+          onClear={() => setPhone("")}
+          type="tel"
+          placeholder="휴대폰 ('-' 제외하고 입력)"
+          autoComplete="tel"
+          required
+        />
 
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-300">
-              주민등록번호 <span className="text-rose-400">*</span>
-            </span>
-            <input
-              type="text"
-              value={residentId}
-              onChange={(event) => setResidentId(normalizeResidentId(event.target.value))}
-              required
-              className={inputClassName}
-              placeholder="관리자 등록 정보와 동일하게"
-            />
-          </label>
+        <SignupField
+          value={residentId}
+          onChange={(event) => setResidentId(event.target.value.replace(/[^\d-]/g, "").slice(0, 14))}
+          onClear={() => setResidentId("")}
+          placeholder="주민등록번호 (관리자 등록 정보와 동일)"
+          required
+        />
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-300">
-                은행명 <span className="text-rose-400">*</span>
-              </span>
-              <input
-                type="text"
-                value={bankName}
-                onChange={(event) => setBankName(event.target.value)}
-                required
-                className={inputClassName}
-                placeholder="예: 국민은행"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-300">
-                계좌번호 <span className="text-rose-400">*</span>
-              </span>
-              <input
-                type="text"
-                value={accountNumber}
-                onChange={(event) => setAccountNumber(event.target.value.replace(/[^\d-]/g, ""))}
-                required
-                className={inputClassName}
-                placeholder="- 없이 입력 가능"
-              />
-            </label>
-          </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <SignupField
+            value={bankName}
+            onChange={(event) => setBankName(event.target.value)}
+            onClear={() => setBankName("")}
+            placeholder="은행명"
+            required
+          />
+          <SignupField
+            value={accountNumber}
+            onChange={(event) => setAccountNumber(event.target.value.replace(/[^\d-]/g, ""))}
+            onClear={() => setAccountNumber("")}
+            placeholder="계좌번호"
+            required
+          />
+        </div>
 
-          {error ? (
-            <p className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-              {error}
-            </p>
-          ) : null}
+        <PhoneVerifyPreview />
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full rounded-xl bg-violet-500 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {submitting ? "가입 처리 중…" : "회원가입"}
-          </button>
-        </form>
+        {error ? <SignupError>{error}</SignupError> : null}
 
-        <p className="mt-5 text-center text-sm text-slate-400">
-          이미 계정이 있으신가요?{" "}
-          <button type="button" onClick={onLogin} className="font-semibold text-cyan-400 hover:text-cyan-300">
-            로그인
-          </button>
-        </p>
-      </div>
-    </div>
+        <SignupActions submitLabel="가입하기" submitting={submitting} onCancel={onLogin} />
+      </form>
+
+    </AuthShell>
   );
 }
