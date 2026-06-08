@@ -115,13 +115,75 @@ export async function checkHealth(): Promise<HealthResponse> {
   return res.json();
 }
 
+export type ProjectFile = {
+  job_id: string;
+  title: string;
+  filename: string;
+  status: string;
+  uploaded_at: string | null;
+  due_at: string | null;
+  assignee: string | null;
+  pdf_ready: boolean;
+};
+
+export type ProjectSummary = {
+  project_id: string;
+  title: string;
+  status: string;
+  file_count: number;
+  completed_count: number;
+  due_at: string | null;
+  memo?: string | null;
+  priority?: string;
+  assignee?: string;
+  files?: ProjectFile[];
+  client: { id: number; name: string };
+};
+
+function memberAuthHeaders(): HeadersInit {
+  const token = localStorage.getItem(MEMBER_TOKEN_KEY);
+  const headers: HeadersInit = { Accept: "application/json" };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+export async function fetchProjects(includeFiles = true): Promise<ProjectSummary[]> {
+  const query = includeFiles ? "?include_files=true" : "";
+  const res = await fetch(`${apiBase()}/api/projects${query}`, { headers: memberAuthHeaders() });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err));
+  }
+  const data = (await res.json()) as { projects?: ProjectSummary[] };
+  return data.projects || [];
+}
+
+export async function createProject(title: string, memo?: string): Promise<ProjectSummary> {
+  const res = await fetch(`${apiBase()}/api/projects`, {
+    method: "POST",
+    headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ title, memo }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data));
+  }
+  return (data as { project: ProjectSummary }).project;
+}
+
 export async function uploadVoice(
   file: File,
   onProgress?: (percent: number) => void,
   onUploadComplete?: () => void,
+  projectId?: string,
 ): Promise<UploadResponse> {
   const form = new FormData();
   form.append("file", file);
+  if (projectId) {
+    form.append("project_id", projectId);
+  }
   const token = localStorage.getItem(MEMBER_TOKEN_KEY);
 
   return new Promise((resolve, reject) => {

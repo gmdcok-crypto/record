@@ -120,6 +120,7 @@ def create_job_record(
     transcript_key: str | None = None,
     transcript_json: dict | None = None,
     member: Member | None = None,
+    project_id: str | None = None,
 ) -> Job:
     if member is not None:
         client = get_or_create_client_for_member(db, member)
@@ -133,6 +134,7 @@ def create_job_record(
 
     job = Job(
         job_id=job_id,
+        project_id=project_id,
         client_id=client.id,
         title=title,
         original_filename=filename,
@@ -569,6 +571,8 @@ def dashboard_overview(db: Session) -> dict:
         if job.payment_status != "paid"
     )
 
+    from app.services.project_store import list_projects
+
     return {
         "stats": {
             "total_jobs": len(jobs),
@@ -579,9 +583,11 @@ def dashboard_overview(db: Session) -> dict:
             "total_settlements": total_settlements,
             "outstanding": outstanding,
         },
+        "projects": list_projects(db, include_files=True),
         "jobs": [
             {
                 "id": job.job_id,
+                "project_id": job.project_id,
                 "client": job.client.name if job.client else DEFAULT_CLIENT_NAME,
                 "title": job.title,
                 "filename": job.original_filename,

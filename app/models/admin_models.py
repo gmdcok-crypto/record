@@ -79,10 +79,27 @@ class Transcriber(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
+class Project(Base):
+    __tablename__ = "projects"
+
+    project_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id"), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    memo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    priority: Mapped[str] = mapped_column(String(20), nullable=False, default="normal")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    client: Mapped[Client | None] = relationship()
+    jobs: Mapped[list["Job"]] = relationship(back_populates="project")
+
+
 class Job(Base):
     __tablename__ = "jobs"
 
     job_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str | None] = mapped_column(ForeignKey("projects.project_id"), nullable=True, index=True)
     client_id: Mapped[int | None] = mapped_column(ForeignKey("clients.id"), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -118,6 +135,7 @@ class Job(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     client: Mapped[Client | None] = relationship()
+    project: Mapped[Project | None] = relationship(back_populates="jobs")
     transcriber: Mapped[Transcriber | None] = relationship()
 
 

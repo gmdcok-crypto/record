@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>프로젝트 · 다파일 UI 와이어</title>
+  <style>
+    :root {
+      --bg: #020617;
+      --panel: #0f172a;
+      --border: #334155;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #22d3ee;
+      --accent-dim: rgba(34, 211, 238, 0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Pretendard", "Noto Sans KR", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+    h1 { font-size: 1.5rem; margin: 0 0 8px; }
+    .lead { color: var(--muted); font-size: 0.95rem; margin-bottom: 24px; }
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .tab {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      padding: 8px 16px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    .tab.active { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); }
+    .screen { display: none; }
+    .screen.active { display: block; }
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--panel);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .card h2 { font-size: 1rem; margin: 0 0 12px; color: var(--accent); }
+    .wire {
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      background: #020617;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre;
+      overflow-x: auto;
+      color: #cbd5e1;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; }
+    th { background: #1e293b; color: var(--muted); font-weight: 600; }
+    .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .pill.on { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+    ul.steps { margin: 0; padding-left: 1.2rem; color: var(--muted); font-size: 0.9rem; }
+    ul.steps li { margin-bottom: 6px; }
+    .note { font-size: 0.85rem; color: var(--muted); margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>프로젝트 · 다파일 UI 와이어</h1>
+    <p class="lead">관리·배정은 프로젝트 단위, 편집·저장·PDF는 파일(Job) 단위. 역할별 대표 화면 1개.</p>
+
+    <div class="card">
+      <h2>공통 원칙</h2>
+      <div class="grid3">
+        <div><strong>프로젝트</strong><br /><span class="note">의뢰인 + 사건명 + 마감 + 메모</span></div>
+        <div><strong>파일 (Job)</strong><br /><span class="note">녹음 1개 = 전사 1개 = 상태 1개</span></div>
+        <div><strong>편집창</strong><br /><span class="note">항상 파일 1개만 (목록으로 전환)</span></div>
+      </div>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-screen="admin" type="button">관리자</button>
+      <button class="tab" data-screen="client" type="button">의뢰인 PWA</button>
+      <button class="tab" data-screen="transcriber" type="button">속기사 PWA</button>
+    </div>
+
+    <section id="admin" class="screen active">
+      <div class="card">
+        <h2>관리자 — 의뢰 / 프로젝트 관리</h2>
+        <p class="note">목록은 프로젝트 단위 · 펼치면 파일 · 배정은 프로젝트 기본 (필요 시 파일 재배정)</p>
+        <div class="wire">[검색: 의뢰인 · 프로젝트명 · 파일명 · 담당자]  [상태필터]  [일괄배정] [배정화면]
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ▾ │ ○○사건 통화녹취      │ 홍길동 │ 3개 │ 1/3 │ 김속기 │ 06/10 │ 작업중 │ 배정 │
+│   ├──────────────────────────────────────────────────────────────────────────│
+│   │ ① 1차_피의자통화.mp3    12:40   완료    김속기                              │
+│   │ ② 2차_현장녹음.m4a      34:12   작업중  김속기   [재배정]                   │
+│   │ ③ 참고자료_통화.wav     08:05   대기    김속기                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ ▸ │ △△분쟁 상담녹취      │ 이영희 │ 1개 │ 0/1 │  -    │ 06/11 │ 배정대기│ 배정 │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+[상세 모달]
+  좌: 프로젝트 요약 (의뢰인, 마감, 담당, 메모)
+  우: [①1차] [②현장] [③참고] 탭 → 선택 파일 전사 미리보기 (읽기 전용)</div>
+      </div>
+    </section>
+
+    <section id="client" class="screen">
+      <div class="card">
+        <h2>의뢰인 PWA — 업로드 / 보관함 / 편집</h2>
+        <p>
+          <span class="pill">업로드</span>
+          <span class="pill on">보관함</span>
+          <span class="pill">편집</span>
+        </p>
+        <div class="wire">[업로드 탭]
+  이번 업로드 프로젝트: ( ● ○○사건 통화녹취 ) ( + 새 프로젝트 )
+  ┌─────────────────────────┐
+  │   파일 드롭존            │  → 선택 프로젝트에 자동 연결
+  └─────────────────────────┘
+
+[보관함 탭 — 프로젝트 폴더]
+  ▼ ○○사건 통화녹취                    진행 1/3
+      1차_피의자통화.mp3                 완료
+      2차_현장녹음.m4a                   확인요청  [수정]  ← 편집 탭으로
+      참고자료_통화.wav                  작업 중
+
+[편집 탭 — 파일 1개만]
+  경로: ○○사건 통화녹취 &gt; 2차_현장녹음.m4a
+  ┌ 플레이어 ─────┐  ┌ 세그먼트 편집 ─────────────┐
+  │ ▶ 00:00/34:12 │  │ 화자1: ...                 │
+  └───────────────┘  │ [저장] [재검수 요청]        │
+                     └────────────────────────────┘</div>
+        <p class="note">의뢰인은 확인요청 받은 파일만 편집합니다.</p>
+      </div>
+    </section>
+
+    <section id="transcriber" class="screen">
+      <div class="card">
+        <h2>속기사 PWA — 3열 작업함</h2>
+        <p class="note">좌: 프로젝트 · 중: 파일 목록 · 우: 선택 파일 편집 (기존 1파일 UI 유지)</p>
+        <div class="wire">┌─ ① 프로젝트 ─┬─ ② 파일 목록 ─────┬─ ③ 편집 (선택 파일 1개) ─────────┐
+│ ● ○○사건     │ ① 1차통화.mp3  완료 │ 2차_현장녹음.m4a                    │
+│   홍길동     │ ② 현장녹음.m4a ◀작업│ [임시저장][의뢰인전달][최종확정]    │
+│   작업 중    │ ③ 참고.wav     대기 │ ┌ 오디오 플레이어 ─────────────┐   │
+│              │                     │ └──────────────────────────────┘   │
+│ ○ □□녹취     │ 권장: ②→③ 순서      │ ┌ 초벌 / 세그먼트 편집 ─────────┐   │
+│   박철수     │                     │ └──────────────────────────────┘   │
+└──────────────┴─────────────────────┴────────────────────────────────────┘</div>
+        <p class="note">저장·상태 변경·PDF는 파일(Job) 단위 API 그대로 사용</p>
+      </div>
+    </section>
+
+    <div class="card">
+      <h2>역할별 흐름</h2>
+      <div class="grid3">
+        <div>
+          <strong>의뢰인</strong>
+          <ul class="steps">
+            <li>보관함에서 프로젝트 선택</li>
+            <li>확인요청 파일만 편집 탭</li>
+            <li>해당 파일 전사만 수정·저장</li>
+            <li>프로젝트 진행률 자동 반영</li>
+          </ul>
+        </div>
+        <div>
+          <strong>속기사</strong>
+          <ul class="steps">
+            <li>배정 프로젝트 선택</li>
+            <li>파일 목록에서 1개씩 처리</li>
+            <li>파일별 초벌 저장·전달</li>
+            <li>전 파일 1차 완료 시 단계 전환</li>
+          </ul>
+        </div>
+        <div>
+          <strong>관리자</strong>
+          <ul class="steps">
+            <li>프로젝트 목록·진행률 확인</li>
+            <li>프로젝트 단위 일괄 배정</li>
+            <li>필요 시 파일만 재배정</li>
+            <li>상세에서 파일별 전사·PDF</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>프로젝트 상태 (파일 상태 집계)</h2>
+      <table>
+        <thead><tr><th>하위 파일 조건</th><th>프로젝트 표시</th></tr></thead>
+        <tbody>
+          <tr><td>파일 1개라도 배정 대기</td><td>배정 대기</td></tr>
+          <tr><td>파일 1개라도 작업 중</td><td>작업 중</td></tr>
+          <tr><td>전 파일 1차 완료</td><td>의뢰인 확인 대기</td></tr>
+          <tr><td>전 파일 최종 완료</td><td>완료</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>구현 시 DB/API (참고)</h2>
+      <div class="grid3">
+        <div>
+          <strong>신규</strong>
+          <p class="note">projects: id, client_id, title, due_at, memo<br />jobs.project_id (nullable)</p>
+        </div>
+        <div>
+          <strong>API</strong>
+          <p class="note">POST /api/projects<br />GET /api/projects/:id/files<br />POST /api/projects/:id/assign</p>
+        </div>
+        <div>
+          <strong>유지</strong>
+          <p class="note">/api/jobs/:id/transcript<br />/api/jobs/:id/status 등 파일 단위 API</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    document.querySelectorAll(".tab").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.screen;
+        document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === btn));
+        document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("active", s.id === id));
+      });
+    });
+  </script>
+</body>
+</html>
