@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 
 import {
-  assignJob,
   assignProject,
   createTranscriber,
   createAdminEventsSource,
@@ -422,8 +421,8 @@ function App() {
   const [detailJobId, setDetailJobId] = useState<string | null>(null);
   const [detailJob, setDetailJob] = useState<JobResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [assignTarget, setAssignTarget] = useState<JobItem | null>(null);
   const [assignProjectTarget, setAssignProjectTarget] = useState<ProjectItem | null>(null);
+  const [detailProject, setDetailProject] = useState<ProjectItem | null>(null);
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [selectedTranscriberCode, setSelectedTranscriberCode] = useState("");
   const [transcriberModalOpen, setTranscriberModalOpen] = useState(false);
@@ -607,12 +606,6 @@ function App() {
     }
   };
 
-  const handleAssign = async (jobId: string, transcriberCode = "TR-001") => {
-    await runAdminAction("배정 처리 중입니다.", async () => {
-      await assignJob(jobId, transcriberCode, "관리자 화면 배정");
-    });
-  };
-
   const openDetailModal = async (jobId: string) => {
     try {
       setDetailJobId(jobId);
@@ -633,40 +626,39 @@ function App() {
     setDetailLoading(false);
   };
 
-  const openAssignModal = (job: JobItem) => {
-    setAssignTarget(job);
-    setAssignProjectTarget(null);
-    setSelectedTranscriberCode(transcribers[0]?.id ?? "TR-001");
+  const openProjectDetailModal = (project: ProjectItem) => {
+    setDetailProject(project);
+  };
+
+  const closeProjectDetailModal = () => {
+    setDetailProject(null);
+  };
+
+  const openFileDetailFromProject = (jobId: string) => {
+    closeProjectDetailModal();
+    void openDetailModal(jobId);
   };
 
   const openAssignProjectModal = (project: ProjectItem) => {
     setAssignProjectTarget(project);
-    setAssignTarget(null);
     setSelectedTranscriberCode(transcribers[0]?.id ?? "TR-001");
   };
 
   const closeAssignModal = () => {
-    setAssignTarget(null);
     setAssignProjectTarget(null);
     setSelectedTranscriberCode("");
   };
 
   const confirmAssignModal = async () => {
-    if (!selectedTranscriberCode) return;
-    if (assignProjectTarget) {
-      await runAdminAction("프로젝트 배정 중입니다.", async () => {
-        await assignProject(
-          assignProjectTarget.id,
-          selectedTranscriberCode,
-          undefined,
-          "관리자 프로젝트 일괄 배정",
-        );
-      });
-      closeAssignModal();
-      return;
-    }
-    if (!assignTarget) return;
-    await handleAssign(assignTarget.id, selectedTranscriberCode);
+    if (!selectedTranscriberCode || !assignProjectTarget) return;
+    await runAdminAction("프로젝트 배정 중입니다.", async () => {
+      await assignProject(
+        assignProjectTarget.id,
+        selectedTranscriberCode,
+        undefined,
+        "관리자 프로젝트 일괄 배정",
+      );
+    });
     closeAssignModal();
   };
 
@@ -1023,13 +1015,22 @@ function App() {
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => openAssignProjectModal(project)}
-                          className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-300 transition hover:bg-cyan-500/20"
-                        >
-                          프로젝트 배정
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openProjectDetailModal(project)}
+                            className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/5"
+                          >
+                            상세
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openAssignProjectModal(project)}
+                            className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-300 transition hover:bg-cyan-500/20"
+                          >
+                            프로젝트 배정
+                          </button>
+                        </div>
                       </td>
                     </tr>
                     {expanded
@@ -1050,41 +1051,13 @@ function App() {
                               </span>
                             </td>
                             <td className="px-4 py-2">
-                              <div className="flex gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => void openDetailModal(file.id)}
-                                  className="rounded-xl border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-200"
-                                >
-                                  상세
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    openAssignModal({
-                                      id: file.id,
-                                      projectId: project.id,
-                                      client: project.client,
-                                      title: file.title,
-                                      filename: file.filename,
-                                      uploadedAt: "-",
-                                      dueAt: file.dueAt,
-                                      priority: "일반",
-                                      status: file.status,
-                                      assignee: file.assignee,
-                                      progress: 0,
-                                      duration: "-",
-                                      salesAmount: file.salesAmount,
-                                      settlementAmount: 0,
-                                      paymentStatus: file.paymentStatus,
-                                      settlementStatus: "정산 대기",
-                                    })
-                                  }
-                                  className="rounded-xl border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-200"
-                                >
-                                  파일 배정
-                                </button>
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() => void openDetailModal(file.id)}
+                                className="rounded-xl border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-200"
+                              >
+                                파일 상세
+                              </button>
                             </td>
                           </tr>
                         ))
@@ -1120,6 +1093,13 @@ function App() {
                 </span>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => openProjectDetailModal(project)}
+                  className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200"
+                >
+                  상세
+                </button>
                 <button
                   type="button"
                   onClick={() => openAssignProjectModal(project)}
@@ -1606,16 +1586,6 @@ function App() {
                       type="button"
                       onClick={() => {
                         const matching = jobs.find((job) => job.id === detailJob.job_id);
-                        if (matching) openAssignModal(matching);
-                      }}
-                      className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-300"
-                    >
-                      배정 변경
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const matching = jobs.find((job) => job.id === detailJob.job_id);
                         if (matching) void handleJobAdvance(matching);
                       }}
                       className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200"
@@ -1623,6 +1593,7 @@ function App() {
                       상태 진행
                     </button>
                   </div>
+                  <p className="text-xs text-slate-500">속기사 배정은 프로젝트 단위로 진행합니다.</p>
                 </div>
                 <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-5">
                   <p className="text-xs text-slate-500">전사 미리보기</p>
@@ -1636,18 +1607,121 @@ function App() {
         </div>
       ) : null}
 
-      {assignTarget || assignProjectTarget ? (
+      {detailProject ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[28px] border border-white/10 bg-slate-950 p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-cyan-300">프로젝트 상세</p>
+                <h3 className="mt-1 text-2xl font-semibold text-white">{detailProject.title}</h3>
+                <p className="mt-2 text-sm text-slate-400">{detailProject.client}</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeProjectDetailModal}
+                className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300"
+              >
+                닫기
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                <p className="text-xs text-slate-500">프로젝트 ID</p>
+                <p className="mt-1 break-all font-mono text-sm text-white">{detailProject.id}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                <p className="text-xs text-slate-500">상태</p>
+                <p className="mt-1 text-sm text-white">{detailProject.statusLabel}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                <p className="text-xs text-slate-500">진행</p>
+                <p className="mt-1 text-sm text-white">
+                  {detailProject.completedCount}/{detailProject.fileCount} 파일
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                <p className="text-xs text-slate-500">마감</p>
+                <p className="mt-1 text-sm text-white">{detailProject.dueAt}</p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+              <p className="text-xs text-slate-500">담당 속기사</p>
+              <p className="mt-1 text-sm text-white">{detailProject.assignee}</p>
+            </div>
+
+            <div className="mt-6">
+              <p className="mb-3 text-sm font-semibold text-slate-200">포함 파일</p>
+              {detailProject.files.length ? (
+                <div className="overflow-x-auto rounded-2xl border border-white/10">
+                  <table className="w-full min-w-[720px] border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10 bg-slate-950/80 text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                        <th className="px-4 py-3">파일명</th>
+                        <th className="px-4 py-3">담당</th>
+                        <th className="px-4 py-3">마감</th>
+                        <th className="px-4 py-3">상태</th>
+                        <th className="px-4 py-3">동작</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detailProject.files.map((file) => (
+                        <tr key={file.id} className="border-t border-white/5 text-slate-200">
+                          <td className="max-w-[240px] truncate px-4 py-3" title={file.filename}>
+                            {file.filename}
+                          </td>
+                          <td className="px-4 py-3">{file.assignee}</td>
+                          <td className="px-4 py-3 text-slate-400">{file.dueAt}</td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(file.status)}`}>
+                              {file.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() => openFileDetailFromProject(file.id)}
+                              className="rounded-xl border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-200"
+                            >
+                              파일 상세
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <EmptyState message="이 프로젝트에 등록된 파일이 없습니다." />
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const project = detailProject;
+                  closeProjectDetailModal();
+                  openAssignProjectModal(project);
+                }}
+                className="rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950"
+              >
+                프로젝트 배정
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {assignProjectTarget ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
           <div className="w-full max-w-xl rounded-[28px] border border-white/10 bg-slate-950 p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-2xl font-semibold text-white">
-                  {assignProjectTarget ? "프로젝트 일괄 배정" : "파일 배정"}
-                </h3>
+                <h3 className="text-2xl font-semibold text-white">프로젝트 일괄 배정</h3>
                 <p className="mt-2 text-sm text-slate-400">
-                  {assignProjectTarget
-                    ? `${assignProjectTarget.title} (${assignProjectTarget.fileCount}개 파일)`
-                    : assignTarget?.title}
+                  {`${assignProjectTarget.title} (${assignProjectTarget.fileCount}개 파일)`}
                 </p>
               </div>
               <button
@@ -1674,17 +1748,8 @@ function App() {
                 </select>
               </div>
               <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-300">
-                {assignProjectTarget ? (
-                  <>
-                    <p>{assignProjectTarget.client}</p>
-                    <p className="mt-1">대기·재검수 파일을 선택 속기사에게 일괄 배정합니다.</p>
-                  </>
-                ) : assignTarget ? (
-                  <>
-                    <p>{assignTarget.client}</p>
-                    <p className="mt-1">{assignTarget.id}</p>
-                  </>
-                ) : null}
+                <p>{assignProjectTarget.client}</p>
+                <p className="mt-1">대기·재검수 파일을 선택 속기사에게 일괄 배정합니다.</p>
               </div>
               <div className="flex justify-end gap-2">
                 <button
