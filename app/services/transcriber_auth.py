@@ -92,34 +92,28 @@ def register_transcriber(
     login_id: str,
     password: str,
     name: str,
-    phone: str,
-    resident_id: str,
-    bank_name: str,
-    account_number: str,
+    phone: str | None = None,
+    resident_id: str | None = None,
+    bank_name: str | None = None,
+    account_number: str | None = None,
 ) -> Transcriber:
     normalized_login_id = validate_login_id(login_id)
     normalized_password = validate_password(password)
     normalized_name = name.strip()
-    normalized_phone = phone.strip()
-    normalized_resident_id = resident_id.strip()
-    normalized_bank_name = bank_name.strip()
-    normalized_account_number = account_number.strip()
+    normalized_phone = (phone or "").strip() or None
+    normalized_resident_id = (resident_id or "").strip() or None
+    normalized_bank_name = (bank_name or "").strip() or None
+    normalized_account_number = (account_number or "").strip() or None
 
     if not normalized_name:
         raise TranscriberAuthError("이름을 입력해 주세요")
-    if not normalized_phone:
-        raise TranscriberAuthError("휴대폰 번호를 입력해 주세요")
-    if not normalized_resident_id:
-        raise TranscriberAuthError("주민등록번호를 입력해 주세요")
-    if not normalized_bank_name:
-        raise TranscriberAuthError("은행명을 입력해 주세요")
-    if not normalized_account_number:
-        raise TranscriberAuthError("계좌번호를 입력해 주세요")
 
     if get_transcriber_by_login_id(db, normalized_login_id) is not None:
         raise TranscriberAuthError("이미 사용 중인 로그인 ID입니다")
 
-    existing = find_transcriber_by_identity(db, phone=normalized_phone, resident_id=normalized_resident_id)
+    existing = None
+    if normalized_phone and normalized_resident_id:
+        existing = find_transcriber_by_identity(db, phone=normalized_phone, resident_id=normalized_resident_id)
     if existing is not None:
         if existing.auth_status == AUTH_STATUS_ACTIVE and existing.login_id:
             raise TranscriberAuthError("이미 가입된 휴대폰 번호 또는 주민등록번호입니다")

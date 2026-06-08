@@ -111,9 +111,9 @@ export function PhoneVerifyPreview() {
   return (
     <div className="grid gap-3 rounded-xl border border-dashed border-slate-400/30 bg-slate-900/35 p-3.5">
       <p className="m-0 text-[0.84rem] font-semibold text-slate-400">
-        본인인증 (통신사)
+        추가정보 · 본인인증
         <span className="ml-1.5 rounded-full bg-sky-400/15 px-2 py-0.5 text-[0.72rem] font-semibold text-sky-300">
-          추후 연동
+          로그인 후 입력
         </span>
       </p>
       <SignupSplit>
@@ -122,7 +122,7 @@ export function PhoneVerifyPreview() {
       </SignupSplit>
       <SignupField value="" placeholder="인증번호 6자리" disabled />
       <p className="m-0 text-[0.78rem] text-slate-500">
-        전화 인증은 추후 오픈 예정입니다. 현재는 아래 연락처 정보로 가입합니다.
+        휴대폰·주민등록번호·계좌 정보는 로그인 후 추가정보 입력에서 등록합니다.
       </p>
     </div>
   );

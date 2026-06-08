@@ -21,19 +21,11 @@ function normalizeLoginId(value: string): string {
   return value.replace(/[^A-Za-z0-9]/g, "").slice(0, 8);
 }
 
-function normalizePhone(value: string): string {
-  return value.replace(/\D/g, "").slice(0, 11);
-}
-
 export default function TranscriberSignup({ onSuccess, onLogin }: TranscriberSignupProps) {
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [residentId, setResidentId] = useState("");
-  const [bankName, setBankName] = useState("");
-  const [accountNumber, setAccountNumber] = useState("");
   const [loginIdHint, setLoginIdHint] = useState<{ text: string; tone: "ok" | "error" | "neutral" } | null>(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -85,18 +77,6 @@ export default function TranscriberSignup({ onSuccess, onLogin }: TranscriberSig
       setError("이름을 입력해 주세요.");
       return;
     }
-    if (normalizePhone(phone).length < 10) {
-      setError("휴대폰 번호를 올바르게 입력해 주세요.");
-      return;
-    }
-    if (!residentId.trim()) {
-      setError("주민등록번호를 입력해 주세요.");
-      return;
-    }
-    if (!bankName.trim() || !accountNumber.trim()) {
-      setError("은행명과 계좌번호를 입력해 주세요.");
-      return;
-    }
 
     setSubmitting(true);
     try {
@@ -109,10 +89,6 @@ export default function TranscriberSignup({ onSuccess, onLogin }: TranscriberSig
         login_id: normalizedLoginId,
         password,
         name: name.trim(),
-        phone: normalizePhone(phone),
-        resident_id: residentId.trim(),
-        bank_name: bankName.trim(),
-        account_number: accountNumber.trim(),
       });
       onSuccess(transcriber);
     } catch (err) {
@@ -177,48 +153,12 @@ export default function TranscriberSignup({ onSuccess, onLogin }: TranscriberSig
         />
         <SignupRule>✓ 8자 이상 입력해 주세요</SignupRule>
 
-        <SignupField
-          value={phone}
-          onChange={(event) => setPhone(normalizePhone(event.target.value))}
-          onClear={() => setPhone("")}
-          type="tel"
-          placeholder="휴대폰 ('-' 제외하고 입력)"
-          autoComplete="tel"
-          required
-        />
-
-        <SignupField
-          value={residentId}
-          onChange={(event) => setResidentId(event.target.value.replace(/[^\d-]/g, "").slice(0, 14))}
-          onClear={() => setResidentId("")}
-          placeholder="주민등록번호 (관리자 등록 정보와 동일)"
-          required
-        />
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <SignupField
-            value={bankName}
-            onChange={(event) => setBankName(event.target.value)}
-            onClear={() => setBankName("")}
-            placeholder="은행명"
-            required
-          />
-          <SignupField
-            value={accountNumber}
-            onChange={(event) => setAccountNumber(event.target.value.replace(/[^\d-]/g, ""))}
-            onClear={() => setAccountNumber("")}
-            placeholder="계좌번호"
-            required
-          />
-        </div>
-
         <PhoneVerifyPreview />
 
         {error ? <SignupError>{error}</SignupError> : null}
 
         <SignupActions submitLabel="가입하기" submitting={submitting} onCancel={onLogin} />
       </form>
-
     </AuthShell>
   );
 }

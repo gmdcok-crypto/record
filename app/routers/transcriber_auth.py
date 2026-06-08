@@ -25,10 +25,10 @@ class TranscriberSignupRequest(BaseModel):
     login_id: str = Field(min_length=8, max_length=8)
     password: str = Field(min_length=8)
     name: str
-    phone: str
-    resident_id: str
-    bank_name: str
-    account_number: str
+    phone: str | None = None
+    resident_id: str | None = None
+    bank_name: str | None = None
+    account_number: str | None = None
 
     @field_validator("login_id")
     @classmethod

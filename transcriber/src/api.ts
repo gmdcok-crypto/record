@@ -153,10 +153,6 @@ export type TranscriberSignupInput = {
   login_id: string;
   password: string;
   name: string;
-  phone: string;
-  resident_id: string;
-  bank_name: string;
-  account_number: string;
 };
 
 export async function checkTranscriberLoginId(loginId: string): Promise<boolean> {
@@ -180,10 +176,6 @@ export async function signupTranscriber(input: TranscriberSignupInput): Promise<
       login_id: input.login_id.trim(),
       password: input.password,
       name: input.name.trim(),
-      phone: input.phone.trim(),
-      resident_id: input.resident_id.trim(),
-      bank_name: input.bank_name.trim(),
-      account_number: input.account_number.trim(),
     }),
   });
   const data = await res.json().catch(() => ({}));
