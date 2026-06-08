@@ -165,11 +165,6 @@ function isEditableArchiveStatus(status: string): boolean {
   return EDITABLE_JOB_STATUSES.has(status);
 }
 
-function inferProjectTitle(filename: string): string {
-  const stem = filename.replace(/\.[^.]+$/, "").replace(/_/g, " ").trim();
-  return stem || "새 녹취 프로젝트";
-}
-
 function mapProjectStatus(status: string): string {
   switch (status) {
     case "waiting_assignment":
@@ -271,6 +266,22 @@ export default function App() {
     () => job?.title || job?.transcript_json.filename || selectedFiles[0]?.name || "새 녹취 작업",
     [job, selectedFiles],
   );
+  const selectedUploadProject = useMemo(
+    () => projects.find((project) => project.project_id === selectedUploadProjectId) ?? null,
+    [projects, selectedUploadProjectId],
+  );
+  const uploadProjectReady = useMemo(() => {
+    if (uploadProjectMode === "existing") {
+      return selectedUploadProject !== null;
+    }
+    return newProjectTitle.trim().length > 0;
+  }, [uploadProjectMode, selectedUploadProject, newProjectTitle]);
+  const uploadProjectLabel = useMemo(() => {
+    if (uploadProjectMode === "existing") {
+      return selectedUploadProject?.title ?? "";
+    }
+    return newProjectTitle.trim();
+  }, [uploadProjectMode, selectedUploadProject, newProjectTitle]);
 
   const refreshWorkspace = async () => {
     try {
@@ -410,6 +421,15 @@ export default function App() {
   };
 
   const onSelect = (files: FileList | null) => {
+    if (!uploadProjectReady) {
+      setError(
+        uploadProjectMode === "new"
+          ? "프로젝트 이름을 먼저 입력한 뒤 파일을 선택해 주세요."
+          : "업로드할 프로젝트를 먼저 선택해 주세요.",
+      );
+      return;
+    }
+
     const incomingFiles = files ? Array.from(files) : [];
     if (!incomingFiles.length) return;
 
@@ -535,26 +555,36 @@ export default function App() {
 
     try {
       let targetProjectId: string | undefined;
+      let uploadedProjectTitle = uploadProjectLabel;
       if (uploadProjectMode === "existing") {
-        if (!selectedUploadProjectId) {
+        if (!selectedUploadProjectId || !selectedUploadProject) {
           setError("업로드할 프로젝트를 선택해 주세요.");
           return;
         }
         targetProjectId = selectedUploadProjectId;
+        uploadedProjectTitle = selectedUploadProject.title;
       } else {
-        const title = newProjectTitle.trim() || inferProjectTitle(filesToUpload[0].name);
+        const title = newProjectTitle.trim();
+        if (!title) {
+          setError("프로젝트 이름을 먼저 입력해 주세요.");
+          return;
+        }
         const created = await createProject(title);
         targetProjectId = created.project_id;
+        uploadedProjectTitle = created.title;
         setSelectedUploadProjectId(created.project_id);
         setUploadProjectMode("existing");
+        setNewProjectTitle("");
       }
 
       for (let index = 0; index < filesToUpload.length; index += 1) {
         const file = filesToUpload[index];
-        setMessage(`업로드 중 ${index + 1}/${filesToUpload.length}: ${file.name}`);
+        setMessage(`"${uploadedProjectTitle}" 업로드 중 ${index + 1}/${filesToUpload.length}: ${file.name}`);
         await performUpload(file, targetProjectId);
       }
-      resetUploadUi(`${filesToUpload.length}개 파일 업로드가 완료되었습니다. 업로드된 파일은 관리자 배정 후 속기사가 직접 녹취록을 작성합니다.`);
+      resetUploadUi(
+        `"${uploadedProjectTitle}" 프로젝트에 ${filesToUpload.length}개 파일이 추가되었습니다. 관리자 배정 후 속기사가 녹취록을 작성합니다.`,
+      );
       setActiveTab("archive");
     } catch {
       // Error state is already handled in performUpload.
@@ -750,7 +780,7 @@ export default function App() {
               <p className="text-sm font-semibold text-blue-300">파일 업로드</p>
               <h2 className="mt-1 text-xl font-bold text-white">새 녹취 의뢰</h2>
               <p className="mt-2 text-sm text-slate-400">
-                프로젝트(사건)를 선택한 뒤 파일을 올리면 같은 프로젝트에 묶여 관리됩니다.
+                먼저 프로젝트(사건) 이름을 정하거나 기존 프로젝트를 선택한 뒤 파일을 올려 주세요.
               </p>
             </div>
 
@@ -798,16 +828,24 @@ export default function App() {
                   <p className="mt-3 text-sm text-slate-400">등록된 프로젝트가 없습니다. 새 프로젝트로 업로드하세요.</p>
                 )
               ) : (
-                <input
-                  value={newProjectTitle}
-                  onChange={(event) => setNewProjectTitle(event.target.value)}
-                  placeholder={
-                    selectedFiles[0]
-                      ? inferProjectTitle(selectedFiles[0].name)
-                      : "프로젝트 이름 (예: ○○사건 통화녹취)"
-                  }
-                  className="mt-3 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-cyan-500/50"
-                />
+                <div className="mt-3">
+                  <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                    프로젝트 이름 <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    value={newProjectTitle}
+                    onChange={(event) => {
+                      setNewProjectTitle(event.target.value);
+                      if (error) setError("");
+                    }}
+                    placeholder="예: ○○사건 통화녹취"
+                    required
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-cyan-500/50"
+                  />
+                  {!newProjectTitle.trim() ? (
+                    <p className="mt-2 text-xs text-amber-300/90">프로젝트 이름을 입력해야 파일을 선택할 수 있습니다.</p>
+                  ) : null}
+                </div>
               )}
             </div>
 
@@ -824,13 +862,15 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => inputRef.current?.click()}
-                disabled={busy}
+                disabled={busy || !uploadProjectReady}
                 onDragEnter={(event) => {
                   event.preventDefault();
+                  if (!uploadProjectReady) return;
                   setIsDragActive(true);
                 }}
                 onDragOver={(event) => {
                   event.preventDefault();
+                  if (!uploadProjectReady) return;
                   setIsDragActive(true);
                 }}
                 onDragLeave={(event) => {
@@ -839,22 +879,32 @@ export default function App() {
                   setIsDragActive(false);
                 }}
                 onDrop={onDropFiles}
-                className={`flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-10 text-center transition disabled:opacity-60 ${
-                  isDragActive
-                    ? "border-blue-400 bg-slate-900"
-                    : "border-slate-700 bg-slate-950/80 hover:border-blue-400 hover:bg-slate-900"
+                className={`flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-10 text-center transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                  !uploadProjectReady
+                    ? "border-slate-800 bg-slate-950/40"
+                    : isDragActive
+                      ? "border-blue-400 bg-slate-900"
+                      : "border-slate-700 bg-slate-950/80 hover:border-blue-400 hover:bg-slate-900"
                 }`}
               >
                 <span className="text-4xl">🎙️</span>
                 <span className="mt-3 font-semibold text-slate-100">
-                  {selectedFiles.length > 0 ? `${selectedFiles.length}개 파일 선택됨` : "음성/영상 파일 선택"}
+                  {!uploadProjectReady
+                    ? "프로젝트를 먼저 정해 주세요"
+                    : selectedFiles.length > 0
+                      ? `${selectedFiles.length}개 파일 선택됨`
+                      : "음성/영상 파일 선택"}
                 </span>
                 <span className="mt-1 text-sm text-slate-400">
-                  {selectedFiles.length > 0
-                    ? `${selectedFiles[0].name}${selectedFiles.length > 1 ? ` 외 ${selectedFiles.length - 1}개` : ""} · 총 ${formatSize(
-                        selectedFiles.reduce((sum, file) => sum + file.size, 0),
-                      )}`
-                    : "wav, mp3, m4a, mp4 등 지원 · 드래그 앤 드롭 가능"}
+                  {!uploadProjectReady
+                    ? uploadProjectMode === "new"
+                      ? "위에 프로젝트 이름을 입력하면 파일 선택이 활성화됩니다."
+                      : "위에서 기존 프로젝트를 선택하면 파일 선택이 활성화됩니다."
+                    : selectedFiles.length > 0
+                      ? `${selectedFiles[0].name}${selectedFiles.length > 1 ? ` 외 ${selectedFiles.length - 1}개` : ""} · 총 ${formatSize(
+                          selectedFiles.reduce((sum, file) => sum + file.size, 0),
+                        )}`
+                      : `wav, mp3, m4a, mp4 등 지원 · 드래그 앤 드롭 가능${uploadProjectLabel ? ` · ${uploadProjectLabel}` : ""}`}
                 </span>
               </button>
 
@@ -887,7 +937,9 @@ export default function App() {
               <button
                 type="button"
                 onClick={onUpload}
-                disabled={!selectedFiles.length || busy || r2Ready === false || dbReady === false}
+                disabled={
+                  !uploadProjectReady || !selectedFiles.length || busy || r2Ready === false || dbReady === false
+                }
                 className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-slate-700"
               >
                 {selectedFiles.length > 1 ? `${selectedFiles.length}개 파일 업로드` : "업로드"}
