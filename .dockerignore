@@ -5,6 +5,7 @@ venv
 __pycache__
 *.pyc
 .env
+.env.*
 client/.env
 client/node_modules
 client/dist
@@ -13,4 +14,8 @@ admin/node_modules
 admin/dist
 transcriber/node_modules
 transcriber/dist
+**/*.tsbuildinfo
+tmp_*
 *.md
+.cursor
+agent-transcripts
