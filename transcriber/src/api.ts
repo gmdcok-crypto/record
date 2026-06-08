@@ -91,8 +91,76 @@ export type TranscriberProfile = {
   quality_score: number;
 };
 
+export type TranscriberAuthProfile = {
+  id: number;
+  code: string;
+  login_id: string;
+  name: string;
+  phone: string | null;
+  bank_name: string | null;
+  account_number: string | null;
+  status: string;
+  auth_status: string;
+};
+
+export const TRANSCRIBER_TOKEN_KEY = "transcriber_access_token";
+
 function apiBase(): string {
   return API_URL || window.location.origin;
+}
+
+function transcriberAuthHeaders(): HeadersInit {
+  const token = localStorage.getItem(TRANSCRIBER_TOKEN_KEY);
+  const headers: HeadersInit = { Accept: "application/json" };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+export function bootstrapTranscriberTokenFromUrl(): boolean {
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const hashToken = hashParams.get("token");
+  const queryToken = new URLSearchParams(window.location.search).get("token");
+  const token = hashToken || queryToken;
+  if (!token) return false;
+
+  localStorage.setItem(TRANSCRIBER_TOKEN_KEY, token);
+  window.history.replaceState(null, "", window.location.pathname);
+  return true;
+}
+
+export function clearTranscriberSession(): void {
+  localStorage.removeItem(TRANSCRIBER_TOKEN_KEY);
+}
+
+export async function fetchTranscriberMe(): Promise<TranscriberAuthProfile | null> {
+  const token = localStorage.getItem(TRANSCRIBER_TOKEN_KEY);
+  if (!token) return null;
+
+  const res = await fetch(`${apiBase()}/api/transcriber/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    if (res.status === 401) clearTranscriberSession();
+    return null;
+  }
+  const data = await res.json();
+  return data.transcriber as TranscriberAuthProfile;
+}
+
+export async function loginTranscriber(loginId: string, password: string): Promise<TranscriberAuthProfile> {
+  const res = await fetch(`${apiBase()}/api/transcriber/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ login_id: loginId.trim(), password }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data) || "로그인에 실패했습니다.");
+  }
+  localStorage.setItem(TRANSCRIBER_TOKEN_KEY, data.access_token);
+  return data.transcriber as TranscriberAuthProfile;
 }
 
 function parseErrorDetail(body: unknown): string {
@@ -132,10 +200,10 @@ export async function fetchJob(jobId: string): Promise<JobResponse> {
   return res.json();
 }
 
-export async function fetchAssignedProjects(transcriberCode = "TR-001"): Promise<TranscriberProject[]> {
-  const res = await fetch(
-    `${apiBase()}/api/jobs/transcriber/projects?transcriber_code=${encodeURIComponent(transcriberCode)}`,
-  );
+export async function fetchAssignedProjects(): Promise<TranscriberProject[]> {
+  const res = await fetch(`${apiBase()}/api/jobs/transcriber/projects`, {
+    headers: transcriberAuthHeaders(),
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(parseErrorDetail(err));
@@ -144,8 +212,10 @@ export async function fetchAssignedProjects(transcriberCode = "TR-001"): Promise
   return data.projects || [];
 }
 
-export async function fetchAssignedJobs(transcriberCode = "TR-001"): Promise<AssignedWork[]> {
-  const res = await fetch(`${apiBase()}/api/jobs/transcriber/assigned?transcriber_code=${encodeURIComponent(transcriberCode)}`);
+export async function fetchAssignedJobs(): Promise<AssignedWork[]> {
+  const res = await fetch(`${apiBase()}/api/jobs/transcriber/assigned`, {
+    headers: transcriberAuthHeaders(),
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(parseErrorDetail(err));
@@ -154,8 +224,10 @@ export async function fetchAssignedJobs(transcriberCode = "TR-001"): Promise<Ass
   return data.jobs || [];
 }
 
-export async function fetchTranscriberProfile(transcriberCode = "TR-001"): Promise<TranscriberProfile> {
-  const res = await fetch(`${apiBase()}/api/jobs/transcriber/profile?transcriber_code=${encodeURIComponent(transcriberCode)}`);
+export async function fetchTranscriberProfile(): Promise<TranscriberProfile> {
+  const res = await fetch(`${apiBase()}/api/jobs/transcriber/profile`, {
+    headers: transcriberAuthHeaders(),
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(parseErrorDetail(err));

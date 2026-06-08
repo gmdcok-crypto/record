@@ -37,3 +37,27 @@ def get_current_transcriber(
         raise HTTPException(status_code=401, detail="로그인 초기화된 계정입니다. 다시 가입해 주세요")
 
     return transcriber
+
+
+def get_optional_current_transcriber(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+    db: Annotated[Session, Depends(get_db)],
+) -> Transcriber | None:
+    if not settings.jwt_configured:
+        return None
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        return None
+
+    try:
+        payload = decode_transcriber_access_token(credentials.credentials)
+        transcriber_id = int(payload["sub"])
+    except (jwt.InvalidTokenError, KeyError, TypeError, ValueError):
+        return None
+
+    transcriber = get_transcriber_by_id(db, transcriber_id)
+    if transcriber is None or not transcriber.is_active:
+        return None
+    if not transcriber.login_id or transcriber.auth_status != "active":
+        return None
+
+    return transcriber

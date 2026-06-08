@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.dependencies.member_auth import get_optional_current_member
-from app.models.admin_models import Member
+from app.dependencies.transcriber_auth import get_optional_current_transcriber
+from app.models.admin_models import Member, Transcriber
 from app.db import ensure_db_initialized, get_db, get_engine
 from app.services.audio import remux_faststart, should_faststart
 from app.services.admin_events import publish_admin_event, stream_admin_events
@@ -434,30 +435,48 @@ def admin_update_invoice(
     return {"id": invoice.id, "status": invoice.invoice_status}
 
 
+def _resolve_transcriber_portal_user(
+    db: Session,
+    current: Transcriber | None,
+    transcriber_code: str | None,
+) -> Transcriber:
+    if current is not None:
+        return current
+    if not transcriber_code:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+    transcriber = get_transcriber_by_code(db, transcriber_code)
+    if transcriber is None:
+        raise HTTPException(status_code=404, detail="Transcriber not found")
+    return transcriber
+
+
 @router.get("/transcriber/assigned")
 def list_transcriber_assigned_jobs(
     db: Annotated[Session, Depends(get_db)],
-    transcriber_code: str = Query("TR-001"),
+    current: Annotated[Transcriber | None, Depends(get_optional_current_transcriber)] = None,
+    transcriber_code: str | None = Query(None),
 ) -> dict:
-    return {"jobs": list_transcriber_jobs(db, transcriber_code)}
+    transcriber = _resolve_transcriber_portal_user(db, current, transcriber_code)
+    return {"jobs": list_transcriber_jobs(db, transcriber.transcriber_code)}
 
 
 @router.get("/transcriber/projects")
 def list_transcriber_assigned_projects(
     db: Annotated[Session, Depends(get_db)],
-    transcriber_code: str = Query("TR-001"),
+    current: Annotated[Transcriber | None, Depends(get_optional_current_transcriber)] = None,
+    transcriber_code: str | None = Query(None),
 ) -> dict:
-    return {"projects": list_transcriber_projects(db, transcriber_code)}
+    transcriber = _resolve_transcriber_portal_user(db, current, transcriber_code)
+    return {"projects": list_transcriber_projects(db, transcriber.transcriber_code)}
 
 
 @router.get("/transcriber/profile")
 def transcriber_profile(
     db: Annotated[Session, Depends(get_db)],
-    transcriber_code: str = Query("TR-001"),
+    current: Annotated[Transcriber | None, Depends(get_optional_current_transcriber)] = None,
+    transcriber_code: str | None = Query(None),
 ) -> dict:
-    transcriber = get_transcriber_by_code(db, transcriber_code)
-    if transcriber is None:
-        raise HTTPException(status_code=404, detail="Transcriber not found")
+    transcriber = _resolve_transcriber_portal_user(db, current, transcriber_code)
     return {
         "id": transcriber.id,
         "code": transcriber.transcriber_code,

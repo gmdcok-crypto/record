@@ -1,18 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  bootstrapTranscriberTokenFromUrl,
+  clearTranscriberSession,
   downloadFinalTranscriptPdf,
   fetchAssignedProjects,
   fetchJob,
+  fetchTranscriberMe,
   finalizeTranscriptPdf,
   resolveUrl,
   saveTranscript,
   speakerLabel,
   type JobResponse,
+  type TranscriberAuthProfile,
   type TranscriberProject,
   type TranscriberProjectFile,
   type TranscriptJson,
   type TranscriptSegment,
 } from "./api";
+import TranscriberLogin from "./TranscriberLogin";
+
+type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return "-";
@@ -139,12 +146,14 @@ function draftToTranscript(base: TranscriptJson | null, draft: string): Transcri
 
 export default function App() {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
+  const [transcriberName, setTranscriberName] = useState<string | null>(null);
   const [projects, setProjects] = useState<TranscriberProject[]>([]);
   const [selectedProjectKey, setSelectedProjectKey] = useState("");
   const [selectedJobId, setSelectedJobId] = useState("");
   const [job, setJob] = useState<JobResponse | null>(null);
   const [draft, setDraft] = useState("");
-  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [loadingProjects, setLoadingProjects] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
   const [saving, setSaving] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
@@ -166,23 +175,66 @@ export default function App() {
     [job, draft],
   );
 
-  useEffect(() => {
+  const loadProjects = useCallback(async () => {
     setLoadingProjects(true);
-    fetchAssignedProjects()
-      .then((data) => {
-        setProjects(data);
-        const first = data[0];
-        if (first) {
-          const key = projectKey(first);
-          setSelectedProjectKey(key);
-          setSelectedJobId(first.files[0]?.job_id ?? "");
-        }
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : "배정 프로젝트를 불러오지 못했습니다.");
-      })
-      .finally(() => setLoadingProjects(false));
+    setError("");
+    try {
+      const data = await fetchAssignedProjects();
+      setProjects(data);
+      const first = data[0];
+      if (first) {
+        const key = projectKey(first);
+        setSelectedProjectKey(key);
+        setSelectedJobId(first.files[0]?.job_id ?? "");
+      } else {
+        setSelectedProjectKey("");
+        setSelectedJobId("");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "배정 프로젝트를 불러오지 못했습니다.");
+    } finally {
+      setLoadingProjects(false);
+    }
   }, []);
+
+  const restoreSession = async () => {
+    bootstrapTranscriberTokenFromUrl();
+    const transcriber = await fetchTranscriberMe();
+    if (transcriber) {
+      setTranscriberName(transcriber.name);
+      setAuthStatus("authenticated");
+      return transcriber;
+    }
+    setTranscriberName(null);
+    setAuthStatus("unauthenticated");
+    return null;
+  };
+
+  const handleLoginSuccess = (transcriber: TranscriberAuthProfile) => {
+    setTranscriberName(transcriber.name);
+    setAuthStatus("authenticated");
+    setError("");
+    void loadProjects();
+  };
+
+  const handleLogout = () => {
+    clearTranscriberSession();
+    setTranscriberName(null);
+    setAuthStatus("unauthenticated");
+    setProjects([]);
+    setSelectedProjectKey("");
+    setSelectedJobId("");
+    setJob(null);
+    setDraft("");
+    setMessage("");
+    setError("");
+  };
+
+  useEffect(() => {
+    void restoreSession().then((transcriber) => {
+      if (transcriber) void loadProjects();
+    });
+  }, [loadProjects]);
 
   useEffect(() => {
     if (!selectedJobId) {
@@ -276,14 +328,41 @@ export default function App() {
     }
   };
 
+  if (authStatus === "loading") {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-slate-950 text-slate-400">
+        로그인 확인 중…
+      </div>
+    );
+  }
+
+  if (authStatus === "unauthenticated") {
+    return <TranscriberLogin onSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="relative min-h-screen overflow-hidden">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.12),transparent_24%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.12),transparent_22%),linear-gradient(to_bottom,rgba(15,23,42,0.84),rgba(2,6,23,0.98))]" />
-        <div className="relative mx-auto grid min-h-screen max-w-[1680px] gap-4 px-4 py-4 lg:grid-cols-[220px_240px_minmax(0,1fr)] lg:px-6">
+        <div className="relative mx-auto min-h-screen max-w-[1680px] px-4 py-4 lg:px-6">
+          <header className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-cyan-300">속기사 녹취</p>
+              <h1 className="mt-1 text-2xl font-bold text-white">{transcriberName ? `${transcriberName}님` : "속기사"}</h1>
+            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="shrink-0 rounded-xl border border-white/10 px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white"
+            >
+              로그아웃
+            </button>
+          </header>
+
+          <div className="grid min-h-[calc(100vh-6rem)] gap-4 lg:grid-cols-[220px_240px_minmax(0,1fr)]">
           <aside className="rounded-[28px] border border-white/10 bg-slate-950/70 p-4 backdrop-blur-xl">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-300">프로젝트</p>
-            <h1 className="mt-2 text-lg font-semibold text-white">배정 사건</h1>
+            <h2 className="mt-2 text-lg font-semibold text-white">배정 사건</h2>
             <div className="mt-4 space-y-2">
               {loadingProjects ? (
                 <p className="text-sm text-slate-400">불러오는 중…</p>
@@ -477,6 +556,7 @@ export default function App() {
               </div>
             )}
           </main>
+          </div>
         </div>
       </div>
     </div>
