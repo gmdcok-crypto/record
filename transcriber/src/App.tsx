@@ -11,6 +11,7 @@ import {
   deliverDraftToClient,
   runAiDraft,
   saveTranscript,
+  collectSpeakerIds,
   speakerLabel,
   type JobResponse,
   type TranscriberAuthProfile,
@@ -21,6 +22,7 @@ import {
 } from "./api";
 import TranscriberLogin from "./TranscriberLogin";
 import TranscriberSignup from "./TranscriberSignup";
+import SpeakerSettingsModal from "./SpeakerSettingsModal";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 type AuthScreen = "signup" | "login";
@@ -144,15 +146,19 @@ function buildEditableSegments(transcript?: TranscriptJson | null): EditableSegm
     });
 }
 
-function segmentsToTranscript(base: TranscriptJson | null, segments: EditableSegment[]): TranscriptJson {
+function segmentsToTranscript(
+  base: TranscriptJson | null,
+  segments: EditableSegment[],
+  speaker_labels: Record<string, string>,
+): TranscriptJson {
   const cleaned = segments.map(({ id: _id, ...segment }) => ({
     ...segment,
-    speaker: segment.speaker.trim() || "화자",
+    speaker: segment.speaker.trim() || "1",
     text: segment.text.trim(),
   }));
   const body = cleaned
     .filter((segment) => segment.text.trim())
-    .map((segment) => `${speakerLabel(segment.speaker, base?.speaker_labels)}: ${segment.text.trim()}`)
+    .map((segment) => `${speakerLabel(segment.speaker, speaker_labels)}: ${segment.text.trim()}`)
     .join("\n\n");
   return {
     ...base,
@@ -160,7 +166,7 @@ function segmentsToTranscript(base: TranscriptJson | null, segments: EditableSeg
     plain_text: body,
     segments: cleaned,
     tokens: base?.tokens ?? [],
-    speaker_labels: base?.speaker_labels ?? {},
+    speaker_labels,
   };
 }
 
@@ -188,6 +194,8 @@ export default function App() {
   const [selectedJobId, setSelectedJobId] = useState("");
   const [job, setJob] = useState<JobResponse | null>(null);
   const [segments, setSegments] = useState<EditableSegment[]>([]);
+  const [speakerLabels, setSpeakerLabels] = useState<Record<string, string>>({});
+  const [speakerSettingsOpen, setSpeakerSettingsOpen] = useState(false);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -206,9 +214,10 @@ export default function App() {
     return currentProject.files.find((file) => file.job_id === selectedJobId) ?? currentProject.files[0] ?? null;
   }, [currentProject, selectedJobId]);
 
+  const speakerIds = useMemo(() => collectSpeakerIds(segments), [segments]);
   const currentTranscript = useMemo(
-    () => segmentsToTranscript(job?.transcript_json ?? null, segments),
-    [job, segments],
+    () => segmentsToTranscript(job?.transcript_json ?? null, segments, speakerLabels),
+    [job, segments, speakerLabels],
   );
 
   const loadProjects = useCallback(async () => {
@@ -262,6 +271,7 @@ export default function App() {
     setSelectedJobId("");
     setJob(null);
     setSegments([]);
+    setSpeakerLabels({});
     setMessage("");
     setError("");
   };
@@ -276,6 +286,7 @@ export default function App() {
     if (!selectedJobId) {
       setJob(null);
       setSegments([]);
+      setSpeakerLabels({});
       return;
     }
     setLoadingJob(true);
@@ -285,6 +296,7 @@ export default function App() {
       .then((data) => {
         setJob(data);
         setSegments(buildEditableSegments(data.transcript_json));
+        setSpeakerLabels(data.transcript_json?.speaker_labels ?? {});
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : "작업을 불러오지 못했습니다.");
@@ -351,7 +363,19 @@ export default function App() {
   const restoreFromServerDraft = () => {
     if (!job) return;
     setSegments(buildEditableSegments(job.transcript_json));
+    setSpeakerLabels(job.transcript_json?.speaker_labels ?? {});
     setMessage("서버에 저장된 최신 문서로 되돌렸습니다.");
+    setError("");
+  };
+
+  const applySpeakerLabels = (labels: Record<string, string>) => {
+    const cleaned: Record<string, string> = {};
+    for (const [id, name] of Object.entries(labels)) {
+      if (name.trim()) cleaned[id] = name.trim();
+    }
+    setSpeakerLabels(cleaned);
+    setSpeakerSettingsOpen(false);
+    setMessage("화자 이름이 적용되었습니다. 저장하면 서버에 반영됩니다.");
     setError("");
   };
 
@@ -377,6 +401,7 @@ export default function App() {
       const transcript = result.transcript_json;
       setJob({ ...job, transcript_json: transcript, status: job.status === "assigned" ? "working" : job.status });
       setSegments(buildEditableSegments(transcript));
+      setSpeakerLabels(transcript.speaker_labels ?? {});
       setMessage("AI 초벌 작업이 완료되었습니다. 검토 후 ‘의뢰인에게 초벌 전달’을 눌러 주세요.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "AI 초벌 작업에 실패했습니다.");
@@ -634,18 +659,34 @@ export default function App() {
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-300">녹취 초벌 / 속기사 편집본</label>
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <label className="text-sm font-medium text-slate-300">녹취 초벌 / 속기사 편집본</label>
+                      <button
+                        type="button"
+                        onClick={() => setSpeakerSettingsOpen(true)}
+                        disabled={!speakerIds.length || busy}
+                        className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        화자 설정
+                      </button>
+                    </div>
                     <div className="max-h-[min(62vh,640px)] space-y-2 overflow-y-auto pr-1">
                       {segments.length ? (
                         segments.map((segment, index) => (
                           <div key={segment.id} className="rounded-xl border border-slate-700/80 bg-slate-950/80 px-3 py-2.5">
                             <div className="mb-1.5 flex min-w-0 items-center gap-2">
-                              <input
+                              <select
                                 value={segment.speaker}
                                 disabled={aiRunning}
                                 onChange={(e) => updateSegment(index, { speaker: e.target.value })}
-                                className="w-24 shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs font-semibold text-slate-100 outline-none transition focus:border-blue-500 disabled:opacity-50"
-                              />
+                                className="max-w-[9rem] shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-semibold text-slate-100 outline-none transition focus:border-blue-500 disabled:opacity-50"
+                              >
+                                {speakerIds.map((id) => (
+                                  <option key={id} value={id}>
+                                    {speakerLabel(id, speakerLabels)}
+                                  </option>
+                                ))}
+                              </select>
                               <span className="text-[11px] text-slate-500">
                                 {formatSegmentTime(segment.start_ms)} - {formatSegmentTime(segment.end_ms)}
                               </span>
@@ -738,6 +779,14 @@ export default function App() {
           </main>
           </div>
         </div>
+
+        <SpeakerSettingsModal
+          open={speakerSettingsOpen}
+          speakerIds={speakerIds}
+          labels={speakerLabels}
+          onClose={() => setSpeakerSettingsOpen(false)}
+          onApply={applySpeakerLabels}
+        />
       </div>
     </div>
   );

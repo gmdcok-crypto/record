@@ -398,3 +398,16 @@ export function speakerLabel(speaker: string, labels?: Record<string, string>): 
   if (custom) return custom;
   return /^\d+$/.test(speaker) ? `화자 ${speaker}` : speaker;
 }
+
+export function collectSpeakerIds(segments: TranscriptSegment[]): string[] {
+  const ids = new Set<string>();
+  for (const segment of segments) {
+    if (segment.speaker) ids.add(segment.speaker);
+  }
+  return Array.from(ids).sort((a, b) => {
+    const na = Number(a);
+    const nb = Number(b);
+    if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+    return a.localeCompare(b);
+  });
+}
