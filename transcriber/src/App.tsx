@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import {
   bootstrapTranscriberTokenFromUrl,
   clearTranscriberSession,
@@ -23,6 +23,7 @@ import TranscriberSignup from "./TranscriberSignup";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 type AuthScreen = "signup" | "login";
+type EditableSegment = TranscriptSegment & { id: string };
 
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return "-";
@@ -108,47 +109,68 @@ function projectStatusStyle(status: string): string {
   }
 }
 
-function buildDraftFromTranscript(transcript?: TranscriptJson | null): string {
-  if (!transcript) return "";
-  if (transcript.segments?.length) {
-    return transcript.segments
-      .map((segment) => `${speakerLabel(segment.speaker, transcript.speaker_labels)}: ${segment.text}`)
-      .join("\n\n");
+function buildEditableSegments(transcript?: TranscriptJson | null): EditableSegment[] {
+  const segments = transcript?.segments ?? [];
+  if (segments.length) {
+    return segments.map((segment, index) => ({
+      ...segment,
+      id: `${segment.speaker}-${segment.start_ms ?? "na"}-${index}`,
+    }));
   }
-  return (transcript.text || transcript.plain_text || "").trim();
-}
-
-function draftToTranscript(base: TranscriptJson | null, draft: string): TranscriptJson {
-  const normalizedDraft = draft.trim();
-  const lines = normalizedDraft
+  const body = (transcript?.text || transcript?.plain_text || "").trim();
+  if (!body) return [];
+  return body
     .split(/\n{2,}/)
     .map((line) => line.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((line, index) => {
+      const match = line.match(/^([^:]+):\s*(.*)$/);
+      return {
+        id: `fallback-${index}`,
+        speaker: match?.[1]?.trim() || `${index + 1}`,
+        text: match?.[2]?.trim() || line,
+        start_ms: null,
+        end_ms: null,
+      };
+    });
+}
 
-  const segments: TranscriptSegment[] = lines.map((line, index) => {
-    const match = line.match(/^([^:]+):\s*(.*)$/);
-    const speaker = match?.[1]?.trim() || `${index + 1}`;
-    const text = match?.[2]?.trim() || line;
-    return {
-      speaker,
-      text,
-      start_ms: base?.segments?.[index]?.start_ms ?? null,
-      end_ms: base?.segments?.[index]?.end_ms ?? null,
-    };
-  });
-
+function segmentsToTranscript(base: TranscriptJson | null, segments: EditableSegment[]): TranscriptJson {
+  const cleaned = segments.map(({ id: _id, ...segment }) => ({
+    ...segment,
+    speaker: segment.speaker.trim() || "화자",
+    text: segment.text.trim(),
+  }));
+  const body = cleaned
+    .filter((segment) => segment.text.trim())
+    .map((segment) => `${speakerLabel(segment.speaker, base?.speaker_labels)}: ${segment.text.trim()}`)
+    .join("\n\n");
   return {
     ...base,
-    text: normalizedDraft,
-    plain_text: normalizedDraft,
-    segments: segments.length ? segments : base?.segments ?? [],
+    text: body,
+    plain_text: body,
+    segments: cleaned,
     tokens: base?.tokens ?? [],
     speaker_labels: base?.speaker_labels ?? {},
   };
 }
 
+function formatSegmentTime(ms: number | null | undefined): string {
+  if (ms == null) return "--:--";
+  const total = Math.floor(ms / 1000);
+  const minute = Math.floor(total / 60);
+  const second = total % 60;
+  return `${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}`;
+}
+
+function autoResizeTextarea(element: HTMLTextAreaElement) {
+  element.style.height = "auto";
+  element.style.height = `${element.scrollHeight}px`;
+}
+
 export default function App() {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const segmentEndRef = useRef<number | null>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
   const [authScreen, setAuthScreen] = useState<AuthScreen>("signup");
   const [transcriberName, setTranscriberName] = useState<string | null>(null);
@@ -156,7 +178,7 @@ export default function App() {
   const [selectedProjectKey, setSelectedProjectKey] = useState("");
   const [selectedJobId, setSelectedJobId] = useState("");
   const [job, setJob] = useState<JobResponse | null>(null);
-  const [draft, setDraft] = useState("");
+  const [segments, setSegments] = useState<EditableSegment[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -176,8 +198,8 @@ export default function App() {
   }, [currentProject, selectedJobId]);
 
   const currentTranscript = useMemo(
-    () => draftToTranscript(job?.transcript_json ?? null, draft),
-    [job, draft],
+    () => segmentsToTranscript(job?.transcript_json ?? null, segments),
+    [job, segments],
   );
 
   const loadProjects = useCallback(async () => {
@@ -230,7 +252,7 @@ export default function App() {
     setSelectedProjectKey("");
     setSelectedJobId("");
     setJob(null);
-    setDraft("");
+    setSegments([]);
     setMessage("");
     setError("");
   };
@@ -244,7 +266,7 @@ export default function App() {
   useEffect(() => {
     if (!selectedJobId) {
       setJob(null);
-      setDraft("");
+      setSegments([]);
       return;
     }
     setLoadingJob(true);
@@ -253,13 +275,78 @@ export default function App() {
     fetchJob(selectedJobId)
       .then((data) => {
         setJob(data);
-        setDraft(buildDraftFromTranscript(data.transcript_json));
+        setSegments(buildEditableSegments(data.transcript_json));
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : "작업을 불러오지 못했습니다.");
       })
       .finally(() => setLoadingJob(false));
   }, [selectedJobId]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleTimeUpdate = () => {
+      if (segmentEndRef.current == null) return;
+      if (audio.currentTime >= segmentEndRef.current) {
+        audio.pause();
+        segmentEndRef.current = null;
+      }
+    };
+
+    const clearSegmentTarget = () => {
+      segmentEndRef.current = null;
+    };
+
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("ended", clearSegmentTarget);
+    audio.addEventListener("pause", clearSegmentTarget);
+    return () => {
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("ended", clearSegmentTarget);
+      audio.removeEventListener("pause", clearSegmentTarget);
+    };
+  }, [job?.job_id]);
+
+  const playSegment = (startMs: number | null | undefined, endMs: number | null | undefined) => {
+    const audio = audioRef.current;
+    if (!audio || startMs == null) return;
+
+    segmentEndRef.current = endMs != null ? Math.max(startMs / 1000, endMs / 1000) : null;
+    audio.currentTime = Math.max(0, startMs / 1000);
+    void audio.play().catch(() => {
+      segmentEndRef.current = null;
+    });
+  };
+
+  const handleSegmentTextMouseDown = (
+    event: MouseEvent<HTMLTextAreaElement>,
+    startMs: number | null | undefined,
+    endMs: number | null | undefined,
+  ) => {
+    const textarea = event.currentTarget;
+    if (document.activeElement !== textarea) {
+      event.preventDefault();
+      playSegment(startMs, endMs);
+      textarea.focus();
+    }
+  };
+
+  const updateSegment = (index: number, patch: Partial<TranscriptSegment>) => {
+    setSegments((prev) =>
+      prev.map((segment, currentIndex) => (currentIndex === index ? { ...segment, ...patch } : segment)),
+    );
+  };
+
+  const restoreFromServerDraft = () => {
+    if (!job) return;
+    setSegments(buildEditableSegments(job.transcript_json));
+    setMessage("서버에 저장된 최신 문서로 되돌렸습니다.");
+    setError("");
+  };
+
+  const busy = saving || aiRunning || downloadingPdf;
 
   const selectProject = (project: TranscriberProject) => {
     const key = projectKey(project);
@@ -269,7 +356,7 @@ export default function App() {
 
   const onRunAiDraft = async () => {
     if (!job) return;
-    if (draft.trim() && !window.confirm("기존 편집 내용을 AI 초벌 결과로 덮어씁니다. 계속할까요?")) {
+    if (segments.some((segment) => segment.text.trim()) && !window.confirm("기존 편집 내용을 AI 초벌 결과로 덮어씁니다. 계속할까요?")) {
       return;
     }
 
@@ -280,7 +367,7 @@ export default function App() {
       const result = await runAiDraft(job.job_id);
       const transcript = result.transcript_json;
       setJob({ ...job, transcript_json: transcript, status: job.status === "assigned" ? "working" : job.status });
-      setDraft(buildDraftFromTranscript(transcript));
+      setSegments(buildEditableSegments(transcript));
       setMessage("AI 초벌 작업이 완료되었습니다. 내용을 확인한 뒤 저장하세요.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "AI 초벌 작업에 실패했습니다.");
@@ -464,69 +551,6 @@ export default function App() {
           </aside>
 
           <main className="space-y-4">
-            <header className="rounded-[28px] border border-white/10 bg-slate-950/60 px-5 py-5 backdrop-blur-xl">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                <div>
-                  <p className="text-sm font-medium text-cyan-300">속기사 편집</p>
-                  {currentProject && currentFile ? (
-                    <p className="mt-2 text-sm text-slate-400">
-                      {currentProject.title} &gt; {currentFile.filename}
-                    </p>
-                  ) : null}
-                  <h2 className="mt-1 text-2xl font-semibold tracking-tight text-white">
-                    {currentFile?.title || "파일을 선택하세요"}
-                  </h2>
-                  {currentProject ? (
-                    <p className="mt-2 text-sm text-slate-400">
-                      {currentProject.client.name} · 마감 {formatDateTime(currentProject.due_at)}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void onRunAiDraft()}
-                    disabled={!job || saving || aiRunning || downloadingPdf}
-                    className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-50"
-                  >
-                    {aiRunning ? "AI 초벌 진행 중..." : "AI 초벌작업"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onSaveDraft}
-                    disabled={!job || saving || aiRunning}
-                    className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
-                  >
-                    {saving ? "저장 중..." : "초벌 임시 저장"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onSendToClient}
-                    disabled={!job || saving || aiRunning}
-                    className="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-50"
-                  >
-                    의뢰인에게 초벌 전달
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onFinalize}
-                    disabled={!job || saving || aiRunning}
-                    className="rounded-2xl bg-violet-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50"
-                  >
-                    최종본 확정
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onDownloadStampedPdf}
-                    disabled={!job || downloadingPdf || aiRunning}
-                    className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50"
-                  >
-                    {downloadingPdf ? "PDF 생성 중..." : "도장 날인 PDF"}
-                  </button>
-                </div>
-              </div>
-            </header>
-
             {(message || error) && (
               <div
                 className={`rounded-3xl px-4 py-3 text-sm ${
@@ -540,64 +564,157 @@ export default function App() {
             )}
 
             {loadingJob ? (
-              <div className="rounded-[28px] border border-white/10 bg-slate-900/70 p-12 text-center text-slate-400 backdrop-blur-xl">
+              <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-12 text-center text-sm text-slate-400 shadow-2xl shadow-black/20">
                 파일을 불러오는 중입니다...
-              </div>
+              </section>
             ) : job ? (
-              <div className="grid gap-6 xl:grid-cols-[1.2fr_0.85fr]">
-                <section className="space-y-6">
-                  <div className="rounded-[28px] border border-white/10 bg-slate-900/70 p-5 backdrop-blur-xl">
-                    <p className="text-sm font-semibold text-cyan-300">원본 음성</p>
+              <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
+                <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-violet-300">편집</p>
+                    {currentProject && currentFile ? (
+                      <p className="mt-1 text-sm text-cyan-300/90">
+                        {currentProject.title} &gt; {currentFile.filename}
+                      </p>
+                    ) : null}
+                    <h2 className="mt-1 text-xl font-bold text-white">{currentFile?.title || "녹취 편집"}</h2>
+                    <p className="mt-1 text-sm text-slate-400">
+                      구간 텍스트를 누르면 해당 오디오가 재생되고, 같은 영역에서 바로 수정할 수 있습니다.
+                    </p>
+                    {currentProject ? (
+                      <p className="mt-2 text-xs text-slate-500">
+                        {currentProject.client.name} · 마감 {formatDateTime(currentProject.due_at)} ·{" "}
+                        <span className={`rounded-full px-2 py-0.5 font-semibold ${fileStatusStyle(job.status || "")}`}>
+                          {mapFileStatusLabel(job.status || "")}
+                        </span>
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-400">
+                    <div>작업 ID</div>
+                    <div className="mt-1 font-mono text-[11px] text-slate-100">{job.job_id}</div>
+                  </div>
+                </div>
+
+                {aiRunning ? (
+                  <div className="mb-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                    음성을 분석해 AI 초벌을 생성하는 중입니다. 완료될 때까지 잠시만 기다려 주세요.
+                  </div>
+                ) : null}
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-300">원본 음성</label>
                     <audio
                       ref={audioRef}
                       controls
                       preload="metadata"
                       src={resolveUrl(job.audio_url)}
-                      className="mt-4 w-full rounded-2xl"
+                      className="w-full rounded-xl"
                     />
                   </div>
-                  <div className="rounded-[28px] border border-white/10 bg-slate-900/70 p-5 backdrop-blur-xl">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-sm font-semibold text-violet-300">문서 편집</p>
-                      {aiRunning ? (
-                        <p className="text-xs font-medium text-amber-300">음성을 분석해 초벌을 생성하는 중입니다. 잠시만 기다려 주세요.</p>
-                      ) : null}
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-300">녹취 초벌 / 속기사 편집본</label>
+                    <div className="max-h-[min(62vh,640px)] space-y-2 overflow-y-auto pr-1">
+                      {segments.length ? (
+                        segments.map((segment, index) => (
+                          <div key={segment.id} className="rounded-xl border border-slate-700/80 bg-slate-950/80 px-3 py-2.5">
+                            <div className="mb-1.5 flex min-w-0 items-center gap-2">
+                              <input
+                                value={segment.speaker}
+                                disabled={aiRunning}
+                                onChange={(e) => updateSegment(index, { speaker: e.target.value })}
+                                className="w-24 shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs font-semibold text-slate-100 outline-none transition focus:border-blue-500 disabled:opacity-50"
+                              />
+                              <span className="text-[11px] text-slate-500">
+                                {formatSegmentTime(segment.start_ms)} - {formatSegmentTime(segment.end_ms)}
+                              </span>
+                            </div>
+                            <textarea
+                              value={segment.text}
+                              rows={1}
+                              disabled={aiRunning}
+                              onChange={(e) => {
+                                updateSegment(index, { text: e.target.value });
+                                autoResizeTextarea(e.currentTarget);
+                              }}
+                              onMouseDown={(e) =>
+                                handleSegmentTextMouseDown(e, segment.start_ms, segment.end_ms)
+                              }
+                              onFocus={(e) => autoResizeTextarea(e.currentTarget)}
+                              ref={(element) => {
+                                if (element) autoResizeTextarea(element);
+                              }}
+                              placeholder="텍스트를 눌러 재생하고, 여기서 바로 수정하세요."
+                              className="w-full resize-none overflow-hidden rounded-lg border border-transparent bg-slate-900/60 px-3 py-2 text-sm leading-6 text-slate-100 outline-none transition placeholder:text-slate-500 hover:border-slate-700 focus:border-blue-500 focus:bg-slate-900 disabled:opacity-50"
+                            />
+                          </div>
+                        ))
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-5 py-10 text-center text-sm text-slate-400">
+                          {aiRunning ? "AI 초벌을 생성하는 중입니다..." : "수정할 대화 구간이 없습니다."}
+                        </div>
+                      )}
                     </div>
-                    <textarea
-                      disabled={aiRunning}
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      placeholder="화자명: 발언 내용 형식으로 초벌을 작성하세요."
-                      className="mt-4 min-h-[480px] w-full rounded-3xl border border-slate-700 bg-slate-950 px-5 py-4 text-sm leading-7 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
-                    />
                   </div>
-                </section>
-                <section className="rounded-[28px] border border-white/10 bg-slate-900/70 p-5 backdrop-blur-xl">
-                  <p className="text-sm font-semibold text-emerald-300">작업 정보</p>
-                  <dl className="mt-4 space-y-3 text-sm">
-                    <div>
-                      <dt className="text-slate-500">작업번호</dt>
-                      <dd className="mt-1 break-all font-mono text-white">{job.job_id}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-slate-500">파일명</dt>
-                      <dd className="mt-1 text-white">{currentFile?.filename || "-"}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-slate-500">상태</dt>
-                      <dd className="mt-1">
-                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${fileStatusStyle(job.status || "")}`}>
-                          {mapFileStatusLabel(job.status || "")}
-                        </span>
-                      </dd>
-                    </div>
-                  </dl>
-                </section>
-              </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <button
+                      type="button"
+                      onClick={() => void onRunAiDraft()}
+                      disabled={busy}
+                      className="rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-50"
+                    >
+                      {aiRunning ? "AI 초벌 진행 중..." : "AI 초벌작업"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onSaveDraft}
+                      disabled={busy}
+                      className="rounded-xl border border-slate-700 bg-slate-950 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      {saving ? "저장 중..." : "초벌 임시 저장"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={restoreFromServerDraft}
+                      disabled={busy}
+                      className="rounded-xl border border-slate-700 bg-slate-950 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      서버본 다시 불러오기
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onSendToClient}
+                      disabled={busy}
+                      className="rounded-xl bg-cyan-600 py-3 text-sm font-semibold text-white transition hover:bg-cyan-500 disabled:opacity-50"
+                    >
+                      의뢰인에게 초벌 전달
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onFinalize}
+                      disabled={busy}
+                      className="rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
+                    >
+                      최종본 확정
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onDownloadStampedPdf}
+                      disabled={busy}
+                      className="rounded-xl bg-slate-200 py-3 text-sm font-semibold text-slate-950 transition hover:bg-white disabled:opacity-50"
+                    >
+                      {downloadingPdf ? "PDF 생성 중..." : "도장 날인 PDF"}
+                    </button>
+                  </div>
+                </div>
+              </section>
             ) : (
-              <div className="rounded-[28px] border border-dashed border-white/10 bg-slate-900/40 p-12 text-center text-slate-400">
+              <section className="rounded-3xl border border-dashed border-slate-800 bg-slate-900/40 p-12 text-center text-sm text-slate-400 shadow-2xl shadow-black/20">
                 왼쪽에서 프로젝트와 파일을 선택하세요.
-              </div>
+              </section>
             )}
           </main>
           </div>
