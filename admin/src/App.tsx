@@ -847,56 +847,74 @@ function App() {
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-3xl border border-white/10">
-        <div className="hidden grid-cols-[1.7fr_1fr_0.9fr_0.9fr_0.8fr] gap-4 bg-slate-950/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 lg:grid">
-          <span>의뢰인 / 파일</span>
-          <span>담당 / 마감</span>
-          <span>상태</span>
-          <span>매출</span>
-          <span>동작</span>
-        </div>
-        <div className="divide-y divide-white/5">
-          {visibleJobs.length === 0 ? <EmptyState message="표시할 의뢰/파일 데이터가 없습니다." /> : visibleJobs.map((job) => (
-            <div key={job.id} className="grid gap-4 bg-slate-950/40 px-4 py-4 lg:grid-cols-[1.7fr_1fr_0.9fr_0.9fr_0.8fr] lg:items-center">
-              <div>
-                <p className="font-semibold text-white">{job.title}</p>
-                <p className="mt-1 text-sm text-slate-200">{job.client}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {job.id} · {job.filename}
-                </p>
-              </div>
-              <div className="text-sm text-slate-300">
-                <p>{job.assignee}</p>
-                <p className="mt-1 text-xs text-slate-500">마감 {job.dueAt}</p>
-              </div>
-              <div>
-                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(job.status)}`}>
-                  {job.status}
-                </span>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-white">{formatCurrency(job.salesAmount)}</p>
-                <p className="mt-1 text-xs text-slate-500">{job.paymentStatus}</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => void openDetailModal(job.id)}
-                  className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/5"
-                >
-                  상세
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openAssignModal(job)}
-                  className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-300 transition hover:bg-cyan-500/20"
-                >
-                  배정
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+      <div className="overflow-x-auto rounded-3xl border border-white/10">
+        {visibleJobs.length === 0 ? (
+          <EmptyState message="표시할 의뢰/파일 데이터가 없습니다." />
+        ) : (
+          <table className="w-full min-w-[1080px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-white/10 bg-slate-950/80 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <th className="whitespace-nowrap px-4 py-3">작업번호</th>
+                <th className="whitespace-nowrap px-4 py-3">의뢰인</th>
+                <th className="whitespace-nowrap px-4 py-3">제목</th>
+                <th className="whitespace-nowrap px-4 py-3">파일명</th>
+                <th className="whitespace-nowrap px-4 py-3">담당</th>
+                <th className="whitespace-nowrap px-4 py-3">마감</th>
+                <th className="whitespace-nowrap px-4 py-3">상태</th>
+                <th className="whitespace-nowrap px-4 py-3">매출</th>
+                <th className="whitespace-nowrap px-4 py-3">결제</th>
+                <th className="whitespace-nowrap px-4 py-3">동작</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {visibleJobs.map((job) => (
+                <tr key={job.id} className="bg-slate-950/40 text-slate-200">
+                  <td className="max-w-[120px] truncate whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-400" title={job.id}>
+                    {job.id}
+                  </td>
+                  <td className="max-w-[120px] truncate whitespace-nowrap px-4 py-3 text-white" title={job.client}>
+                    {job.client}
+                  </td>
+                  <td className="max-w-[160px] truncate whitespace-nowrap px-4 py-3" title={job.title}>
+                    {job.title}
+                  </td>
+                  <td className="max-w-[180px] truncate whitespace-nowrap px-4 py-3 text-slate-300" title={job.filename}>
+                    {job.filename}
+                  </td>
+                  <td className="max-w-[100px] truncate whitespace-nowrap px-4 py-3" title={job.assignee}>
+                    {job.assignee}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-slate-400">{job.dueAt}</td>
+                  <td className="whitespace-nowrap px-4 py-3">
+                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(job.status)}`}>
+                      {job.status}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 font-medium text-white">{formatCurrency(job.salesAmount)}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-slate-400">{job.paymentStatus}</td>
+                  <td className="whitespace-nowrap px-4 py-3">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void openDetailModal(job.id)}
+                        className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/5"
+                      >
+                        상세
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openAssignModal(job)}
+                        className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-300 transition hover:bg-cyan-500/20"
+                      >
+                        배정
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </SectionCard>
   );
