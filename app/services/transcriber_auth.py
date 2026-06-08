@@ -7,7 +7,7 @@ from app.models.admin_models import Job, Transcriber
 from app.services.job_store import ACTIVE_JOB_STATUSES, generate_transcriber_code, _sync_transcriber_load
 from app.services.passwords import hash_password, verify_password
 
-LOGIN_ID_PATTERN = re.compile(r"^[A-Za-z0-9]{8}$")
+LOGIN_ID_PATTERN = re.compile(r"^[A-Za-z0-9]{1,8}$")
 MIN_PASSWORD_LENGTH = 8
 AUTH_STATUS_ACTIVE = "active"
 AUTH_STATUS_PENDING_SIGNUP = "pending_signup"
@@ -20,7 +20,7 @@ class TranscriberAuthError(ValueError):
 def validate_login_id(login_id: str) -> str:
     normalized = login_id.strip()
     if not LOGIN_ID_PATTERN.fullmatch(normalized):
-        raise TranscriberAuthError("로그인 ID는 영문·숫자 8자여야 합니다")
+        raise TranscriberAuthError("로그인 ID는 영문·숫자 8자 이내여야 합니다")
     return normalized
 
 

@@ -35,10 +35,9 @@ export default function TranscriberLogin({ onSuccess, onSignup }: TranscriberLog
           value={loginId}
           onChange={(event) => setLoginId(event.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 8))}
           onClear={() => setLoginId("")}
-          placeholder="로그인 ID (영문·숫자 8자)"
+          placeholder="로그인 ID (영문·숫자 8자 이내)"
           autoComplete="username"
           required
-          minLength={8}
           maxLength={8}
         />
 

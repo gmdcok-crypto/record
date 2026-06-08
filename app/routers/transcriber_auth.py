@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/transcriber/auth", tags=["transcriber-auth"])
 
 
 class TranscriberSignupRequest(BaseModel):
-    login_id: str = Field(min_length=8, max_length=8)
+    login_id: str = Field(min_length=1, max_length=8)
     password: str = Field(min_length=8)
     name: str
     phone: str | None = None
@@ -37,7 +37,7 @@ class TranscriberSignupRequest(BaseModel):
 
 
 class TranscriberLoginRequest(BaseModel):
-    login_id: str = Field(min_length=8, max_length=8)
+    login_id: str = Field(min_length=1, max_length=8)
     password: str = Field(min_length=8)
 
     @field_validator("login_id")
@@ -85,7 +85,7 @@ def _auth_error_to_http(exc: TranscriberAuthError) -> HTTPException:
 @router.get("/check-login-id")
 def check_login_id_available(
     db: Annotated[Session, Depends(get_db)],
-    login_id: str = Query(..., min_length=8, max_length=8),
+    login_id: str = Query(..., min_length=1, max_length=8),
 ) -> dict:
     try:
         normalized = validate_login_id(login_id)

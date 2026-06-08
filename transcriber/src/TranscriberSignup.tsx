@@ -34,8 +34,8 @@ export default function TranscriberSignup({ onSuccess, onLogin }: TranscriberSig
   const verifyLoginId = async () => {
     const normalized = normalizeLoginId(loginId);
     setLoginId(normalized);
-    if (normalized.length !== 8) {
-      setLoginIdHint({ text: "로그인 ID는 영문·숫자 8자여야 합니다.", tone: "error" });
+    if (!normalized) {
+      setLoginIdHint({ text: "로그인 ID를 입력해 주세요.", tone: "error" });
       return;
     }
     setCheckingLoginId(true);
@@ -61,8 +61,8 @@ export default function TranscriberSignup({ onSuccess, onLogin }: TranscriberSig
     setError("");
 
     const normalizedLoginId = normalizeLoginId(loginId);
-    if (normalizedLoginId.length !== 8) {
-      setError("로그인 ID는 영문·숫자 8자여야 합니다.");
+    if (!normalizedLoginId) {
+      setError("로그인 ID를 입력해 주세요.");
       return;
     }
     if (password.length < 8) {
@@ -121,7 +121,7 @@ export default function TranscriberSignup({ onSuccess, onLogin }: TranscriberSig
               setLoginId("");
               setLoginIdHint(null);
             }}
-            placeholder="로그인 ID (영문·숫자 8자)"
+            placeholder="로그인 ID (영문·숫자 8자 이내)"
             autoComplete="username"
             required
             maxLength={8}
