@@ -11,6 +11,7 @@ from app.models.admin_models import (
     Job,
     JobAssignment,
     JobStatusLog,
+    Member,
     Settlement,
     SettlementItem,
     Transcriber,
@@ -37,6 +38,36 @@ def ensure_seed_data(db: Session) -> Client:
 
     db.commit()
     db.refresh(client)
+    return client
+
+
+def member_client_code(member_id: int) -> str:
+    return f"MEMBER-{member_id:06d}"
+
+
+def get_or_create_client_for_member(db: Session, member: Member) -> Client:
+    client_code = member_client_code(member.id)
+    client = db.scalar(select(Client).where(Client.client_code == client_code))
+    if client is None:
+        client = Client(
+            client_code=client_code,
+            name=member.name,
+            contact_email=member.email,
+            contact_phone=member.phone,
+        )
+        db.add(client)
+        db.flush()
+        return client
+
+    if (
+        client.name != member.name
+        or client.contact_email != member.email
+        or client.contact_phone != member.phone
+    ):
+        client.name = member.name
+        client.contact_email = member.email
+        client.contact_phone = member.phone
+        db.flush()
     return client
 
 
@@ -88,8 +119,12 @@ def create_job_record(
     voice_key: str,
     transcript_key: str | None = None,
     transcript_json: dict | None = None,
+    member: Member | None = None,
 ) -> Job:
-    client = ensure_seed_data(db)
+    if member is not None:
+        client = get_or_create_client_for_member(db, member)
+    else:
+        client = ensure_seed_data(db)
     admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     due_at = now + timedelta(hours=24)
@@ -271,8 +306,12 @@ def serialize_job(db: Session, job: Job, *, transcript_json: dict, audio_url: st
     }
 
 
-def list_client_jobs(db: Session) -> list[dict]:
-    rows = db.scalars(select(Job).order_by(Job.updated_at.desc())).all()
+def list_client_jobs(db: Session, member: Member | None = None) -> list[dict]:
+    stmt = select(Job).order_by(Job.updated_at.desc())
+    if member is not None:
+        client = get_or_create_client_for_member(db, member)
+        stmt = stmt.where(Job.client_id == client.id)
+    rows = db.scalars(stmt).all()
     result: list[dict] = []
     for job in rows:
         result.append(

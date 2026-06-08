@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.dependencies.member_auth import get_optional_current_member
+from app.models.admin_models import Member
 from app.db import ensure_db_initialized, get_db, get_engine
 from app.services.audio import remux_faststart, should_faststart
 from app.services.admin_events import publish_admin_event, stream_admin_events
@@ -141,8 +143,11 @@ def _ensure_job_exists(job_id: str) -> None:
 
 
 @router.get("")
-def list_jobs(db: Annotated[Session, Depends(get_db)]) -> dict:
-    return {"jobs": list_client_jobs(db)}
+def list_jobs(
+    db: Annotated[Session, Depends(get_db)],
+    member: Annotated[Member | None, Depends(get_optional_current_member)] = None,
+) -> dict:
+    return {"jobs": list_client_jobs(db, member=member)}
 
 
 @router.delete("/{job_id}")

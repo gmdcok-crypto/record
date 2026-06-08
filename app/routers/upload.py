@@ -1,11 +1,15 @@
 from pathlib import Path
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
+from app.dependencies.member_auth import get_optional_current_member
+from app.models.admin_models import Member
 from app.services.audio import remux_faststart, should_faststart
 from app.services.admin_events import publish_admin_event
 from app.services.job_store import create_job_record, find_job_by_filename
@@ -76,6 +80,7 @@ class VoiceUploadResponse(BaseModel):
 async def upload_voice(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    member: Annotated[Member | None, Depends(get_optional_current_member)] = None,
 ) -> VoiceUploadResponse:
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required")
@@ -120,6 +125,7 @@ async def upload_voice(
         filename=upload_result.get("filename", file.filename),
         content_type=content_type,
         voice_key=upload_result["object_key"],
+        member=member,
     )
     publish_admin_event("job_created", {"job_id": job.job_id, "status": job.status})
 

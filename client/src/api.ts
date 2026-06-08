@@ -122,10 +122,14 @@ export async function uploadVoice(
 ): Promise<UploadResponse> {
   const form = new FormData();
   form.append("file", file);
+  const token = localStorage.getItem(MEMBER_TOKEN_KEY);
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${apiBase()}/api/upload/voice`);
+    if (token) {
+      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    }
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && onProgress) {
@@ -163,7 +167,12 @@ export async function fetchJob(jobId: string): Promise<JobResponse> {
 }
 
 export async function fetchClientJobs(): Promise<JobArchiveItem[]> {
-  const res = await fetch(`${apiBase()}/api/jobs`);
+  const token = localStorage.getItem(MEMBER_TOKEN_KEY);
+  const headers: HeadersInit = { Accept: "application/json" };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  const res = await fetch(`${apiBase()}/api/jobs`, { headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(parseErrorDetail(err));
