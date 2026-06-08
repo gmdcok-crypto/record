@@ -285,6 +285,10 @@ export type MemberProfile = {
   phone: string | null;
 };
 
+export function clearMemberSession(): void {
+  localStorage.removeItem(MEMBER_TOKEN_KEY);
+}
+
 export async function fetchMemberMe(): Promise<MemberProfile | null> {
   const token = localStorage.getItem(MEMBER_TOKEN_KEY);
   if (!token) return null;
@@ -293,9 +297,23 @@ export async function fetchMemberMe(): Promise<MemberProfile | null> {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
-    if (res.status === 401) localStorage.removeItem(MEMBER_TOKEN_KEY);
+    if (res.status === 401) clearMemberSession();
     return null;
   }
   const data = await res.json();
+  return data.member as MemberProfile;
+}
+
+export async function loginMember(email: string, password: string): Promise<MemberProfile> {
+  const res = await fetch(`${apiBase()}/api/member/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data) || "로그인에 실패했습니다.");
+  }
+  localStorage.setItem(MEMBER_TOKEN_KEY, data.access_token);
   return data.member as MemberProfile;
 }

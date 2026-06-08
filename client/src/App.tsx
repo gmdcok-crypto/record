@@ -8,6 +8,7 @@ import {
   fetchJob,
   fetchMemberMe,
   bootstrapMemberTokenFromUrl,
+  clearMemberSession,
   resolveUrl,
   saveTranscript,
   speakerLabel,
@@ -17,10 +18,13 @@ import {
   type JobResponse,
   type TranscriptJson,
   type TranscriptSegment,
+  type MemberProfile,
   type UploadResponse,
 } from "./api";
+import MemberLogin from "./MemberLogin";
 
 type Step = "idle" | "uploading" | "ready" | "error";
+type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 type ClientTab = "upload" | "archive" | "edit";
 type EditableSegment = TranscriptSegment & { id: string };
 
@@ -28,6 +32,8 @@ const EDITABLE_JOB_STATUSES = new Set(["first_done", "client_editing"]);
 
 const ACCEPT = "audio/*,video/mp4,video/webm,.wav,.mp3,.m4a,.flac,.ogg";
 const GUEST_CLIENT_NAME = "의뢰인";
+const INTRO_SIGNUP_URL =
+  import.meta.env.VITE_INTRO_URL?.replace(/\/$/, "") || "https://record-voi.netlify.app";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -185,6 +191,7 @@ export default function App() {
   const [cancelTarget, setCancelTarget] = useState<JobArchiveItem | null>(null);
   const [duplicateDialogMessage, setDuplicateDialogMessage] = useState("");
   const [activeTab, setActiveTab] = useState<ClientTab>("archive");
+  const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
   const [memberName, setMemberName] = useState<string | null>(null);
   const segmentEndRef = useRef<number | null>(null);
 
@@ -215,6 +222,41 @@ export default function App() {
     }
   };
 
+  const restoreSession = async () => {
+    bootstrapMemberTokenFromUrl();
+    const member = await fetchMemberMe();
+    if (member) {
+      setMemberName(member.name);
+      setAuthStatus("authenticated");
+      return member;
+    }
+    setMemberName(null);
+    setAuthStatus("unauthenticated");
+    return null;
+  };
+
+  const handleLoginSuccess = (member: MemberProfile) => {
+    setMemberName(member.name);
+    setAuthStatus("authenticated");
+    setError("");
+    void refreshArchive();
+  };
+
+  const handleLogout = () => {
+    clearMemberSession();
+    setMemberName(null);
+    setAuthStatus("unauthenticated");
+    setArchive([]);
+    setJob(null);
+    setSegments([]);
+    setSelectedFiles([]);
+    setStep("idle");
+    setMessage("");
+    setError("");
+    setActiveTab("archive");
+    resetUploadUi();
+  };
+
   useEffect(() => {
     checkHealth()
       .then((h) => {
@@ -225,10 +267,8 @@ export default function App() {
         setR2Ready(false);
         setDbReady(false);
       });
-    bootstrapMemberTokenFromUrl();
-    void refreshArchive();
-    void fetchMemberMe().then((member) => {
-      if (member?.name) setMemberName(member.name);
+    void restoreSession().then((member) => {
+      if (member) void refreshArchive();
     });
   }, []);
 
@@ -526,14 +566,35 @@ export default function App() {
     { id: "edit", label: "편집", badge: pendingReviewCount || undefined },
   ];
 
+  if (authStatus === "loading") {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-slate-950 text-slate-400">
+        로그인 확인 중…
+      </div>
+    );
+  }
+
+  if (authStatus === "unauthenticated") {
+    return <MemberLogin signupUrl={INTRO_SIGNUP_URL} onSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="min-h-dvh bg-slate-950 text-slate-100">
       <div className="mx-auto flex min-h-dvh max-w-3xl flex-col px-4 pb-6 pt-4 lg:max-w-4xl lg:px-6">
-        <header className="mb-4">
-          <p className="text-sm font-semibold text-blue-300">의뢰인 녹취록</p>
-          <h1 className="mt-1 text-2xl font-bold text-white">
-            {memberName ? `${memberName}님` : GUEST_CLIENT_NAME}
-          </h1>
+        <header className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-blue-300">의뢰인 녹취록</p>
+            <h1 className="mt-1 text-2xl font-bold text-white">
+              {memberName ? `${memberName}님` : GUEST_CLIENT_NAME}
+            </h1>
+          </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="shrink-0 rounded-xl border border-slate-700 px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+          >
+            로그아웃
+          </button>
         </header>
 
         <nav className="sticky top-0 z-20 -mx-4 mb-4 border-b border-slate-800 bg-slate-950/95 px-4 backdrop-blur lg:-mx-6 lg:px-6">
