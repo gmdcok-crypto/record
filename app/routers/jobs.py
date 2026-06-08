@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.dependencies.member_auth import get_optional_current_member
 from app.dependencies.transcriber_auth import get_current_transcriber, get_optional_current_transcriber
-from app.models.admin_models import Member, Transcriber
+from app.models.admin_models import Job, Member, Transcriber
 from app.db import ensure_db_initialized, get_db, get_engine
 from app.services.audio import remux_faststart, should_faststart
 from app.services.admin_events import publish_admin_event, stream_admin_events
