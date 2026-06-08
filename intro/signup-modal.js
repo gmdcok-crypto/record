@@ -5,6 +5,7 @@ const API_FETCH_OPTIONS = {
 };
 
 const RAILWAY_API_BASE = "https://record-production.up.railway.app";
+const CLIENT_PWA_URL = "https://record-user.netlify.app/";
 
 if ("serviceWorker" in navigator) {
   void navigator.serviceWorker.getRegistrations().then((regs) => {
@@ -31,7 +32,7 @@ const API_BASE = (() => {
   return origin || RAILWAY_API_BASE;
 })();
 const TOKEN_KEY = "member_access_token";
-const CLIENT_URL = `${API_BASE}/`;
+const CLIENT_URL = CLIENT_PWA_URL;
 const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[#?!@$%^&*\-]).{8,16}$/;
 const EMAIL_PATTERN = /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/;
 
