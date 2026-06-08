@@ -128,7 +128,7 @@ function mapClientJobStatus(status: string): string {
     case "working":
       return "작업 중";
     case "first_done":
-      return "확인요청";
+      return "검토요망";
     case "client_editing":
       return "수정 중";
     case "review_waiting":
@@ -176,7 +176,7 @@ function mapProjectStatus(status: string): string {
     case "working":
       return "작업 중";
     case "client_review":
-      return "확인 대기";
+      return "검토요망";
     case "completed":
       return "완료";
     case "empty":

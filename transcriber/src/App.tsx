@@ -52,7 +52,7 @@ function mapProjectStatus(status: string): string {
     case "working":
       return "작업 중";
     case "client_review":
-      return "의뢰인 확인";
+      return "의뢰인 검토중";
     case "completed":
       return "완료";
     default:
@@ -67,7 +67,7 @@ function mapFileStatusLabel(status: string): string {
     case "working":
       return "초벌 작성 중";
     case "first_done":
-      return "의뢰인 확인";
+      return "의뢰인 검토중";
     case "client_editing":
       return "의뢰인 수정 중";
     case "review_waiting":
@@ -405,7 +405,7 @@ export default function App() {
     try {
       const result = await deliverDraftToClient(job.job_id, currentTranscript);
       setJob({ ...job, transcript_json: result.transcript_json, status: result.status });
-      setMessage("의뢰인에게 초벌을 전달했습니다. 의뢰인 화면에서 확인요청 상태로 검토할 수 있습니다.");
+      setMessage("의뢰인에게 초벌을 전달했습니다. 의뢰인 화면에서 검토요망 상태로 확인할 수 있습니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "전달 실패");
     } finally {
