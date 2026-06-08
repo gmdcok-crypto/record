@@ -571,6 +571,7 @@ def dashboard_overview(db: Session) -> dict:
         if job.payment_status != "paid"
     )
 
+    from app.services.member_auth import list_members_admin
     from app.services.project_store import list_projects
 
     return {
@@ -584,6 +585,7 @@ def dashboard_overview(db: Session) -> dict:
             "outstanding": outstanding,
         },
         "projects": list_projects(db, include_files=True),
+        "members": list_members_admin(db),
         "jobs": [
             {
                 "id": job.job_id,

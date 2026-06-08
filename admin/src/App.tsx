@@ -11,6 +11,7 @@ import {
   fetchJob,
   updateInvoiceStatus,
   updateJobStatus,
+  updateMemberActive,
   updateSettlementStatus,
   updateTranscriber,
   type AdminOverview,
@@ -22,6 +23,7 @@ type MenuKey =
   | "jobs"
   | "assignments"
   | "transcribers"
+  | "members"
   | "progress"
   | "settlements"
   | "sales"
@@ -87,6 +89,19 @@ type ProjectItem = {
   completedCount: number;
   assignee: string;
   files: ProjectFileItem[];
+};
+
+type MemberItem = {
+  id: number;
+  email: string;
+  name: string;
+  phone: string;
+  isActive: boolean;
+  createdAt: string;
+  clientId: number | null;
+  clientCode: string;
+  projectCount: number;
+  jobCount: number;
 };
 
 type Transcriber = {
@@ -155,6 +170,7 @@ const MENU_BASE: Array<Omit<MenuItem, "count">> = [
   { key: "jobs", label: "의뢰 / 파일 관리" },
   { key: "assignments", label: "배정 관리" },
   { key: "transcribers", label: "속기사 관리" },
+  { key: "members", label: "회원 관리" },
   { key: "progress", label: "진행 현황" },
   { key: "settlements", label: "정산 관리" },
   { key: "sales", label: "매출 관리" },
@@ -423,6 +439,8 @@ function App() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [assignProjectTarget, setAssignProjectTarget] = useState<ProjectItem | null>(null);
   const [detailProject, setDetailProject] = useState<ProjectItem | null>(null);
+  const [memberQuery, setMemberQuery] = useState("");
+  const [detailMember, setDetailMember] = useState<MemberItem | null>(null);
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [selectedTranscriberCode, setSelectedTranscriberCode] = useState("");
   const [transcriberModalOpen, setTranscriberModalOpen] = useState(false);
@@ -517,6 +535,21 @@ function App() {
       settlementAmount: job.settlement_amount,
       paymentStatus: mapPaymentStatus(job.payment_status),
       settlementStatus: mapSettlementStatus(job.settlement_status),
+    }));
+  }, [overview]);
+
+  const members = useMemo<MemberItem[]>(() => {
+    return (overview?.members ?? []).map((member) => ({
+      id: member.id,
+      email: member.email,
+      name: member.name,
+      phone: member.phone || "-",
+      isActive: member.is_active,
+      createdAt: formatDateTime(member.created_at),
+      clientId: member.client_id,
+      clientCode: member.client_code,
+      projectCount: member.project_count,
+      jobCount: member.job_count,
     }));
   }, [overview]);
 
@@ -784,13 +817,32 @@ function App() {
           };
         case "transcribers":
           return { ...item, count: `${transcribers.length}` };
+        case "members":
+          return { ...item, count: `${members.length}` };
         case "progress":
           return { ...item, count: `${jobs.filter((job) => job.status !== "최종 완료").length}` };
         default:
           return item;
       }
     });
-  }, [jobs, transcribers]);
+  }, [jobs, transcribers, members]);
+
+  const visibleMembers = useMemo(() => {
+    const q = memberQuery.trim().toLowerCase();
+    if (!q) return members;
+    return members.filter((member) => {
+      const haystack = [String(member.id), member.email, member.name, member.phone, member.clientCode].join(" ").toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [members, memberQuery]);
+
+  const memberProjects = useMemo(() => {
+    if (!detailMember?.clientId) return [];
+    return projects.filter((project) => {
+      const overviewProject = overview?.projects?.find((item) => item.project_id === project.id);
+      return overviewProject?.client.id === detailMember.clientId;
+    });
+  }, [detailMember, projects, overview]);
 
   const visibleProjects = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -1151,6 +1203,97 @@ function App() {
     </div>
   );
 
+  const toggleMemberActive = async (member: MemberItem) => {
+    await runAdminAction("회원 상태 변경 중입니다.", async () => {
+      const updated = await updateMemberActive(member.id, !member.isActive);
+      setDetailMember((current) =>
+        current?.id === member.id
+          ? {
+              ...current,
+              isActive: updated.is_active,
+            }
+          : current,
+      );
+    });
+  };
+
+  const renderMembers = () => (
+    <SectionCard title="회원 관리">
+      <div className="mb-4">
+        <input
+          value={memberQuery}
+          onChange={(event) => setMemberQuery(event.target.value)}
+          placeholder="이름, 이메일, 휴대폰, 의뢰인 코드 검색"
+          className="w-full max-w-xl rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-cyan-400"
+        />
+      </div>
+      <div className="overflow-hidden rounded-3xl border border-white/10">
+        {visibleMembers.length === 0 ? (
+          <EmptyState message="표시할 회원이 없습니다." />
+        ) : (
+          <>
+            <div className="hidden grid-cols-[0.6fr_1fr_1fr_0.9fr_0.7fr_0.7fr_0.7fr_1fr] gap-4 bg-slate-950/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 lg:grid">
+              <span>ID</span>
+              <span>이름</span>
+              <span>이메일</span>
+              <span>휴대폰</span>
+              <span>프로젝트</span>
+              <span>파일</span>
+              <span>상태</span>
+              <span>동작</span>
+            </div>
+            <div className="divide-y divide-white/5">
+              {visibleMembers.map((member) => (
+                <div
+                  key={member.id}
+                  className="grid gap-4 bg-slate-950/40 px-4 py-4 lg:grid-cols-[0.6fr_1fr_1fr_0.9fr_0.7fr_0.7fr_0.7fr_1fr] lg:items-center"
+                >
+                  <div className="text-sm text-slate-300">{member.id}</div>
+                  <div className="text-sm font-medium text-white">{member.name}</div>
+                  <div className="truncate text-sm text-slate-300" title={member.email}>
+                    {member.email}
+                  </div>
+                  <div className="text-sm text-slate-300">{member.phone}</div>
+                  <div className="text-sm text-slate-300">{member.projectCount}건</div>
+                  <div className="text-sm text-slate-300">{member.jobCount}건</div>
+                  <div>
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                        member.isActive ? "bg-emerald-500/15 text-emerald-300" : "bg-slate-500/15 text-slate-400"
+                      }`}
+                    >
+                      {member.isActive ? "활성" : "비활성"}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDetailMember(member)}
+                      className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200"
+                    >
+                      상세
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void toggleMemberActive(member)}
+                      className={`rounded-xl border px-3 py-2 text-xs font-medium ${
+                        member.isActive
+                          ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                      }`}
+                    >
+                      {member.isActive ? "비활성화" : "활성화"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </SectionCard>
+  );
+
   const renderTranscribers = () => (
     <SectionCard
       title="속기사 관리"
@@ -1435,6 +1578,8 @@ function App() {
         return renderAssignments();
       case "transcribers":
         return renderTranscribers();
+      case "members":
+        return renderMembers();
       case "progress":
         return renderProgress();
       case "settlements":
@@ -1603,6 +1748,100 @@ function App() {
                 </div>
               </div>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {detailMember ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-[28px] border border-white/10 bg-slate-950 p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-violet-300">회원 상세</p>
+                <h3 className="mt-1 text-2xl font-semibold text-white">{detailMember.name}</h3>
+                <p className="mt-2 text-sm text-slate-400">{detailMember.email}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailMember(null)}
+                className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300"
+              >
+                닫기
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                <p className="text-xs text-slate-500">회원 ID</p>
+                <p className="mt-1 text-sm text-white">{detailMember.id}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                <p className="text-xs text-slate-500">상태</p>
+                <p className="mt-1 text-sm text-white">{detailMember.isActive ? "활성" : "비활성"}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                <p className="text-xs text-slate-500">휴대폰</p>
+                <p className="mt-1 text-sm text-white">{detailMember.phone}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                <p className="text-xs text-slate-500">가입일</p>
+                <p className="mt-1 text-sm text-white">{detailMember.createdAt}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 sm:col-span-2">
+                <p className="text-xs text-slate-500">연결 의뢰인 코드</p>
+                <p className="mt-1 font-mono text-sm text-white">{detailMember.clientCode}</p>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <p className="mb-3 text-sm font-semibold text-slate-200">
+                프로젝트 ({detailMember.projectCount}건) · 파일 ({detailMember.jobCount}건)
+              </p>
+              {memberProjects.length ? (
+                <div className="space-y-2">
+                  {memberProjects.map((project) => (
+                    <div
+                      key={project.id}
+                      className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-white">{project.title}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          진행 {project.completedCount}/{project.fileCount} · {project.statusLabel}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDetailMember(null);
+                          openProjectDetailModal(project);
+                          setActiveMenu("jobs");
+                        }}
+                        className="shrink-0 rounded-xl border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-200"
+                      >
+                        프로젝트 보기
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState message="아직 등록된 프로젝트가 없습니다." />
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => void toggleMemberActive(detailMember)}
+                className={`rounded-2xl px-4 py-2 text-sm font-semibold ${
+                  detailMember.isActive
+                    ? "border border-amber-500/30 bg-amber-500/10 text-amber-300"
+                    : "bg-emerald-500 text-slate-950"
+                }`}
+              >
+                {detailMember.isActive ? "계정 비활성화" : "계정 활성화"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

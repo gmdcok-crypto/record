@@ -1,9 +1,10 @@
 import re
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.admin_models import Member
+from app.models.admin_models import Client, Job, Member, Project
+from app.services.job_store import member_client_code
 from app.services.passwords import hash_password, verify_password
 
 EMAIL_PATTERN = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
@@ -97,4 +98,42 @@ def authenticate_member(db: Session, *, email: str, password: str) -> Member:
         raise MemberAuthError("비활성화된 계정입니다")
     if not verify_password(password, member.password_hash):
         raise MemberAuthError("이메일 또는 비밀번호가 올바르지 않습니다")
+    return member
+
+
+def serialize_member_admin(db: Session, member: Member) -> dict:
+    client_code = member_client_code(member.id)
+    client = db.scalar(select(Client).where(Client.client_code == client_code))
+    project_count = 0
+    job_count = 0
+    if client is not None:
+        project_count = int(
+            db.scalar(select(func.count()).select_from(Project).where(Project.client_id == client.id)) or 0
+        )
+        job_count = int(db.scalar(select(func.count()).select_from(Job).where(Job.client_id == client.id)) or 0)
+
+    return {
+        "id": member.id,
+        "email": member.email,
+        "name": member.name,
+        "phone": member.phone,
+        "is_active": bool(member.is_active),
+        "created_at": member.created_at.isoformat() if member.created_at else None,
+        "updated_at": member.updated_at.isoformat() if member.updated_at else None,
+        "client_id": client.id if client else None,
+        "client_code": client_code,
+        "project_count": project_count,
+        "job_count": job_count,
+    }
+
+
+def list_members_admin(db: Session) -> list[dict]:
+    members = db.scalars(select(Member).order_by(Member.created_at.desc())).all()
+    return [serialize_member_admin(db, member) for member in members]
+
+
+def set_member_active(db: Session, member: Member, *, is_active: bool) -> Member:
+    member.is_active = 1 if is_active else 0
+    db.commit()
+    db.refresh(member)
     return member

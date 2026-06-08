@@ -128,9 +128,24 @@ export type AdminOverviewProject = {
   files?: AdminOverviewProjectFile[];
 };
 
+export type AdminOverviewMember = {
+  id: number;
+  email: string;
+  name: string;
+  phone: string | null;
+  is_active: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+  client_id: number | null;
+  client_code: string;
+  project_count: number;
+  job_count: number;
+};
+
 export type AdminOverview = {
   stats: AdminOverviewStats;
   projects?: AdminOverviewProject[];
+  members?: AdminOverviewMember[];
   jobs: AdminOverviewJob[];
   transcribers: AdminOverviewTranscriber[];
   settlements: AdminOverviewSettlement[];
@@ -183,6 +198,22 @@ export async function fetchAdminOverview(): Promise<AdminOverview> {
     throw await parseApiError(res, "관리자 데이터를 불러올 수 없습니다");
   }
   return res.json();
+}
+
+export async function updateMemberActive(memberId: number, isActive: boolean): Promise<AdminOverviewMember> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/members/${memberId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ is_active: isActive }),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "회원 상태 변경 실패");
+  }
+  const data = (await res.json()) as { member?: AdminOverviewMember };
+  if (!data.member) {
+    throw new Error("회원 상태 변경 실패");
+  }
+  return data.member;
 }
 
 export async function assignProject(

@@ -39,6 +39,7 @@ from app.services.job_store import (
     update_transcriber,
 )
 from app.services.pdf_export import build_transcript_pdf
+from app.services.member_auth import get_member_by_id, serialize_member_admin, set_member_active
 from app.services.transcriber_auth import TranscriberAuthError, revoke_transcriber_auth
 from app.services.r2 import (
     create_download_url,
@@ -70,6 +71,10 @@ class ExportTranscriptPdfRequest(BaseModel):
 class JobAssignRequest(BaseModel):
     transcriber_code: str
     note: str | None = None
+
+
+class MemberActiveUpdateRequest(BaseModel):
+    is_active: bool
 
 
 class AdminTranscriberUpdateRequest(BaseModel):
@@ -252,6 +257,25 @@ def admin_events() -> StreamingResponse:
 @router.get("/admin/transcribers")
 def admin_transcribers(db: Annotated[Session, Depends(get_db)]) -> dict:
     return {"transcribers": dashboard_overview(db)["transcribers"]}
+
+
+@router.get("/admin/members")
+def admin_members(db: Annotated[Session, Depends(get_db)]) -> dict:
+    return {"members": dashboard_overview(db)["members"]}
+
+
+@router.patch("/admin/members/{member_id}")
+def admin_update_member_active(
+    member_id: int,
+    body: MemberActiveUpdateRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    member = get_member_by_id(db, member_id)
+    if member is None:
+        raise HTTPException(status_code=404, detail="회원을 찾을 수 없습니다.")
+    member = set_member_active(db, member, is_active=body.is_active)
+    publish_admin_event("member_updated", {"member_id": member.id, "is_active": bool(member.is_active)})
+    return {"member": serialize_member_admin(db, member)}
 
 
 @router.post("/admin/jobs/{job_id}/assign")
