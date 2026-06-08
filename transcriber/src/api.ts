@@ -149,6 +149,51 @@ export async function fetchTranscriberMe(): Promise<TranscriberAuthProfile | nul
   return data.transcriber as TranscriberAuthProfile;
 }
 
+export type TranscriberSignupInput = {
+  login_id: string;
+  password: string;
+  name: string;
+  phone: string;
+  resident_id: string;
+  bank_name: string;
+  account_number: string;
+};
+
+export async function checkTranscriberLoginId(loginId: string): Promise<boolean> {
+  const res = await fetch(
+    `${apiBase()}/api/transcriber/auth/check-login-id?login_id=${encodeURIComponent(loginId.trim())}`,
+    { headers: { Accept: "application/json" } },
+  );
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(data) || "로그인 ID 확인에 실패했습니다.");
+  }
+  const data = (await res.json()) as { available?: boolean };
+  return Boolean(data.available);
+}
+
+export async function signupTranscriber(input: TranscriberSignupInput): Promise<TranscriberAuthProfile> {
+  const res = await fetch(`${apiBase()}/api/transcriber/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      login_id: input.login_id.trim(),
+      password: input.password,
+      name: input.name.trim(),
+      phone: input.phone.trim(),
+      resident_id: input.resident_id.trim(),
+      bank_name: input.bank_name.trim(),
+      account_number: input.account_number.trim(),
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data) || "회원가입에 실패했습니다.");
+  }
+  localStorage.setItem(TRANSCRIBER_TOKEN_KEY, data.access_token);
+  return data.transcriber as TranscriberAuthProfile;
+}
+
 export async function loginTranscriber(loginId: string, password: string): Promise<TranscriberAuthProfile> {
   const res = await fetch(`${apiBase()}/api/transcriber/auth/login`, {
     method: "POST",

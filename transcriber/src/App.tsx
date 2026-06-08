@@ -18,8 +18,10 @@ import {
   type TranscriptSegment,
 } from "./api";
 import TranscriberLogin from "./TranscriberLogin";
+import TranscriberSignup from "./TranscriberSignup";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
+type AuthScreen = "signup" | "login";
 
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return "-";
@@ -147,6 +149,7 @@ function draftToTranscript(base: TranscriptJson | null, draft: string): Transcri
 export default function App() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
+  const [authScreen, setAuthScreen] = useState<AuthScreen>("signup");
   const [transcriberName, setTranscriberName] = useState<string | null>(null);
   const [projects, setProjects] = useState<TranscriberProject[]>([]);
   const [selectedProjectKey, setSelectedProjectKey] = useState("");
@@ -337,7 +340,10 @@ export default function App() {
   }
 
   if (authStatus === "unauthenticated") {
-    return <TranscriberLogin onSuccess={handleLoginSuccess} />;
+    if (authScreen === "signup") {
+      return <TranscriberSignup onSuccess={handleLoginSuccess} onLogin={() => setAuthScreen("login")} />;
+    }
+    return <TranscriberLogin onSuccess={handleLoginSuccess} onSignup={() => setAuthScreen("signup")} />;
   }
 
   return (

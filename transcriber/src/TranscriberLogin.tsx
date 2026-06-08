@@ -3,9 +3,10 @@ import { loginTranscriber, type TranscriberAuthProfile } from "./api";
 
 type TranscriberLoginProps = {
   onSuccess: (transcriber: TranscriberAuthProfile) => void;
+  onSignup: () => void;
 };
 
-export default function TranscriberLogin({ onSuccess }: TranscriberLoginProps) {
+export default function TranscriberLogin({ onSuccess, onSignup }: TranscriberLoginProps) {
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -78,8 +79,11 @@ export default function TranscriberLogin({ onSuccess }: TranscriberLoginProps) {
           </button>
         </form>
 
-        <p className="mt-5 text-center text-sm text-slate-500">
-          최초 이용 시 관리자에게 등록 요청 후 가입 절차를 진행해 주세요.
+        <p className="mt-5 text-center text-sm text-slate-400">
+          아직 계정이 없으신가요?{" "}
+          <button type="button" onClick={onSignup} className="font-semibold text-cyan-400 hover:text-cyan-300">
+            회원가입
+          </button>
         </p>
       </div>
     </div>
