@@ -272,6 +272,24 @@ export async function fetchTranscriberProfile(): Promise<TranscriberProfile> {
   return res.json();
 }
 
+export type AiDraftResponse = {
+  status: string;
+  job_id: string;
+  transcript_json: TranscriptJson;
+};
+
+export async function runAiDraft(jobId: string): Promise<AiDraftResponse> {
+  const res = await fetch(`${apiBase()}/api/jobs/transcriber/${jobId}/ai-draft`, {
+    method: "POST",
+    headers: transcriberAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err));
+  }
+  return res.json();
+}
+
 export async function saveTranscript(jobId: string, transcript: TranscriptJson): Promise<void> {
   const res = await fetch(`${apiBase()}/api/jobs/${jobId}/transcript`, {
     method: "PUT",

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.config import settings
-from app.services.r2 import get_object_bytes, get_object_metadata, get_voice_object_key, save_transcript_json
+from app.services.job_transcription import transcribe_job_voice
 from app.services.soniox import transcribe_upload
 router = APIRouter(prefix="/api", tags=["transcribe"])
 
@@ -43,32 +43,13 @@ async def test_transcribe(file: UploadFile = File(...)) -> dict:
 
 @router.post("/transcribe/job/{job_id}")
 def transcribe_job(job_id: str) -> dict:
-    if not settings.soniox_api_key:
-        raise HTTPException(status_code=503, detail="SONIOX_API_KEY is not configured")
-
     try:
-        voice_key = get_voice_object_key(job_id)
+        transcript_json, transcript_key, voice_key = transcribe_job_voice(job_id)
     except ValueError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"R2 lookup failed: {exc}") from exc
-
-    if not voice_key:
-        raise HTTPException(status_code=404, detail=f"Voice file not found for job: {job_id}")
-
-    filename = voice_key.rsplit("/", 1)[-1]
-
-    try:
-        metadata = get_object_metadata(voice_key)
-        content = get_object_bytes(voice_key)
-        transcript_json = transcribe_upload(
-            content,
-            filename,
-            metadata.get("content_type", "audio/x-m4a"),
-        )
-        transcript_key = save_transcript_json(job_id, transcript_json)
-    except ValueError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        message = str(exc)
+        if "not found" in message.lower():
+            raise HTTPException(status_code=404, detail=message) from exc
+        raise HTTPException(status_code=503, detail=message) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Transcription failed: {exc}") from exc
 

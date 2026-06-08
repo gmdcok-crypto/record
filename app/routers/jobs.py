@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.dependencies.member_auth import get_optional_current_member
-from app.dependencies.transcriber_auth import get_optional_current_transcriber
+from app.dependencies.transcriber_auth import get_current_transcriber, get_optional_current_transcriber
 from app.models.admin_models import Member, Transcriber
 from app.db import ensure_db_initialized, get_db, get_engine
 from app.services.audio import remux_faststart, should_faststart
@@ -41,6 +41,7 @@ from app.services.job_store import (
 )
 from app.services.pdf_export import build_transcript_pdf
 from app.services.member_auth import get_member_by_id, serialize_member_admin, set_member_active
+from app.services.job_transcription import transcribe_job_voice
 from app.services.transcriber_auth import TranscriberAuthError, revoke_transcriber_auth
 from app.services.r2 import (
     create_download_url,
@@ -487,6 +488,42 @@ def transcriber_profile(
         "current_load": transcriber.current_load,
         "unit_price": float(transcriber.unit_price or 0),
         "quality_score": float(transcriber.quality_score or 0),
+    }
+
+
+@router.post("/transcriber/{job_id}/ai-draft")
+def transcriber_ai_draft(
+    job_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current: Annotated[Transcriber, Depends(get_current_transcriber)],
+) -> dict:
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.assigned_transcriber_id != current.id:
+        raise HTTPException(status_code=403, detail="배정된 작업만 AI 초벌을 실행할 수 있습니다.")
+
+    try:
+        transcript_json, transcript_key, voice_key = transcribe_job_voice(job_id)
+    except ValueError as exc:
+        message = str(exc)
+        if "not found" in message.lower():
+            raise HTTPException(status_code=404, detail=message) from exc
+        raise HTTPException(status_code=503, detail=message) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Transcription failed: {exc}") from exc
+
+    mark_transcript_saved(db, job, transcript_key, transcript_json)
+    if job.status == "assigned":
+        job = set_job_status(db, job, "working", "AI 초벌 생성")
+    publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
+
+    return {
+        "status": "AI_DONE",
+        "job_id": job_id,
+        "voice_key": voice_key,
+        "transcript_key": transcript_key,
+        "transcript_json": transcript_json,
     }
 
 

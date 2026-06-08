@@ -8,6 +8,7 @@ import {
   fetchTranscriberMe,
   finalizeTranscriptPdf,
   resolveUrl,
+  runAiDraft,
   saveTranscript,
   speakerLabel,
   type JobResponse,
@@ -159,6 +160,7 @@ export default function App() {
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [aiRunning, setAiRunning] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -263,6 +265,28 @@ export default function App() {
     const key = projectKey(project);
     setSelectedProjectKey(key);
     setSelectedJobId(project.files[0]?.job_id ?? "");
+  };
+
+  const onRunAiDraft = async () => {
+    if (!job) return;
+    if (draft.trim() && !window.confirm("기존 편집 내용을 AI 초벌 결과로 덮어씁니다. 계속할까요?")) {
+      return;
+    }
+
+    setAiRunning(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await runAiDraft(job.job_id);
+      const transcript = result.transcript_json;
+      setJob({ ...job, transcript_json: transcript, status: job.status === "assigned" ? "working" : job.status });
+      setDraft(buildDraftFromTranscript(transcript));
+      setMessage("AI 초벌 작업이 완료되었습니다. 내용을 확인한 뒤 저장하세요.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "AI 초벌 작업에 실패했습니다.");
+    } finally {
+      setAiRunning(false);
+    }
   };
 
   const onSaveDraft = async () => {
@@ -461,8 +485,16 @@ export default function App() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
+                    onClick={() => void onRunAiDraft()}
+                    disabled={!job || saving || aiRunning || downloadingPdf}
+                    className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-50"
+                  >
+                    {aiRunning ? "AI 초벌 진행 중..." : "AI 초벌작업"}
+                  </button>
+                  <button
+                    type="button"
                     onClick={onSaveDraft}
-                    disabled={!job || saving}
+                    disabled={!job || saving || aiRunning}
                     className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
                   >
                     {saving ? "저장 중..." : "초벌 임시 저장"}
@@ -470,7 +502,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={onSendToClient}
-                    disabled={!job || saving}
+                    disabled={!job || saving || aiRunning}
                     className="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-50"
                   >
                     의뢰인에게 초벌 전달
@@ -478,7 +510,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={onFinalize}
-                    disabled={!job || saving}
+                    disabled={!job || saving || aiRunning}
                     className="rounded-2xl bg-violet-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50"
                   >
                     최종본 확정
@@ -486,7 +518,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={onDownloadStampedPdf}
-                    disabled={!job || downloadingPdf}
+                    disabled={!job || downloadingPdf || aiRunning}
                     className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50"
                   >
                     {downloadingPdf ? "PDF 생성 중..." : "도장 날인 PDF"}
@@ -525,8 +557,14 @@ export default function App() {
                     />
                   </div>
                   <div className="rounded-[28px] border border-white/10 bg-slate-900/70 p-5 backdrop-blur-xl">
-                    <p className="text-sm font-semibold text-violet-300">문서 편집</p>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-violet-300">문서 편집</p>
+                      {aiRunning ? (
+                        <p className="text-xs font-medium text-amber-300">음성을 분석해 초벌을 생성하는 중입니다. 잠시만 기다려 주세요.</p>
+                      ) : null}
+                    </div>
                     <textarea
+                      disabled={aiRunning}
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
                       placeholder="화자명: 발언 내용 형식으로 초벌을 작성하세요."
