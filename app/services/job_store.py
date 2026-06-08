@@ -23,6 +23,29 @@ DEFAULT_TRANSCRIBER_CODE = "TR-001"
 DEFAULT_CLIENT_CODE = "CLIENT-DEFAULT"
 DEFAULT_CLIENT_NAME = "일반 의뢰인"
 ACTIVE_JOB_STATUSES = {"assigned", "working", "first_done", "client_editing", "review_waiting"}
+CLIENT_VISIBLE_TRANSCRIPT_STATUSES = frozenset(
+    {"first_done", "client_editing", "review_waiting", "final_done", "pdf_sent"}
+)
+TRANSCRIBER_DRAFT_STATUSES = frozenset({"assigned", "working"})
+
+
+def empty_transcript_json(filename: str) -> dict:
+    return {
+        "filename": filename,
+        "text": "",
+        "plain_text": "",
+        "segments": [],
+        "tokens": [],
+        "speaker_labels": {},
+    }
+
+
+def transcript_visible_to_client(job: Job) -> bool:
+    return job.status in CLIENT_VISIBLE_TRANSCRIPT_STATUSES
+
+
+def transcriber_can_view_job_transcript(job: Job, transcriber: Transcriber | None) -> bool:
+    return transcriber is not None and job.assigned_transcriber_id == transcriber.id
 
 
 def ensure_seed_data(db: Session) -> Client:

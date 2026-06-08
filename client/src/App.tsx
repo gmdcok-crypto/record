@@ -501,6 +501,9 @@ export default function App() {
             ? "확인요청 문서를 불러왔습니다. 내용을 검토하고 수정하세요."
             : "편집 문서를 불러왔습니다.",
         );
+      } else if (data.status === "assigned" || data.status === "working") {
+        setActiveTab("archive");
+        setMessage("속기사가 초벌 작업 중입니다. 초벌 전달 후 편집 화면에서 확인할 수 있습니다.");
       } else {
         setMessage("작업을 불러왔습니다.");
       }
@@ -971,7 +974,7 @@ export default function App() {
                 />
                 <button
                   type="button"
-                  onClick={() => void loadJobById(jobIdInput, { switchToEdit: true })}
+                  onClick={() => void loadJobById(jobIdInput)}
                   disabled={busy || !jobIdInput.trim()}
                   className="rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50"
                 >
@@ -1101,7 +1104,19 @@ export default function App() {
               )}
             </div>
 
-            {job ? (
+            {job && !isEditableArchiveStatus(job.status ?? "") ? (
+              <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-5 py-10 text-center text-sm text-slate-400">
+                {job.status === "assigned" || job.status === "working" ? (
+                  <>
+                    속기사가 초벌 작업 중입니다.
+                    <br />
+                    초벌 전달 후 확인요청 상태가 되면 이 화면에서 검토·수정할 수 있습니다.
+                  </>
+                ) : (
+                  <>현재 상태에서는 편집할 수 없습니다. 보관함에서 확인요청 파일을 선택해 주세요.</>
+                )}
+              </div>
+            ) : job ? (
               <div className="space-y-4">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-300">원본 음성</label>

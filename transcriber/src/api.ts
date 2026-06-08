@@ -229,7 +229,9 @@ export function resolveUrl(path: string): string {
 }
 
 export async function fetchJob(jobId: string): Promise<JobResponse> {
-  const res = await fetch(`${apiBase()}/api/jobs/${jobId}`);
+  const res = await fetch(`${apiBase()}/api/jobs/${jobId}`, {
+    headers: transcriberAuthHeaders(),
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(parseErrorDetail(err));
@@ -277,6 +279,22 @@ export type AiDraftResponse = {
   job_id: string;
   transcript_json: TranscriptJson;
 };
+
+export async function deliverDraftToClient(
+  jobId: string,
+  transcript: TranscriptJson,
+): Promise<{ job_id: string; status: string; transcript_json: TranscriptJson }> {
+  const res = await fetch(`${apiBase()}/api/jobs/transcriber/${jobId}/deliver-draft`, {
+    method: "POST",
+    headers: { ...transcriberAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ transcript_json: transcript }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err));
+  }
+  return res.json();
+}
 
 export async function runAiDraft(jobId: string): Promise<AiDraftResponse> {
   const res = await fetch(`${apiBase()}/api/jobs/transcriber/${jobId}/ai-draft`, {

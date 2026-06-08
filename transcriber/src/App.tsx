@@ -8,6 +8,7 @@ import {
   fetchTranscriberMe,
   finalizeTranscriptPdf,
   resolveUrl,
+  deliverDraftToClient,
   runAiDraft,
   saveTranscript,
   speakerLabel,
@@ -368,7 +369,7 @@ export default function App() {
       const transcript = result.transcript_json;
       setJob({ ...job, transcript_json: transcript, status: job.status === "assigned" ? "working" : job.status });
       setSegments(buildEditableSegments(transcript));
-      setMessage("AI 초벌 작업이 완료되었습니다. 내용을 확인한 뒤 저장하세요.");
+      setMessage("AI 초벌 작업이 완료되었습니다. 검토 후 ‘의뢰인에게 초벌 전달’을 눌러 주세요.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "AI 초벌 작업에 실패했습니다.");
     } finally {
@@ -394,13 +395,17 @@ export default function App() {
 
   const onSendToClient = async () => {
     if (!job) return;
+    if (!segments.some((segment) => segment.text.trim())) {
+      setError("전달할 초벌 내용이 없습니다. AI 초벌작업을 실행하거나 직접 작성해 주세요.");
+      return;
+    }
     setSaving(true);
     setError("");
     setMessage("");
     try {
-      await saveTranscript(job.job_id, currentTranscript);
-      setJob({ ...job, transcript_json: currentTranscript });
-      setMessage("의뢰인 검토용 초벌본을 저장했습니다.");
+      const result = await deliverDraftToClient(job.job_id, currentTranscript);
+      setJob({ ...job, transcript_json: result.transcript_json, status: result.status });
+      setMessage("의뢰인에게 초벌을 전달했습니다. 의뢰인 화면에서 확인요청 상태로 검토할 수 있습니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "전달 실패");
     } finally {

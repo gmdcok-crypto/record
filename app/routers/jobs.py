@@ -32,9 +32,13 @@ from app.services.job_store import (
     list_client_jobs,
     list_transcriber_jobs,
     mark_final_pdf_saved,
+    empty_transcript_json,
     mark_transcript_saved,
     serialize_job,
     set_job_status,
+    TRANSCRIBER_DRAFT_STATUSES,
+    transcriber_can_view_job_transcript,
+    transcript_visible_to_client,
     update_invoice_status,
     update_settlement_status,
     update_transcriber,
@@ -142,6 +146,16 @@ def _pdf_response(transcript: dict) -> Response:
             "Cache-Control": "no-cache",
         },
     )
+
+
+def _resolve_job_transcript(
+    job: Job,
+    job_id: str,
+    transcriber: Transcriber | None,
+) -> dict:
+    if transcriber_can_view_job_transcript(job, transcriber) or transcript_visible_to_client(job):
+        return get_transcript_json(job_id) or empty_transcript_json(job.original_filename)
+    return empty_transcript_json(job.original_filename)
 
 
 def _ensure_job_exists(job_id: str) -> None:
@@ -527,8 +541,50 @@ def transcriber_ai_draft(
     }
 
 
+@router.post("/transcriber/{job_id}/deliver-draft")
+def transcriber_deliver_draft(
+    job_id: str,
+    body: SaveTranscriptRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current: Annotated[Transcriber, Depends(get_current_transcriber)],
+) -> dict:
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.assigned_transcriber_id != current.id:
+        raise HTTPException(status_code=403, detail="배정된 작업만 초벌을 전달할 수 있습니다.")
+    if job.status not in TRANSCRIBER_DRAFT_STATUSES | {"review_waiting"}:
+        raise HTTPException(status_code=409, detail="현재 상태에서는 초벌을 전달할 수 없습니다.")
+
+    voice_key = get_voice_object_key(job_id)
+    if not voice_key:
+        raise HTTPException(status_code=404, detail="Voice file not found")
+
+    try:
+        transcript_key = save_transcript_json(job_id, body.transcript_json)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Save failed: {exc}") from exc
+
+    mark_transcript_saved(db, job, transcript_key, body.transcript_json)
+    job = set_job_status(db, job, "first_done", "속기사 초벌 전달")
+    publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
+
+    return {
+        "job_id": job_id,
+        "status": job.status,
+        "transcript_key": transcript_key,
+        "transcript_json": body.transcript_json,
+    }
+
+
 @router.get("/{job_id}")
-def get_job(job_id: str, db: Annotated[Session, Depends(get_db)]) -> dict:
+def get_job(
+    job_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current: Annotated[Transcriber | None, Depends(get_optional_current_transcriber)] = None,
+) -> dict:
     voice_key = get_voice_object_key(job_id)
     if not voice_key:
         raise HTTPException(status_code=404, detail="Voice file not found")
@@ -537,14 +593,7 @@ def get_job(job_id: str, db: Annotated[Session, Depends(get_db)]) -> dict:
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found in database")
 
-    transcript = get_transcript_json(job_id) or {
-        "filename": job.original_filename,
-        "text": "",
-        "plain_text": "",
-        "segments": [],
-        "tokens": [],
-        "speaker_labels": {},
-    }
+    transcript = _resolve_job_transcript(job, job_id, current)
 
     return serialize_job(db, job, transcript_json=transcript, audio_url=f"/api/jobs/{job_id}/audio")
 
