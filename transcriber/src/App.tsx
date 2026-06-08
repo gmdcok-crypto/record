@@ -80,6 +80,14 @@ function mapFileStatusLabel(status: string): string {
   }
 }
 
+function jobWorkflowStatus(job: { status?: string; workflow_status?: string } | null | undefined): string {
+  return job?.workflow_status ?? job?.status ?? "";
+}
+
+function fileWorkflowStatus(file: { status: string; workflow_status?: string }): string {
+  return file.workflow_status ?? file.status;
+}
+
 function fileStatusStyle(status: string): string {
   switch (status) {
     case "final_done":
@@ -404,7 +412,13 @@ export default function App() {
     setMessage("");
     try {
       const result = await deliverDraftToClient(job.job_id, currentTranscript);
-      setJob({ ...job, transcript_json: result.transcript_json, status: result.status });
+      setJob({
+        ...job,
+        transcript_json: result.transcript_json,
+        status: result.status,
+        workflow_status: result.workflow_status ?? result.status,
+      });
+      await loadProjects();
       setMessage("의뢰인에게 초벌을 전달했습니다. 의뢰인 화면에서 검토요망 상태로 확인할 수 있습니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "전달 실패");
@@ -543,8 +557,8 @@ export default function App() {
                     >
                       <p className="truncate text-sm font-medium text-white">{file.filename}</p>
                       <p className="mt-1 text-[10px] text-slate-500">{formatDateTime(file.due_at)}</p>
-                      <span className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${fileStatusStyle(file.status)}`}>
-                        {mapFileStatusLabel(file.status)}
+                      <span className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${fileStatusStyle(fileWorkflowStatus(file))}`}>
+                        {mapFileStatusLabel(fileWorkflowStatus(file))}
                       </span>
                     </button>
                   );
@@ -589,8 +603,8 @@ export default function App() {
                     {currentProject ? (
                       <p className="mt-2 text-xs text-slate-500">
                         {currentProject.client.name} · 마감 {formatDateTime(currentProject.due_at)} ·{" "}
-                        <span className={`rounded-full px-2 py-0.5 font-semibold ${fileStatusStyle(job.status || "")}`}>
-                          {mapFileStatusLabel(job.status || "")}
+                        <span className={`rounded-full px-2 py-0.5 font-semibold ${fileStatusStyle(jobWorkflowStatus(job))}`}>
+                          {mapFileStatusLabel(jobWorkflowStatus(job))}
                         </span>
                       </p>
                     ) : null}

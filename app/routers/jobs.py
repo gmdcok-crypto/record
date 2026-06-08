@@ -574,6 +574,7 @@ def transcriber_deliver_draft(
     return {
         "job_id": job_id,
         "status": job.status,
+        "workflow_status": job.status,
         "transcript_key": transcript_key,
         "transcript_json": body.transcript_json,
     }

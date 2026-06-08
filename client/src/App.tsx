@@ -504,7 +504,7 @@ export default function App() {
         setActiveTab("edit");
         setMessage(
           workflowStatus === "first_done"
-            ? "확인요청 문서를 불러왔습니다. 내용을 검토하고 수정하세요."
+            ? "검토요망 문서를 불러왔습니다. 내용을 검토하고 수정하세요."
             : "편집 문서를 불러왔습니다.",
         );
       } else if (workflowStatus === "assigned" || workflowStatus === "working") {
@@ -963,7 +963,7 @@ export default function App() {
               <p className="text-sm font-semibold text-emerald-300">보관함</p>
               <h2 className="mt-1 text-xl font-bold text-white">프로젝트 보관함</h2>
               <p className="mt-1 text-sm text-slate-400">
-                프로젝트(사건)별로 묶여 있습니다. 확인요청 파일을 누르면 편집 탭으로 이동합니다.
+                프로젝트(사건)별로 묶여 있습니다. 검토요망 파일을 누르면 편집 탭으로 이동합니다.
               </p>
             </div>
 
@@ -1117,10 +1117,10 @@ export default function App() {
                   <>
                     속기사가 초벌 작업 중입니다.
                     <br />
-                    초벌 전달 후 확인요청 상태가 되면 이 화면에서 검토·수정할 수 있습니다.
+                    초벌 전달 후 검토요망 상태가 되면 이 화면에서 검토·수정할 수 있습니다.
                   </>
                 ) : (
-                  <>현재 상태에서는 편집할 수 없습니다. 보관함에서 확인요청 파일을 선택해 주세요.</>
+                  <>현재 상태에서는 편집할 수 없습니다. 보관함에서 검토요망 파일을 선택해 주세요.</>
                 )}
               </div>
             ) : job ? (
@@ -1218,7 +1218,7 @@ export default function App() {
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-6 py-14 text-center text-sm text-slate-400">
-                보관함에서 확인요청 항목을 선택하거나 작업번호로 문서를 불러오세요.
+                보관함에서 검토요망 항목을 선택하거나 작업번호로 문서를 불러오세요.
               </div>
             )}
           </section>

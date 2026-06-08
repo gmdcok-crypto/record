@@ -32,6 +32,7 @@ export type JobResponse = {
   transcript_json: TranscriptJson;
   title?: string;
   status?: string;
+  workflow_status?: string;
   priority?: string;
   uploaded_at?: string | null;
   due_at?: string | null;
@@ -62,6 +63,7 @@ export type TranscriberProjectFile = {
   title: string;
   filename: string;
   status: string;
+  workflow_status?: string;
   uploaded_at: string | null;
   due_at: string | null;
   assignee: string | null;
@@ -283,7 +285,7 @@ export type AiDraftResponse = {
 export async function deliverDraftToClient(
   jobId: string,
   transcript: TranscriptJson,
-): Promise<{ job_id: string; status: string; transcript_json: TranscriptJson }> {
+): Promise<{ job_id: string; status: string; workflow_status?: string; transcript_json: TranscriptJson }> {
   const res = await fetch(`${apiBase()}/api/jobs/transcriber/${jobId}/deliver-draft`, {
     method: "POST",
     headers: { ...transcriberAuthHeaders(), "Content-Type": "application/json" },
