@@ -1,14 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { formatDurationInput, parseDurationInput } from "./transcriptEditor";
 import {
   QUOTE_TIERS,
+  ZERO_HMS,
   calculateQuote,
+  createQuoteFileId,
   createQuoteSegmentId,
   formatDurationHuman,
   formatKrw,
+  formatSegmentClock,
+  hmsToMs,
+  msToHms,
   readMediaDuration,
+  sumQuoteFileDurationsMs,
   sumSelectedSegmentDurationMs,
+  type HmsTime,
+  type QuoteFileEntry,
   type QuoteSegment,
 } from "./quotePricing";
 import { playSegmentAudio } from "./segmentAudio";
@@ -17,123 +24,271 @@ const ACCEPT = "audio/*,video/mp4,video/webm,.wav,.mp3,.m4a,.flac,.ogg";
 
 type QuoteMode = "full" | "segments";
 
+const SELECT_CLASS =
+  "rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-slate-100 outline-none focus:border-cyan-500";
+
 function formatSegmentRange(startMs: number, endMs: number): string {
-  return `${formatDurationInput(startMs)} ~ ${formatDurationInput(endMs)}`;
+  return `${formatSegmentClock(startMs)} ~ ${formatSegmentClock(endMs)}`;
+}
+
+function clampHms(value: HmsTime, maxMs?: number): HmsTime {
+  if (maxMs == null) return value;
+
+  const max = msToHms(maxMs);
+  let next = { ...value };
+  if (next.hour > max.hour) next.hour = max.hour;
+  const minuteMax = next.hour === max.hour ? max.minute : 59;
+  if (next.minute > minuteMax) next.minute = minuteMax;
+  const secondMax = next.hour === max.hour && next.minute === max.minute ? max.second : 59;
+  if (next.second > secondMax) next.second = secondMax;
+  if (hmsToMs(next) > maxMs) {
+    return msToHms(maxMs);
+  }
+  return next;
+}
+
+function TimeHmsSelect({
+  value,
+  onChange,
+  maxMs,
+  label,
+}: {
+  value: HmsTime;
+  onChange: (next: HmsTime) => void;
+  maxMs?: number;
+  label: string;
+}) {
+  const max = maxMs != null ? msToHms(maxMs) : { hour: 23, minute: 59, second: 59 };
+  const minuteMax = value.hour === max.hour ? max.minute : 59;
+  const secondMax = value.hour === max.hour && value.minute === max.minute ? max.second : 59;
+
+  const update = (patch: Partial<HmsTime>) => {
+    onChange(clampHms({ ...value, ...patch }, maxMs));
+  };
+
+  return (
+    <div>
+      <span className="mb-1 block text-xs font-medium text-slate-500">{label}</span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <select
+          value={value.hour}
+          onChange={(event) => update({ hour: Number(event.target.value) })}
+          className={SELECT_CLASS}
+        >
+          {Array.from({ length: max.hour + 1 }, (_, hour) => (
+            <option key={hour} value={hour}>
+              {hour}
+            </option>
+          ))}
+        </select>
+        <span className="text-xs text-slate-500">시</span>
+        <select
+          value={value.minute}
+          onChange={(event) => update({ minute: Number(event.target.value) })}
+          className={SELECT_CLASS}
+        >
+          {Array.from({ length: minuteMax + 1 }, (_, minute) => (
+            <option key={minute} value={minute}>
+              {minute}
+            </option>
+          ))}
+        </select>
+        <span className="text-xs text-slate-500">분</span>
+        <select
+          value={value.second}
+          onChange={(event) => update({ second: Number(event.target.value) })}
+          className={SELECT_CLASS}
+        >
+          {Array.from({ length: secondMax + 1 }, (_, second) => (
+            <option key={second} value={second}>
+              {second}
+            </option>
+          ))}
+        </select>
+        <span className="text-xs text-slate-500">초</span>
+      </div>
+    </div>
+  );
+}
+
+function revokeQuoteFileUrls(files: QuoteFileEntry[]) {
+  for (const entry of files) {
+    URL.revokeObjectURL(entry.url);
+  }
 }
 
 export default function QuoteRequestTab() {
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const segmentEndRef = useRef<number | null>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [fileUrl, setFileUrl] = useState("");
-  const [durationMs, setDurationMs] = useState<number | null>(null);
-  const [loadingDuration, setLoadingDuration] = useState(false);
-  const [durationError, setDurationError] = useState("");
+  const filesRef = useRef<QuoteFileEntry[]>([]);
+  const [files, setFiles] = useState<QuoteFileEntry[]>([]);
+  const [activeFileId, setActiveFileId] = useState<string | null>(null);
   const [mode, setMode] = useState<QuoteMode>("full");
   const [segments, setSegments] = useState<QuoteSegment[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
   const [segmentForm, setSegmentForm] = useState({
-    label: "",
-    startTime: "",
-    endTime: "",
+    start: ZERO_HMS,
+    end: ZERO_HMS,
   });
   const [segmentFormError, setSegmentFormError] = useState("");
 
-  useEffect(() => {
-    return () => {
-      if (fileUrl) URL.revokeObjectURL(fileUrl);
-    };
-  }, [fileUrl]);
+  filesRef.current = files;
+
+  const activeFile = useMemo(
+    () => files.find((entry) => entry.id === activeFileId) ?? null,
+    [activeFileId, files],
+  );
+
+  const totalDurationMs = useMemo(() => sumQuoteFileDurationsMs(files), [files]);
+  const hasLoadedDuration = files.some((entry) => entry.durationMs != null && !entry.loading);
 
   const billableDurationMs = useMemo(() => {
-    if (!durationMs) return 0;
-    if (mode === "full") return durationMs;
+    if (!hasLoadedDuration) return 0;
+    if (mode === "full") return totalDurationMs;
     return sumSelectedSegmentDurationMs(segments);
-  }, [durationMs, mode, segments]);
+  }, [hasLoadedDuration, mode, segments, totalDurationMs]);
 
   const quote = useMemo(() => calculateQuote(billableDurationMs), [billableDurationMs]);
 
-  const resetFileState = () => {
-    if (fileUrl) URL.revokeObjectURL(fileUrl);
-    setFile(null);
-    setFileUrl("");
-    setDurationMs(null);
-    setDurationError("");
+  useEffect(() => {
+    return () => {
+      revokeQuoteFileUrls(filesRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!activeFileId && files.length) {
+      setActiveFileId(files[0].id);
+      return;
+    }
+    if (activeFileId && !files.some((entry) => entry.id === activeFileId)) {
+      setActiveFileId(files[0]?.id ?? null);
+    }
+  }, [activeFileId, files]);
+
+  const resetAll = () => {
+    revokeQuoteFileUrls(files);
+    setFiles([]);
+    setActiveFileId(null);
     setSegments([]);
-    setSegmentForm({ label: "", startTime: "", endTime: "" });
+    setSegmentForm({ start: ZERO_HMS, end: ZERO_HMS });
     setSegmentFormError("");
     if (inputRef.current) inputRef.current.value = "";
   };
 
-  const loadFile = async (nextFile: File) => {
-    resetFileState();
-    setLoadingDuration(true);
-    try {
-      const nextUrl = URL.createObjectURL(nextFile);
-      const nextDuration = await readMediaDuration(nextFile);
-      setFile(nextFile);
-      setFileUrl(nextUrl);
-      setDurationMs(nextDuration);
-    } catch (err) {
-      setDurationError(err instanceof Error ? err.message : "파일을 불러오지 못했습니다.");
-    } finally {
-      setLoadingDuration(false);
-    }
+  const removeFile = (fileId: string) => {
+    setFiles((prev) => {
+      const target = prev.find((entry) => entry.id === fileId);
+      if (target) URL.revokeObjectURL(target.url);
+      return prev.filter((entry) => entry.id !== fileId);
+    });
+    setSegments((prev) => prev.filter((segment) => segment.fileId !== fileId));
   };
 
-  const onSelectFile = (files: FileList | null) => {
-    const nextFile = files?.[0];
-    if (!nextFile) return;
-    void loadFile(nextFile);
+  const loadDurations = async (entries: QuoteFileEntry[]) => {
+    await Promise.all(
+      entries.map(async (entry) => {
+        try {
+          const durationMs = await readMediaDuration(entry.file);
+          setFiles((prev) =>
+            prev.map((item) =>
+              item.id === entry.id ? { ...item, durationMs, loading: false, error: "" } : item,
+            ),
+          );
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "재생 시간을 확인할 수 없습니다.";
+          setFiles((prev) =>
+            prev.map((item) =>
+              item.id === entry.id ? { ...item, durationMs: null, loading: false, error: message } : item,
+            ),
+          );
+        }
+      }),
+    );
+  };
+
+  const addFiles = (incoming: File[]) => {
+    const mediaFiles = incoming.filter((file) => file.size > 0);
+    if (!mediaFiles.length) return;
+
+    const nextEntries: QuoteFileEntry[] = mediaFiles.map((file) => ({
+      id: createQuoteFileId(),
+      file,
+      url: URL.createObjectURL(file),
+      durationMs: null,
+      loading: true,
+      error: "",
+    }));
+
+    setFiles((prev) => [...prev, ...nextEntries]);
+    if (!activeFileId) {
+      setActiveFileId(nextEntries[0].id);
+    }
+    void loadDurations(nextEntries);
+    if (inputRef.current) inputRef.current.value = "";
+  };
+
+  const onSelectFiles = (fileList: FileList | null) => {
+    if (!fileList?.length) return;
+    addFiles(Array.from(fileList));
   };
 
   const addSegment = () => {
-    if (durationMs == null) return;
+    if (!activeFile?.durationMs) return;
 
-    const start_ms = parseDurationInput(segmentForm.startTime);
-    const end_ms = parseDurationInput(segmentForm.endTime);
+    const start_ms = hmsToMs(segmentForm.start);
+    const end_ms = hmsToMs(segmentForm.end);
 
-    if (start_ms == null || end_ms == null) {
-      setSegmentFormError("시작·종료 시간을 분:초 형식으로 입력해 주세요. (예: 01:23)");
-      return;
-    }
     if (end_ms <= start_ms) {
       setSegmentFormError("종료 시간은 시작 시간보다 늦어야 합니다.");
       return;
     }
-    if (end_ms > durationMs) {
+    if (end_ms > activeFile.durationMs) {
       setSegmentFormError("종료 시간이 파일 길이를 넘을 수 없습니다.");
       return;
     }
 
     const segment: QuoteSegment = {
       id: createQuoteSegmentId(),
-      label: segmentForm.label.trim() || `구간 ${segments.length + 1}`,
+      fileId: activeFile.id,
       start_ms,
       end_ms,
       selected: true,
     };
 
     setSegments((prev) =>
-      [...prev, segment].sort((left, right) => left.start_ms - right.start_ms || left.end_ms - right.end_ms),
+      [...prev, segment].sort(
+        (left, right) =>
+          left.fileId.localeCompare(right.fileId) ||
+          left.start_ms - right.start_ms ||
+          left.end_ms - right.end_ms,
+      ),
     );
-    setSegmentForm({ label: "", startTime: "", endTime: "" });
+    setSegmentForm({ start: ZERO_HMS, end: ZERO_HMS });
     setSegmentFormError("");
   };
 
-  const playSegment = (startMs: number, endMs: number) => {
+  const playSegment = (fileId: string, startMs: number, endMs: number) => {
+    const entry = files.find((item) => item.id === fileId);
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!entry || !audio) return;
+
+    if (audio.src !== entry.url) {
+      audio.src = entry.url;
+    }
     void playSegmentAudio(audio, segmentEndRef, startMs, endMs);
   };
 
-  const setCurrentTimeToForm = (field: "startTime" | "endTime") => {
+  const setCurrentTimeToForm = (field: "start" | "end") => {
     const audio = audioRef.current;
-    if (!audio) return;
-    const value = formatDurationInput(Math.floor(audio.currentTime * 1000));
-    setSegmentForm((prev) => ({ ...prev, [field]: value }));
+    if (!audio || !activeFile?.durationMs) return;
+    const next = clampHms(msToHms(Math.floor(audio.currentTime * 1000)), activeFile.durationMs);
+    setSegmentForm((prev) => ({ ...prev, [field]: next }));
   };
+
+  const loadedFileCount = files.filter((entry) => entry.durationMs != null).length;
+  const loadingFileCount = files.filter((entry) => entry.loading).length;
 
   return (
     <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
@@ -141,7 +296,7 @@ export default function QuoteRequestTab() {
         <p className="text-sm font-semibold text-cyan-300">견적 의뢰</p>
         <h2 className="mt-1 text-xl font-bold text-white">녹취록 작성 비용 계산</h2>
         <p className="mt-1 text-sm text-slate-400">
-          음성·영상 파일을 올리면 요금표 기준으로 예상 견적을 확인할 수 있습니다.
+          음성·영상 파일을 여러 개 올릴 수 있으며, 파일 전체 모드에서는 모든 파일 재생 시간의 합으로 견적을 계산합니다.
         </p>
       </div>
 
@@ -149,73 +304,108 @@ export default function QuoteRequestTab() {
         ref={inputRef}
         type="file"
         accept={ACCEPT}
+        multiple
         className="hidden"
-        onChange={(event) => onSelectFile(event.target.files)}
+        onChange={(event) => onSelectFiles(event.target.files)}
       />
 
-      {!file ? (
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          onDragEnter={(event) => {
-            event.preventDefault();
-            setIsDragActive(true);
-          }}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setIsDragActive(true);
-          }}
-          onDragLeave={(event) => {
-            event.preventDefault();
-            if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
-            setIsDragActive(false);
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
-            setIsDragActive(false);
-            onSelectFile(event.dataTransfer.files);
-          }}
-          className={`flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-12 text-center transition ${
-            isDragActive
-              ? "border-cyan-400 bg-slate-900"
-              : "border-slate-700 bg-slate-950/80 hover:border-cyan-400 hover:bg-slate-900"
-          }`}
-        >
-          <span className="text-4xl">📋</span>
-          <span className="mt-3 font-semibold text-slate-100">견적용 파일 선택</span>
-          <span className="mt-1 text-sm text-slate-400">wav, mp3, m4a, mp4 등 · 드래그 앤 드롭 가능</span>
-        </button>
-      ) : (
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setIsDragActive(true);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setIsDragActive(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+          setIsDragActive(false);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          setIsDragActive(false);
+          onSelectFiles(event.dataTransfer.files);
+        }}
+        className={`mb-4 flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-8 text-center transition ${
+          isDragActive
+            ? "border-cyan-400 bg-slate-900"
+            : "border-slate-700 bg-slate-950/80 hover:border-cyan-400 hover:bg-slate-900"
+        }`}
+      >
+        <span className="text-3xl">📋</span>
+        <span className="mt-2 font-semibold text-slate-100">
+          {files.length ? "파일 추가" : "견적용 파일 선택"}
+        </span>
+        <span className="mt-1 text-sm text-slate-400">
+          여러 파일 선택 가능 · wav, mp3, m4a, mp4 등 · 드래그 앤 드롭
+        </span>
+      </button>
+
+      {files.length ? (
         <div className="space-y-4">
           <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-white">{file.name}</p>
-                <p className="mt-1 text-sm text-slate-400">
-                  {loadingDuration
-                    ? "재생 시간 확인 중…"
-                    : durationMs != null
-                      ? `전체 길이 ${formatDurationHuman(durationMs)}`
-                      : "재생 시간 미확인"}
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-white">
+                  업로드 파일 {files.length}개
+                  {loadedFileCount ? ` · 합계 ${formatDurationHuman(totalDurationMs)}` : ""}
                 </p>
+                {loadingFileCount ? (
+                  <p className="mt-1 text-xs text-slate-500">재생 시간 확인 중 {loadingFileCount}개…</p>
+                ) : null}
               </div>
               <button
                 type="button"
-                onClick={resetFileState}
+                onClick={resetAll}
                 className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-800"
               >
-                다른 파일
+                전체 삭제
               </button>
             </div>
 
-            {durationError ? (
-              <p className="mt-3 text-sm text-rose-300">{durationError}</p>
-            ) : fileUrl ? (
-              <audio ref={audioRef} controls preload="metadata" src={fileUrl} className="mt-3 w-full rounded-xl" />
-            ) : null}
+            <div className="space-y-2">
+              {files.map((entry) => (
+                <div
+                  key={entry.id}
+                  className={`flex flex-wrap items-center gap-3 rounded-xl border px-3 py-2.5 ${
+                    entry.id === activeFileId
+                      ? "border-cyan-500/40 bg-cyan-500/10"
+                      : "border-slate-800 bg-slate-900/70"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setActiveFileId(entry.id)}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <p className="truncate text-sm font-semibold text-white">{entry.file.name}</p>
+                    <p className="text-xs text-slate-500">
+                      {entry.loading
+                        ? "재생 시간 확인 중…"
+                        : entry.error
+                          ? entry.error
+                          : entry.durationMs != null
+                            ? formatDurationHuman(entry.durationMs)
+                            : "재생 시간 미확인"}
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeFile(entry.id)}
+                    className="rounded-lg border border-rose-500/30 px-2.5 py-1.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10"
+                  >
+                    삭제
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
 
-          {durationMs != null ? (
+          {hasLoadedDuration ? (
             <>
               <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-950/80 p-1">
                 <button
@@ -240,69 +430,78 @@ export default function QuoteRequestTab() {
 
               {mode === "full" ? (
                 <p className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-100">
-                  파일 전체 재생 시간({formatDurationHuman(durationMs)})을 기준으로 견적을 계산합니다.
+                  업로드한 {loadedFileCount}개 파일 재생 시간 합계({formatDurationHuman(totalDurationMs)})를 기준으로
+                  견적을 계산합니다.
                 </p>
               ) : (
                 <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
                   <div>
                     <p className="text-sm font-semibold text-white">구간 추가</p>
                     <p className="mt-1 text-xs text-slate-500">
-                      재생하며 시작·종료 시각을 맞추거나 직접 입력하세요. 선택한 구간 시간의 합으로 견적이 계산됩니다.
+                      파일을 선택한 뒤 구간을 추가하세요. 선택한 구간 시간의 합으로 견적이 계산됩니다.
                     </p>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <label className="block sm:col-span-3">
-                      <span className="mb-1 block text-xs font-medium text-slate-500">구간 이름 (선택)</span>
-                      <input
-                        value={segmentForm.label}
-                        onChange={(event) => setSegmentForm((prev) => ({ ...prev, label: event.target.value }))}
-                        placeholder="예: 1차 통화"
-                        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-500"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-xs font-medium text-slate-500">시작</span>
-                      <input
-                        value={segmentForm.startTime}
-                        onChange={(event) => setSegmentForm((prev) => ({ ...prev, startTime: event.target.value }))}
-                        placeholder="00:00"
-                        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-500"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-xs font-medium text-slate-500">종료</span>
-                      <input
-                        value={segmentForm.endTime}
-                        onChange={(event) => setSegmentForm((prev) => ({ ...prev, endTime: event.target.value }))}
-                        placeholder="01:30"
-                        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-500"
-                      />
-                    </label>
-                    <div className="flex flex-wrap items-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setCurrentTimeToForm("startTime")}
-                        className="rounded-lg border border-slate-700 px-2.5 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800"
-                      >
-                        현재→시작
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCurrentTimeToForm("endTime")}
-                        className="rounded-lg border border-slate-700 px-2.5 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800"
-                      >
-                        현재→종료
-                      </button>
-                      <button
-                        type="button"
-                        onClick={addSegment}
-                        className="rounded-lg bg-cyan-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-cyan-500"
-                      >
-                        구간 추가
-                      </button>
-                    </div>
-                  </div>
+                  {activeFile ? (
+                    <>
+                      <p className="text-xs text-cyan-200">
+                        편집 중: <span className="font-semibold">{activeFile.file.name}</span>
+                        {activeFile.durationMs != null ? ` · ${formatDurationHuman(activeFile.durationMs)}` : ""}
+                      </p>
+
+                      {activeFile.durationMs != null && !activeFile.error ? (
+                        <audio
+                          ref={audioRef}
+                          key={activeFile.id}
+                          controls
+                          preload="metadata"
+                          src={activeFile.url}
+                          className="w-full rounded-xl"
+                        />
+                      ) : null}
+
+                      <div className="space-y-3">
+                        <TimeHmsSelect
+                          label="시작"
+                          value={segmentForm.start}
+                          maxMs={activeFile.durationMs ?? undefined}
+                          onChange={(start) => setSegmentForm((prev) => ({ ...prev, start }))}
+                        />
+                        <TimeHmsSelect
+                          label="종료"
+                          value={segmentForm.end}
+                          maxMs={activeFile.durationMs ?? undefined}
+                          onChange={(end) => setSegmentForm((prev) => ({ ...prev, end }))}
+                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setCurrentTimeToForm("start")}
+                            disabled={!activeFile.durationMs}
+                            className="rounded-lg border border-slate-700 px-2.5 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800 disabled:opacity-40"
+                          >
+                            현재→시작
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCurrentTimeToForm("end")}
+                            disabled={!activeFile.durationMs}
+                            className="rounded-lg border border-slate-700 px-2.5 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800 disabled:opacity-40"
+                          >
+                            현재→종료
+                          </button>
+                          <button
+                            type="button"
+                            onClick={addSegment}
+                            disabled={!activeFile.durationMs}
+                            className="rounded-lg bg-cyan-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-cyan-500 disabled:opacity-40"
+                          >
+                            구간 추가
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
 
                   {segmentFormError ? <p className="text-sm text-rose-300">{segmentFormError}</p> : null}
 
@@ -310,6 +509,7 @@ export default function QuoteRequestTab() {
                     {segments.length ? (
                       segments.map((segment) => {
                         const segmentDuration = Math.max(0, segment.end_ms - segment.start_ms);
+                        const segmentFile = files.find((entry) => entry.id === segment.fileId);
                         return (
                           <div
                             key={segment.id}
@@ -328,15 +528,16 @@ export default function QuoteRequestTab() {
                               className="h-4 w-4 rounded border-slate-600 bg-slate-950 text-cyan-500"
                             />
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm font-semibold text-white">{segment.label}</p>
+                              <p className="text-sm font-semibold text-white">
+                                {formatSegmentRange(segment.start_ms, segment.end_ms)}
+                              </p>
                               <p className="text-xs text-slate-500">
-                                {formatSegmentRange(segment.start_ms, segment.end_ms)} ·{" "}
-                                {formatDurationHuman(segmentDuration)}
+                                {segmentFile?.file.name ?? "파일"} · {formatDurationHuman(segmentDuration)}
                               </p>
                             </div>
                             <button
                               type="button"
-                              onClick={() => playSegment(segment.start_ms, segment.end_ms)}
+                              onClick={() => playSegment(segment.fileId, segment.start_ms, segment.end_ms)}
                               className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-800"
                             >
                               재생
@@ -353,22 +554,25 @@ export default function QuoteRequestTab() {
                       })
                     ) : (
                       <p className="rounded-xl border border-dashed border-slate-700 px-4 py-6 text-center text-sm text-slate-500">
-                        아직 구간이 없습니다. 위에서 구간을 추가해 주세요.
+                        아직 구간이 없습니다. 파일을 선택하고 구간을 추가해 주세요.
                       </p>
                     )}
                   </div>
 
-                  <p className="text-sm text-cyan-100">
-                    선택 구간 합계: {formatDurationHuman(billableDurationMs)}
-                  </p>
+                  <p className="text-sm text-cyan-100">선택 구간 합계: {formatDurationHuman(billableDurationMs)}</p>
                 </div>
               )}
 
-              <QuoteSummary quote={quote} billableDurationMs={billableDurationMs} mode={mode} />
+              <QuoteSummary
+                quote={quote}
+                billableDurationMs={billableDurationMs}
+                mode={mode}
+                fileCount={loadedFileCount}
+              />
             </>
           ) : null}
         </div>
-      )}
+      ) : null}
 
       <PriceTableReference activeTierLabel={quote.tier?.label ?? null} />
     </section>
@@ -379,10 +583,12 @@ function QuoteSummary({
   quote,
   billableDurationMs,
   mode,
+  fileCount,
 }: {
   quote: ReturnType<typeof calculateQuote>;
   billableDurationMs: number;
   mode: QuoteMode;
+  fileCount: number;
 }) {
   if (mode === "segments" && billableDurationMs === 0) {
     return (
@@ -411,6 +617,11 @@ function QuoteSummary({
   return (
     <div className="rounded-2xl border border-cyan-500/30 bg-gradient-to-br from-cyan-500/15 to-slate-950 px-4 py-5">
       <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">예상 견적</p>
+      {mode === "full" && fileCount > 1 ? (
+        <p className="mt-2 text-sm text-slate-300">
+          대상 파일: <span className="font-semibold text-white">{fileCount}개 합산</span>
+        </p>
+      ) : null}
       <p className="mt-2 text-sm text-slate-300">
         계산 기준 시간: <span className="font-semibold text-white">{formatDurationHuman(quote.durationMs)}</span>
       </p>

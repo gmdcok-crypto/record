@@ -87,16 +87,65 @@ export function readMediaDuration(file: File): Promise<number> {
   });
 }
 
+export type QuoteFileEntry = {
+  id: string;
+  file: File;
+  url: string;
+  durationMs: number | null;
+  loading: boolean;
+  error: string;
+};
+
 export type QuoteSegment = {
   id: string;
-  label: string;
+  fileId: string;
   start_ms: number;
   end_ms: number;
   selected: boolean;
 };
 
+export type HmsTime = {
+  hour: number;
+  minute: number;
+  second: number;
+};
+
+export const ZERO_HMS: HmsTime = { hour: 0, minute: 0, second: 0 };
+
+export function msToHms(ms: number): HmsTime {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  return {
+    hour: Math.floor(total / 3600),
+    minute: Math.floor((total % 3600) / 60),
+    second: total % 60,
+  };
+}
+
+export function hmsToMs({ hour, minute, second }: HmsTime): number {
+  return (hour * 3600 + minute * 60 + second) * 1000;
+}
+
+export function formatSegmentClock(ms: number): string {
+  const { hour, minute, second } = msToHms(ms);
+  if (hour > 0) {
+    return `${hour}시 ${minute}분 ${second}초`;
+  }
+  if (minute > 0) {
+    return `${minute}분 ${second}초`;
+  }
+  return `${second}초`;
+}
+
+export function createQuoteFileId(): string {
+  return `quote-file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
 export function createQuoteSegmentId(): string {
   return `quote-seg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+export function sumQuoteFileDurationsMs(files: QuoteFileEntry[]): number {
+  return files.reduce((sum, entry) => sum + (entry.durationMs ?? 0), 0);
 }
 
 export function sumSelectedSegmentDurationMs(segments: QuoteSegment[]): number {
