@@ -29,7 +29,6 @@ type UploadBillingPanelProps = {
   formatSize: (bytes: number) => string;
   paid: boolean;
   onPaidChange: (paid: boolean) => void;
-  onBillingReadyChange: (ready: boolean) => void;
   onRemoveFile: (file: File) => void;
 };
 
@@ -49,10 +48,10 @@ export default function UploadBillingPanel({
   formatSize,
   paid,
   onPaidChange,
-  onBillingReadyChange,
   onRemoveFile,
 }: UploadBillingPanelProps) {
   const entriesRef = useRef<UploadBillingFile[]>([]);
+  const paidBillableRef = useRef<number | null>(null);
   const [entries, setEntries] = useState<UploadBillingFile[]>([]);
   const [segmentForms, setSegmentForms] = useState<Record<string, { start: typeof ZERO_HMS; end: typeof ZERO_HMS }>>({});
   const [segmentFormErrors, setSegmentFormErrors] = useState<Record<string, string>>({});
@@ -128,16 +127,22 @@ export default function UploadBillingPanel({
   }, [entries]);
 
   useEffect(() => {
-    onBillingReadyChange(billingReady);
-  }, [billingReady, onBillingReadyChange]);
-
-  useEffect(() => {
-    onPaidChange(false);
-  }, [billableDurationMs, onPaidChange]);
-
-  useEffect(() => {
-    if (!billingReady) onPaidChange(false);
-  }, [billingReady, onPaidChange]);
+    if (!paid) {
+      paidBillableRef.current = null;
+      return;
+    }
+    if (!billingReady) {
+      onPaidChange(false);
+      return;
+    }
+    if (paidBillableRef.current === null) {
+      paidBillableRef.current = billableDurationMs;
+      return;
+    }
+    if (billableDurationMs !== paidBillableRef.current) {
+      onPaidChange(false);
+    }
+  }, [billingReady, billableDurationMs, paid, onPaidChange]);
 
   const updateEntry = (key: string, patch: Partial<UploadBillingFile>) => {
     setEntries((prev) => prev.map((entry) => (entry.key === key ? { ...entry, ...patch } : entry)));
@@ -178,6 +183,7 @@ export default function UploadBillingPanel({
 
   const handlePay = () => {
     if (!billingReady || !quote.tier) return;
+    paidBillableRef.current = billableDurationMs;
     onPaidChange(true);
   };
 
@@ -241,9 +247,13 @@ export default function UploadBillingPanel({
         ) : null}
 
         <div className="mt-4 flex flex-wrap gap-2">
-          {paid ? (
+          {paid && billingReady ? (
             <span className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-200">
               결제 완료 · 업로드 가능
+            </span>
+          ) : paid && !billingReady ? (
+            <span className="inline-flex items-center rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200">
+              견적이 변경되어 결제를 다시 진행해 주세요.
             </span>
           ) : (
             <button

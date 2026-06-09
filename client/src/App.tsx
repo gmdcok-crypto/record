@@ -276,7 +276,6 @@ export default function App() {
   const [cancelTarget, setCancelTarget] = useState<JobArchiveItem | null>(null);
   const [duplicateDialogMessage, setDuplicateDialogMessage] = useState("");
   const [uploadPaid, setUploadPaid] = useState(false);
-  const [uploadBillingReady, setUploadBillingReady] = useState(false);
   const [activeTab, setActiveTab] = useState<ClientTab>("archive");
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
   const [memberName, setMemberName] = useState<string | null>(null);
@@ -322,6 +321,15 @@ export default function App() {
     }
     return newProjectTitle.trim();
   }, [uploadProjectMode, selectedUploadProject, newProjectTitle]);
+
+  const uploadButtonLabel = useMemo(() => {
+    if (!uploadProjectReady) return "프로젝트를 먼저 정해 주세요";
+    if (!selectedFiles.length) return "파일을 선택해 주세요";
+    if (!uploadPaid) return "결제 후 업로드 가능";
+    if (r2Ready === false || dbReady === false) return "서버 연결을 확인해 주세요";
+    if (busy) return "처리 중…";
+    return selectedFiles.length > 1 ? `${selectedFiles.length}개 파일 업로드` : "업로드";
+  }, [uploadProjectReady, selectedFiles.length, uploadPaid, r2Ready, dbReady, busy]);
 
   const refreshWorkspace = async () => {
     try {
@@ -445,7 +453,6 @@ export default function App() {
   const resetUploadUi = (successMessage = "") => {
     setSelectedFiles([]);
     setUploadPaid(false);
-    setUploadBillingReady(false);
     setProgress(0);
     setStep("idle");
     setUploadStatus("");
@@ -980,7 +987,6 @@ export default function App() {
                   formatSize={formatSize}
                   paid={uploadPaid}
                   onPaidChange={setUploadPaid}
-                  onBillingReadyChange={setUploadBillingReady}
                   onRemoveFile={removeSelectedFile}
                 />
               ) : null}
@@ -992,18 +998,13 @@ export default function App() {
                   !uploadProjectReady ||
                   !selectedFiles.length ||
                   !uploadPaid ||
-                  !uploadBillingReady ||
                   busy ||
                   r2Ready === false ||
                   dbReady === false
                 }
                 className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-slate-700"
               >
-                {!uploadPaid || !uploadBillingReady
-                  ? "결제 후 업로드 가능"
-                  : selectedFiles.length > 1
-                    ? `${selectedFiles.length}개 파일 업로드`
-                    : "업로드"}
+                {uploadButtonLabel}
               </button>
             </div>
           </section>
