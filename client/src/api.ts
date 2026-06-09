@@ -489,6 +489,30 @@ export async function saveSharedTranscript(
   }
 }
 
+export async function fetchSharedTranscriptChanges(token: string): Promise<TranscriptChangeEntry[]> {
+  const res = await fetch(`${apiBase()}/api/jobs/share/${encodeURIComponent(token)}/transcript/changes`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data));
+  }
+  return (data.entries ?? []) as TranscriptChangeEntry[];
+}
+
+export async function submitSharedReviewRequest(token: string, transcript: TranscriptJson): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/share/${encodeURIComponent(token)}/review-request`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      transcript_json: transcript,
+      save_kind: "review_request",
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err));
+  }
+}
+
 export async function loginMember(email: string, password: string): Promise<MemberProfile> {
   const res = await fetch(`${apiBase()}/api/member/auth/login`, {
     method: "POST",

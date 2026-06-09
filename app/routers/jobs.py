@@ -764,6 +764,15 @@ def get_shared_job(token: str, db: Annotated[Session, Depends(get_db)]) -> dict:
     }
 
 
+@router.get("/share/{token}/transcript/changes")
+def get_shared_job_changes(token: str, db: Annotated[Session, Depends(get_db)]) -> dict:
+    share = _get_valid_share_or_404(db, token)
+    job = get_job_record(db, share.job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"job_id": job.job_id, "entries": list_transcript_change_logs(db, job.job_id)}
+
+
 @router.get("/{job_id}/audio")
 def stream_audio(job_id: str, request: Request) -> Response:
     voice_key = get_voice_object_key(job_id)
@@ -978,6 +987,7 @@ def save_shared_transcript(
             job.job_id,
             body.transcript_json,
             save_kind=save_kind,
+            shared_editor=True,
         )
         if job.status != "client_editing":
             job = set_job_status(db, job, "client_editing", "공유 링크 수정본 저장")
@@ -988,6 +998,36 @@ def save_shared_transcript(
 
     publish_admin_event("job_updated", {"job_id": job.job_id, "status": job.status})
     return {"job_id": job.job_id, "status": job.status, "transcript_key": transcript_key}
+
+
+@router.post("/share/{token}/review-request")
+def submit_shared_review_request(
+    token: str,
+    body: SaveTranscriptRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    share = _get_valid_share_or_404(db, token)
+    job = get_job_record(db, share.job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    try:
+        persist_job_transcript(
+            db,
+            job,
+            job.job_id,
+            body.transcript_json,
+            save_kind="review_request",
+            shared_editor=True,
+        )
+        job = set_job_status(db, job, "review_waiting", "공유 링크에서 속기사 재검수 요청")
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Review request failed: {exc}") from exc
+
+    publish_admin_event("job_updated", {"job_id": job.job_id, "status": job.status})
+    return {"job_id": job.job_id, "status": job.status}
 
 
 @router.post("/{job_id}/status")
