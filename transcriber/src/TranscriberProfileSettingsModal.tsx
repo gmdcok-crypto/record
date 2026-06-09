@@ -15,6 +15,12 @@ function fieldClassName() {
   return "w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-violet-500";
 }
 
+function formatResidentId(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 13);
+  if (digits.length <= 6) return digits;
+  return `${digits.slice(0, 6)}-${digits.slice(6)}`;
+}
+
 export default function TranscriberProfileSettingsModal({
   open,
   profile,
@@ -38,7 +44,7 @@ export default function TranscriberProfileSettingsModal({
     setPhone(profile.phone ?? "");
     setBankName(profile.bank_name ?? "");
     setAccountNumber(profile.account_number ?? "");
-    setResidentId(profile.resident_id ?? "");
+    setResidentId(formatResidentId(profile.resident_id ?? ""));
     setLicenseFile(null);
     setError("");
   }, [open, profile]);
@@ -103,11 +109,8 @@ export default function TranscriberProfileSettingsModal({
   const previewIsPdf = (profile.license_filename || licenseFile?.name || "").toLowerCase().endsWith(".pdf");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
         <h2 className="text-lg font-semibold text-white">개인정보 설정</h2>
         <p className="mt-1 text-sm text-slate-400">
           정산 및 본인 확인에 필요한 정보를 입력해 주세요. 로그인 ID·비밀번호는 가입 화면에서만 변경할 수 있습니다.
@@ -139,11 +142,13 @@ export default function TranscriberProfileSettingsModal({
             <span className="mb-1 block text-xs font-medium text-slate-500">주민등록번호</span>
             <input
               type="text"
+              inputMode="numeric"
               value={residentId}
-              onChange={(e) => setResidentId(e.target.value)}
+              onChange={(e) => setResidentId(formatResidentId(e.target.value))}
               placeholder="000000-0000000"
               className={fieldClassName()}
               autoComplete="off"
+              maxLength={14}
             />
           </label>
 
