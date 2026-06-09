@@ -1,7 +1,6 @@
 (() => {
   const ACCEPT = "audio/*,video/mp4,video/webm,.wav,.mp3,.m4a,.flac,.ogg";
   const {
-    QUOTE_TIERS,
     ZERO_HMS,
     msToHms,
     hmsToMs,
@@ -231,26 +230,6 @@
     `;
   }
 
-  function priceTableHtml(activeTierLabel) {
-    const rows = QUOTE_TIERS.map((tier) => {
-      const active = tier.label === activeTierLabel;
-      return `<tr class="${active ? "is-active" : ""}"><td>${tier.label}</td><td>${formatKrw(tier.baseFee)}</td><td>${formatKrw(tier.totalWithVat)}</td></tr>`;
-    }).join("");
-
-    return `
-      <div class="quote-price-table">
-        <p class="quote-price-table__title">요금표</p>
-        <p class="quote-price-table__desc">최종 통합 녹취록 요금표 (부가세 10% 포함)</p>
-        <div class="quote-price-table__scroll">
-          <table>
-            <thead><tr><th>녹음 시간</th><th>PDF 기본요금</th><th>부가세 포함</th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-      </div>
-    `;
-  }
-
   function render() {
     const loadedFileCount = state.files.filter((entry) => entry.durationMs != null).length;
     const loadingFileCount = state.files.filter((entry) => entry.loading).length;
@@ -351,11 +330,9 @@
 
     bodyEl.innerHTML = `
       <div class="quote-modal__head">
-        <div>
-          <p class="quote-modal__eyebrow">무료 견적</p>
-          <h2 class="quote-modal__title" id="quote-modal-title">녹취록 작성 비용 계산</h2>
-          <p class="quote-modal__desc" id="quote-modal-desc">음성·영상 파일을 올리면 요금표 기준으로 예상 견적을 확인할 수 있습니다.</p>
-        </div>
+        <p class="quote-modal__eyebrow">무료 견적</p>
+        <h2 class="quote-modal__title" id="quote-modal-title">녹취록 작성 비용 계산</h2>
+        <p class="quote-modal__desc" id="quote-modal-desc">음성·영상 파일을 올리면 예상 견적을 확인할 수 있습니다.</p>
         <button type="button" class="quote-reset-btn" data-action="reset-quote" ${hasContent ? "" : "disabled"}>견적초기화</button>
       </div>
 
@@ -367,7 +344,6 @@
 
       ${fileListHtml}
       ${modeHtml}
-      ${priceTableHtml(quote.tier?.label ?? null)}
     `;
   }
 
