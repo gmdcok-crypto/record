@@ -24,6 +24,7 @@ import {
   type TranscriptJson,
   type TranscriptSegment,
 } from "./api";
+import ActionNoticeModal, { type ActionNotice, type ActionNoticeKind } from "./ActionNoticeModal";
 import TranscriberLogin from "./TranscriberLogin";
 import TranscriberProfileSettingsModal from "./TranscriberProfileSettingsModal";
 import TranscriberSignup from "./TranscriberSignup";
@@ -211,11 +212,11 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [aiRunning, setAiRunning] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [saveDraftDialog, setSaveDraftDialog] = useState<{ kind: "success" | "error"; message: string } | null>(
-    null,
-  );
+  const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
+
+  const showNotice = useCallback((kind: ActionNoticeKind, message: string, title?: string) => {
+    setActionNotice({ kind, message, title });
+  }, []);
 
   const currentProject = useMemo(
     () => projects.find((project) => projectKey(project) === selectedProjectKey) ?? null,
@@ -235,7 +236,6 @@ export default function App() {
 
   const loadProjects = useCallback(async () => {
     setLoadingProjects(true);
-    setError("");
     try {
       const data = await fetchAssignedProjects();
       setProjects(data);
@@ -249,11 +249,11 @@ export default function App() {
         setSelectedJobId("");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "배정 프로젝트를 불러오지 못했습니다.");
+      showNotice("error", err instanceof Error ? err.message : "배정 프로젝트를 불러오지 못했습니다.");
     } finally {
       setLoadingProjects(false);
     }
-  }, []);
+  }, [showNotice]);
 
   const loadLicensePreviewUrl = useCallback(async () => fetchTranscriberLicenseObjectUrl(), []);
 
@@ -285,7 +285,6 @@ export default function App() {
     setTranscriberName(transcriber.name);
     setTranscriberProfile(transcriber);
     setAuthStatus("authenticated");
-    setError("");
     void loadProjects();
   };
 
@@ -300,8 +299,6 @@ export default function App() {
     setJob(null);
     setSegments([]);
     setSpeakerLabels({});
-    setMessage("");
-    setError("");
   };
 
   useEffect(() => {
@@ -318,8 +315,6 @@ export default function App() {
       return;
     }
     setLoadingJob(true);
-    setMessage("");
-    setError("");
     fetchJob(selectedJobId)
       .then((data) => {
         setJob(data);
@@ -327,10 +322,10 @@ export default function App() {
         setSpeakerLabels(data.transcript_json?.speaker_labels ?? {});
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : "작업을 불러오지 못했습니다.");
+        showNotice("error", err instanceof Error ? err.message : "작업을 불러오지 못했습니다.");
       })
       .finally(() => setLoadingJob(false));
-  }, [selectedJobId]);
+  }, [selectedJobId, showNotice]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -368,8 +363,7 @@ export default function App() {
     if (!job) return;
     setSegments(buildEditableSegments(job.transcript_json));
     setSpeakerLabels(job.transcript_json?.speaker_labels ?? {});
-    setMessage("서버에 저장된 최신 문서로 되돌렸습니다.");
-    setError("");
+    showNotice("info", "서버에 저장된 최신 문서로 되돌렸습니다.");
   };
 
   const applySpeakerLabels = (labels: Record<string, string>) => {
@@ -379,8 +373,7 @@ export default function App() {
     }
     setSpeakerLabels(cleaned);
     setSpeakerSettingsOpen(false);
-    setMessage("화자 이름이 적용되었습니다. 저장하면 서버에 반영됩니다.");
-    setError("");
+    showNotice("info", "화자 이름이 적용되었습니다. 저장하면 서버에 반영됩니다.");
   };
 
   const busy = saving || aiRunning || downloadingPdf;
@@ -398,8 +391,6 @@ export default function App() {
     }
 
     setAiRunning(true);
-    setError("");
-    setMessage("");
     try {
       const result = await runAiDraft(job.job_id);
       const transcript = result.transcript_json;
@@ -407,9 +398,9 @@ export default function App() {
       setSegments(buildEditableSegments(transcript));
       setSpeakerLabels(transcript.speaker_labels ?? {});
       setChangeHistoryRefresh((value) => value + 1);
-      setMessage("AI 초벌 작업이 완료되었습니다. 검토 후 ‘의뢰인에게 초벌 전달’을 눌러 주세요.");
+      showNotice("success", "AI 초벌 작업이 완료되었습니다. 검토 후 ‘의뢰인에게 초벌 전달’을 눌러 주세요.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "AI 초벌 작업에 실패했습니다.");
+      showNotice("error", err instanceof Error ? err.message : "AI 초벌 작업에 실패했습니다.");
     } finally {
       setAiRunning(false);
     }
@@ -418,19 +409,14 @@ export default function App() {
   const onSaveDraft = async () => {
     if (!job) return;
     setSaving(true);
-    setError("");
-    setMessage("");
-    setSaveDraftDialog(null);
+    setActionNotice(null);
     try {
       await saveTranscript(job.job_id, currentTranscript, "draft");
       setJob({ ...job, transcript_json: currentTranscript });
       setChangeHistoryRefresh((value) => value + 1);
-      setSaveDraftDialog({ kind: "success", message: "초벌 임시 저장이 완료되었습니다." });
+      showNotice("success", "초벌 임시 저장이 완료되었습니다.", "임시 저장 완료");
     } catch (err) {
-      setSaveDraftDialog({
-        kind: "error",
-        message: err instanceof Error ? err.message : "저장 실패",
-      });
+      showNotice("error", err instanceof Error ? err.message : "저장 실패", "임시 저장 실패");
     } finally {
       setSaving(false);
     }
@@ -439,12 +425,10 @@ export default function App() {
   const onSendToClient = async () => {
     if (!job) return;
     if (!segments.some((segment) => segment.text.trim())) {
-      setError("전달할 초벌 내용이 없습니다. AI 초벌작업을 실행하거나 직접 작성해 주세요.");
+      showNotice("error", "전달할 초벌 내용이 없습니다. AI 초벌작업을 실행하거나 직접 작성해 주세요.");
       return;
     }
     setSaving(true);
-    setError("");
-    setMessage("");
     try {
       const result = await deliverDraftToClient(job.job_id, currentTranscript);
       setJob({
@@ -455,9 +439,9 @@ export default function App() {
       });
       await loadProjects();
       setChangeHistoryRefresh((value) => value + 1);
-      setMessage("의뢰인에게 초벌을 전달했습니다. 의뢰인 화면에서 검토요망 상태로 확인할 수 있습니다.");
+      showNotice("success", "의뢰인에게 초벌을 전달했습니다. 의뢰인 화면에서 검토요망 상태로 확인할 수 있습니다.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "전달 실패");
+      showNotice("error", err instanceof Error ? err.message : "전달 실패");
     } finally {
       setSaving(false);
     }
@@ -466,15 +450,13 @@ export default function App() {
   const onFinalize = async () => {
     if (!job) return;
     setSaving(true);
-    setError("");
-    setMessage("");
     try {
       await saveTranscript(job.job_id, currentTranscript, "finalize");
       setJob({ ...job, transcript_json: currentTranscript });
       setChangeHistoryRefresh((value) => value + 1);
-      setMessage("최종본이 저장되었습니다.");
+      showNotice("success", "최종본이 저장되었습니다.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "확정 실패");
+      showNotice("error", err instanceof Error ? err.message : "확정 실패");
     } finally {
       setSaving(false);
     }
@@ -483,17 +465,15 @@ export default function App() {
   const onDownloadStampedPdf = async () => {
     if (!job) return;
     setDownloadingPdf(true);
-    setError("");
-    setMessage("");
     try {
       await saveTranscript(job.job_id, currentTranscript, "pdf_finalize");
       await finalizeTranscriptPdf(job.job_id, currentTranscript);
       await downloadFinalTranscriptPdf(job.job_id);
       setJob({ ...job, transcript_json: currentTranscript, final_pdf_ready: true, status: "pdf_sent" });
       setChangeHistoryRefresh((value) => value + 1);
-      setMessage("최종 PDF를 R2에 저장하고 다운로드했습니다.");
+      showNotice("success", "최종 PDF를 R2에 저장하고 다운로드했습니다.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "PDF 다운로드 실패");
+      showNotice("error", err instanceof Error ? err.message : "PDF 다운로드 실패");
     } finally {
       setDownloadingPdf(false);
     }
@@ -619,18 +599,6 @@ export default function App() {
           </aside>
 
           <main className="space-y-4">
-            {(message || error) && (
-              <div
-                className={`rounded-3xl px-4 py-3 text-sm ${
-                  error
-                    ? "border border-red-500/30 bg-red-500/10 text-red-300"
-                    : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                }`}
-              >
-                {error || message}
-              </div>
-            )}
-
             {loadingJob ? (
               <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-12 text-center text-sm text-slate-400 shadow-2xl shadow-black/20">
                 파일을 불러오는 중입니다...
@@ -825,40 +793,14 @@ export default function App() {
           onSaved={(next) => {
             setTranscriberProfile(next);
             setTranscriberName(next.name);
-            setMessage("개인정보가 저장되었습니다.");
+            showNotice("success", "개인정보가 저장되었습니다.");
           }}
           onSaveProfile={updateTranscriberProfile}
           onUploadLicense={uploadTranscriberLicense}
           loadLicensePreviewUrl={loadLicensePreviewUrl}
         />
 
-        {saveDraftDialog ? (
-          <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
-            <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-2xl shadow-black/40">
-              <h3
-                className={`text-lg font-semibold ${
-                  saveDraftDialog.kind === "error" ? "text-rose-300" : "text-white"
-                }`}
-              >
-                {saveDraftDialog.kind === "error" ? "임시 저장 실패" : "임시 저장 완료"}
-              </h3>
-              <p className="mt-3 text-sm leading-6 text-slate-300">{saveDraftDialog.message}</p>
-              <div className="mt-5 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setSaveDraftDialog(null)}
-                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                    saveDraftDialog.kind === "error"
-                      ? "bg-rose-600 text-white hover:bg-rose-500"
-                      : "bg-violet-600 text-white hover:bg-violet-500"
-                  }`}
-                >
-                  확인
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
+        <ActionNoticeModal notice={actionNotice} onClose={() => setActionNotice(null)} accent="violet" />
       </div>
     </div>
   );

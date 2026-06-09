@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import {
   cancelClientJob,
   checkHealth,
@@ -25,6 +25,7 @@ import {
   type TranscriptSegment,
   type MemberProfile,
 } from "./api";
+import ActionNoticeModal, { type ActionNotice, type ActionNoticeKind } from "./ActionNoticeModal";
 import MemberLogin from "./MemberLogin";
 import SpeakerSettingsModal from "./SpeakerSettingsModal";
 import TranscriptChangeHistory from "./TranscriptChangeHistory";
@@ -235,8 +236,8 @@ export default function App() {
   const [isDragActive, setIsDragActive] = useState(false);
   const [step, setStep] = useState<Step>("idle");
   const [progress, setProgress] = useState(0);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  const [uploadStatus, setUploadStatus] = useState("");
+  const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
   const [r2Ready, setR2Ready] = useState<boolean | null>(null);
   const [dbReady, setDbReady] = useState<boolean | null>(null);
   const [job, setJob] = useState<JobResponse | null>(null);
@@ -257,24 +258,16 @@ export default function App() {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<JobArchiveItem | null>(null);
   const [duplicateDialogMessage, setDuplicateDialogMessage] = useState("");
-  const [saveDraftDialog, setSaveDraftDialog] = useState<{ kind: "success" | "error"; message: string } | null>(
-    null,
-  );
   const [activeTab, setActiveTab] = useState<ClientTab>("archive");
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
   const [memberName, setMemberName] = useState<string | null>(null);
   const segmentEndRef = useRef<number | null>(null);
 
+  const showNotice = useCallback((kind: ActionNoticeKind, message: string, title?: string) => {
+    setActionNotice({ kind, message, title });
+  }, []);
+
   const busy = step === "uploading" || loadingJob || saving || downloadingPdf;
-  const pendingReviewCount = useMemo(() => {
-    const fromProjects = projects.reduce(
-      (count, project) =>
-        count +
-        (project.files?.filter((file) => (file.workflow_status ?? file.status) === "first_done").length ?? 0),
-      0,
-    );
-    return fromProjects || archive.filter((item) => item.status === "first_done").length;
-  }, [projects, archive]);
   const archivedFilenames = useMemo(
     () => new Set(archive.map((item) => normalizeUploadFilename(item.filename))),
     [archive],
@@ -318,7 +311,7 @@ export default function App() {
         setSelectedUploadProjectId(projectList[0].project_id);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "보관함을 불러오지 못했습니다.");
+      showNotice("error", err instanceof Error ? err.message : "보관함을 불러오지 못했습니다.");
     }
   };
 
@@ -354,7 +347,6 @@ export default function App() {
   const handleLoginSuccess = (member: MemberProfile) => {
     setMemberName(member.name);
     setAuthStatus("authenticated");
-    setError("");
     void refreshWorkspace();
   };
 
@@ -373,8 +365,8 @@ export default function App() {
     setSegments([]);
     setSelectedFiles([]);
     setStep("idle");
-    setMessage("");
-    setError("");
+    setUploadStatus("");
+    setActionNotice(null);
     setActiveTab("archive");
     resetUploadUi();
   };
@@ -413,18 +405,21 @@ export default function App() {
     return attachSegmentStopListener(audio, segmentEndRef);
   }, [job?.job_id]);
 
-  const resetUploadUi = (nextMessage = "") => {
+  const resetUploadUi = (successMessage = "") => {
     setSelectedFiles([]);
     setProgress(0);
     setStep("idle");
-    setError("");
-    setMessage(nextMessage);
+    setUploadStatus("");
     if (inputRef.current) inputRef.current.value = "";
+    if (successMessage) {
+      showNotice("success", successMessage);
+    }
   };
 
   const onSelect = (files: FileList | null) => {
     if (!uploadProjectReady) {
-      setError(
+      showNotice(
+        "error",
         uploadProjectMode === "new"
           ? "프로젝트 이름을 먼저 입력한 뒤 파일을 선택해 주세요."
           : "업로드할 프로젝트를 먼저 선택해 주세요.",
@@ -448,8 +443,7 @@ export default function App() {
     });
     setStep("idle");
     setProgress(0);
-    setError("");
-    setMessage("");
+    setUploadStatus("");
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -482,8 +476,6 @@ export default function App() {
   const loadJobById = async (jobId: string, options?: { switchToEdit?: boolean }) => {
     if (!jobId.trim()) return;
     setLoadingJob(true);
-    setError("");
-    setMessage("");
     try {
       const data = await fetchJob(jobId.trim());
       setJob(data);
@@ -495,22 +487,23 @@ export default function App() {
       const shouldOpenEdit = options?.switchToEdit ?? isEditableArchiveStatus(workflowStatus);
       if (shouldOpenEdit) {
         setActiveTab("edit");
-        setMessage(
+        showNotice(
+          "info",
           workflowStatus === "first_done"
             ? "검토요망 문서를 불러왔습니다. 내용을 검토하고 수정하세요."
             : "편집 문서를 불러왔습니다.",
         );
       } else if (workflowStatus === "assigned" || workflowStatus === "working") {
         setActiveTab("archive");
-        setMessage("속기사가 초벌 작업 중입니다. 초벌 전달 후 편집 화면에서 확인할 수 있습니다.");
+        showNotice("info", "속기사가 초벌 작업 중입니다. 초벌 전달 후 편집 화면에서 확인할 수 있습니다.");
       } else {
-        setMessage("작업을 불러왔습니다.");
+        showNotice("info", "작업을 불러왔습니다.");
       }
       const context = resolveEditContext(data.job_id, projects);
       setEditContext(context);
       await refreshWorkspace();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "작업을 불러오지 못했습니다.");
+      showNotice("error", err instanceof Error ? err.message : "작업을 불러오지 못했습니다.");
     } finally {
       setLoadingJob(false);
     }
@@ -526,7 +519,6 @@ export default function App() {
   const performUpload = async (fileToUpload: File, projectId?: string) => {
     setStep("uploading");
     setProgress(0);
-    setError("");
     try {
       await uploadVoice(fileToUpload, setProgress, undefined, projectId);
       setJob(null);
@@ -534,14 +526,14 @@ export default function App() {
       setSpeakerLabels({});
       await refreshWorkspace();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "업로드 실패";
-      if (message.includes("이미 업로드된 파일입니다")) {
-        setError("");
-        openDuplicateDialog(message);
+      const failureMessage = err instanceof Error ? err.message : "업로드 실패";
+      if (failureMessage.includes("이미 업로드된 파일입니다")) {
+        openDuplicateDialog(failureMessage);
       } else {
-        setError(message);
+        showNotice("error", failureMessage);
       }
       setStep("error");
+      setUploadStatus("");
       throw err;
     }
   };
@@ -561,7 +553,7 @@ export default function App() {
       let uploadedProjectTitle = uploadProjectLabel;
       if (uploadProjectMode === "existing") {
         if (!selectedUploadProjectId || !selectedUploadProject) {
-          setError("업로드할 프로젝트를 선택해 주세요.");
+          showNotice("error", "업로드할 프로젝트를 선택해 주세요.");
           return;
         }
         targetProjectId = selectedUploadProjectId;
@@ -569,7 +561,7 @@ export default function App() {
       } else {
         const title = newProjectTitle.trim();
         if (!title) {
-          setError("프로젝트 이름을 먼저 입력해 주세요.");
+          showNotice("error", "프로젝트 이름을 먼저 입력해 주세요.");
           return;
         }
         const created = await createProject(title);
@@ -582,7 +574,7 @@ export default function App() {
 
       for (let index = 0; index < filesToUpload.length; index += 1) {
         const file = filesToUpload[index];
-        setMessage(`"${uploadedProjectTitle}" 업로드 중 ${index + 1}/${filesToUpload.length}: ${file.name}`);
+        setUploadStatus(`"${uploadedProjectTitle}" 업로드 중 ${index + 1}/${filesToUpload.length}: ${file.name}`);
         await performUpload(file, targetProjectId);
       }
       resetUploadUi(
@@ -597,21 +589,16 @@ export default function App() {
   const onSaveDraft = async () => {
     if (!job) return;
     setSaving(true);
-    setError("");
-    setMessage("");
-    setSaveDraftDialog(null);
+    setActionNotice(null);
     try {
       await saveTranscript(job.job_id, currentTranscript, "draft");
       await updateJobStatus(job.job_id, "client_editing", "의뢰인 수정본 저장");
       setJob({ ...job, transcript_json: currentTranscript, status: "client_editing" });
       setChangeHistoryRefresh((value) => value + 1);
-      setSaveDraftDialog({ kind: "success", message: "의뢰인 수정본이 DB와 R2에 저장되었습니다." });
+      showNotice("success", "의뢰인 수정본이 DB와 R2에 저장되었습니다.", "임시 저장 완료");
       await refreshWorkspace();
     } catch (err) {
-      setSaveDraftDialog({
-        kind: "error",
-        message: err instanceof Error ? err.message : "저장 실패",
-      });
+      showNotice("error", err instanceof Error ? err.message : "저장 실패", "임시 저장 실패");
     } finally {
       setSaving(false);
     }
@@ -620,17 +607,15 @@ export default function App() {
   const onSubmitForReview = async () => {
     if (!job) return;
     setSaving(true);
-    setError("");
-    setMessage("");
     try {
       await saveTranscript(job.job_id, currentTranscript, "review_request");
       await updateJobStatus(job.job_id, "review_waiting", "의뢰인 수정 후 속기사 재검수 요청");
       setJob({ ...job, transcript_json: currentTranscript, status: "review_waiting" });
       setChangeHistoryRefresh((value) => value + 1);
-      setMessage("재검수 요청이 DB에 반영되었습니다.");
+      showNotice("success", "재검수 요청이 DB에 반영되었습니다.");
       await refreshWorkspace();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "검수 요청 실패");
+      showNotice("error", err instanceof Error ? err.message : "검수 요청 실패");
     } finally {
       setSaving(false);
     }
@@ -639,18 +624,16 @@ export default function App() {
   const onDownloadPdf = async () => {
     if (!job) return;
     setDownloadingPdf(true);
-    setError("");
-    setMessage("");
     try {
       if (job.final_pdf_ready) {
         await downloadFinalTranscriptPdf(job.job_id);
-        setMessage("저장된 최종 PDF를 다운로드했습니다.");
+        showNotice("success", "저장된 최종 PDF를 다운로드했습니다.");
       } else {
         await downloadTranscriptPdf(job.job_id, currentTranscript);
-        setMessage("현재 문서 기준 PDF를 다운로드했습니다.");
+        showNotice("success", "현재 문서 기준 PDF를 다운로드했습니다.");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "PDF 다운로드 실패");
+      showNotice("error", err instanceof Error ? err.message : "PDF 다운로드 실패");
     } finally {
       setDownloadingPdf(false);
     }
@@ -666,8 +649,7 @@ export default function App() {
     if (!job) return;
     setSegments(buildEditableSegments(job.transcript_json));
     setSpeakerLabels(job.transcript_json?.speaker_labels ?? {});
-    setMessage("서버에 저장된 최신 문서로 되돌렸습니다.");
-    setError("");
+    showNotice("info", "서버에 저장된 최신 문서로 되돌렸습니다.");
   };
 
   const applySpeakerLabels = (labels: Record<string, string>) => {
@@ -677,13 +659,10 @@ export default function App() {
     }
     setSpeakerLabels(cleaned);
     setSpeakerSettingsOpen(false);
-    setMessage("화자 이름이 적용되었습니다. 저장하면 서버에 반영됩니다.");
-    setError("");
+    showNotice("info", "화자 이름이 적용되었습니다. 저장하면 서버에 반영됩니다.");
   };
 
   const onCancelUpload = async (jobId: string) => {
-    setError("");
-    setMessage("");
     try {
       await cancelClientJob(jobId);
       if (job?.job_id === jobId) {
@@ -694,9 +673,9 @@ export default function App() {
         setStep("idle");
       }
       await refreshWorkspace();
-      setMessage("배정 전 업로드를 취소했습니다.");
+      showNotice("success", "배정 전 업로드를 취소했습니다.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "업로드 취소 실패");
+      showNotice("error", err instanceof Error ? err.message : "업로드 취소 실패");
     }
   };
 
@@ -720,10 +699,10 @@ export default function App() {
     await onCancelUpload(jobId);
   };
 
-  const tabs: { id: ClientTab; label: string; badge?: number }[] = [
+  const tabs: { id: ClientTab; label: string }[] = [
     { id: "upload", label: "업로드" },
-    { id: "archive", label: "보관함", badge: pendingReviewCount || undefined },
-    { id: "edit", label: "편집", badge: pendingReviewCount || undefined },
+    { id: "archive", label: "보관함" },
+    { id: "edit", label: "편집" },
   ];
 
   if (authStatus === "loading") {
@@ -766,34 +745,18 @@ export default function App() {
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className={`relative rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                  className={`rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
                     isActive
                       ? "bg-slate-800 text-white shadow-inner shadow-black/20"
                       : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
                   }`}
                 >
                   {tab.label}
-                  {tab.badge ? (
-                    <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-500 px-1 text-[10px] font-bold text-white">
-                      {tab.badge}
-                    </span>
-                  ) : null}
                 </button>
               );
             })}
           </div>
         </nav>
-
-        {error ? (
-          <div className="mb-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-            {error}
-          </div>
-        ) : null}
-        {message ? (
-          <div className="mb-4 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
-            {message}
-          </div>
-        ) : null}
 
         <main className="flex-1">
           {activeTab === "upload" ? (
@@ -856,10 +819,7 @@ export default function App() {
                   </label>
                   <input
                     value={newProjectTitle}
-                    onChange={(event) => {
-                      setNewProjectTitle(event.target.value);
-                      if (error) setError("");
-                    }}
+                    onChange={(event) => setNewProjectTitle(event.target.value)}
                     placeholder="예: ○○사건 통화녹취"
                     required
                     className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-cyan-500/50"
@@ -929,6 +889,12 @@ export default function App() {
                       : `wav, mp3, m4a, mp4 등 지원 · 드래그 앤 드롭 가능${uploadProjectLabel ? ` · ${uploadProjectLabel}` : ""}`}
                 </span>
               </button>
+
+              {uploadStatus ? (
+                <p className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-100">
+                  {uploadStatus}
+                </p>
+              ) : null}
 
               {step === "uploading" && (
                 <div>
@@ -1260,10 +1226,6 @@ export default function App() {
           ) : null}
         </main>
 
-        <div className="sr-only" aria-live="polite">
-          {error || message}
-        </div>
-
         {cancelTarget ? (
           <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
             <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-2xl shadow-black/40">
@@ -1310,33 +1272,7 @@ export default function App() {
           </div>
         ) : null}
 
-        {saveDraftDialog ? (
-          <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
-            <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-2xl shadow-black/40">
-              <h3
-                className={`text-lg font-semibold ${
-                  saveDraftDialog.kind === "error" ? "text-rose-300" : "text-white"
-                }`}
-              >
-                {saveDraftDialog.kind === "error" ? "임시 저장 실패" : "임시 저장 완료"}
-              </h3>
-              <p className="mt-3 text-sm leading-6 text-slate-300">{saveDraftDialog.message}</p>
-              <div className="mt-5 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setSaveDraftDialog(null)}
-                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                    saveDraftDialog.kind === "error"
-                      ? "bg-rose-600 text-white hover:bg-rose-500"
-                      : "bg-cyan-500 text-slate-950 hover:bg-cyan-400"
-                  }`}
-                >
-                  확인
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
+        <ActionNoticeModal notice={actionNotice} onClose={() => setActionNotice(null)} />
 
         <SpeakerSettingsModal
           open={speakerSettingsOpen}

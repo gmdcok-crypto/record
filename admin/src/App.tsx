@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 
+import ActionNoticeModal, { type ActionNotice } from "./ActionNoticeModal";
 import JobTranscriptViewer from "./JobTranscriptViewer";
 import {
   assignProject,
@@ -462,7 +463,7 @@ function App() {
   const [statusFilter, setStatusFilter] = useState<"전체" | JobStatus>("전체");
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busyMessage, setBusyMessage] = useState("");
+  const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
   const [detailJobId, setDetailJobId] = useState<string | null>(null);
   const [detailJob, setDetailJob] = useState<JobResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -657,17 +658,15 @@ function App() {
     }));
   }, [overview]);
 
-  const runAdminAction = async (message: string, action: () => Promise<void>) => {
+  const runAdminAction = async (successMessage: string, action: () => Promise<void>) => {
     try {
-      setBusyMessage(message);
       await action();
       await loadOverview();
+      setActionNotice({ kind: "success", message: successMessage });
     } catch (err) {
       console.error(err);
       window.alert(err instanceof Error ? err.message : "요청 처리 중 오류가 발생했습니다.");
       setLoading(false);
-    } finally {
-      setBusyMessage("");
     }
   };
 
@@ -748,7 +747,7 @@ function App() {
       if (!confirmed) return;
     }
 
-    await runAdminAction(reassign ? "배정 변경 중입니다." : "프로젝트 배정 중입니다.", async () => {
+    await runAdminAction(reassign ? "배정이 변경되었습니다." : "프로젝트 배정이 완료되었습니다.", async () => {
       await assignProject(
         assignProjectTarget.id,
         selectedTranscriberCode,
@@ -762,14 +761,14 @@ function App() {
 
   const handleSettlementConfirm = async (item: SettlementItem) => {
     const nextStatus = item.status === "정산 대기" ? "confirmed" : "paid";
-    await runAdminAction("정산 상태 변경 중입니다.", async () => {
+    await runAdminAction("정산 상태가 변경되었습니다.", async () => {
       await updateSettlementStatus(item.id, nextStatus);
     });
   };
 
   const handleInvoiceConfirm = async (item: SalesItem) => {
     const nextStatus = item.status === "paid" ? "paid" : "paid";
-    await runAdminAction("매출 상태 변경 중입니다.", async () => {
+    await runAdminAction("매출 상태가 변경되었습니다.", async () => {
       await updateInvoiceStatus(item.id, nextStatus);
     });
   };
@@ -819,7 +818,7 @@ function App() {
       account_number: transcriberForm.accountNumber.trim() || undefined,
     };
 
-    await runAdminAction(editingTranscriberId ? "속기사 수정 중입니다." : "속기사 추가 중입니다.", async () => {
+    await runAdminAction(editingTranscriberId ? "속기사 정보가 수정되었습니다." : "속기사가 추가되었습니다.", async () => {
       if (editingTranscriberId) {
         await updateTranscriber(editingTranscriberId, profilePayload);
       } else {
@@ -831,7 +830,7 @@ function App() {
 
   const removeTranscriber = async (person: Transcriber) => {
     if (!window.confirm(`${person.name}(${person.id}) 속기사를 삭제하시겠습니까?`)) return;
-    await runAdminAction("속기사 삭제 중입니다.", async () => {
+    await runAdminAction("속기사가 삭제되었습니다.", async () => {
       await deleteTranscriber(person.id);
     });
   };
@@ -844,7 +843,7 @@ function App() {
     ) {
       return;
     }
-    await runAdminAction("로그인 초기화 중입니다.", async () => {
+    await runAdminAction("로그인 정보가 초기화되었습니다.", async () => {
       await revokeTranscriberAuth(person.id);
     });
   };
@@ -856,27 +855,7 @@ function App() {
     }));
   }, [jobs]);
 
-  const menuItems = useMemo<MenuItem[]>(() => {
-    return MENU_BASE.map((item) => {
-      switch (item.key) {
-        case "jobs":
-          return { ...item, count: `${jobs.length}` };
-        case "assignments":
-          return {
-            ...item,
-            count: `${jobs.filter((job) => job.status === "배정 대기" || job.status === "재검수 대기").length}`,
-          };
-        case "transcribers":
-          return { ...item, count: `${transcribers.length}` };
-        case "members":
-          return { ...item, count: `${members.length}` };
-        case "progress":
-          return { ...item, count: `${jobs.filter((job) => job.status !== "최종 완료").length}` };
-        default:
-          return item;
-      }
-    });
-  }, [jobs, transcribers, members]);
+  const menuItems = MENU_BASE;
 
   const visibleMembers = useMemo(() => {
     const q = memberQuery.trim().toLowerCase();
@@ -1262,7 +1241,7 @@ function App() {
   );
 
   const toggleMemberActive = async (member: MemberItem) => {
-    await runAdminAction("회원 상태 변경 중입니다.", async () => {
+    await runAdminAction("회원 상태가 변경되었습니다.", async () => {
       const updated = await updateMemberActive(member.id, !member.isActive);
       setDetailMember((current) =>
         current?.id === member.id
@@ -1686,21 +1665,10 @@ function App() {
                     }`}
                   >
                     <span className="text-sm font-medium">{item.label}</span>
-                    {item.count ? (
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                          active ? "bg-slate-950/10 text-slate-950" : "bg-white/5 text-slate-400"
-                        }`}
-                      >
-                        {item.count}
-                      </span>
-                    ) : null}
                   </button>
                 );
               })}
             </nav>
-
-            {busyMessage ? <div className="mt-8 rounded-3xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-sm text-cyan-100">{busyMessage}</div> : null}
           </aside>
 
           <main className="space-y-6">
@@ -2217,6 +2185,8 @@ function App() {
           </div>
         </div>
       ) : null}
+
+      <ActionNoticeModal notice={actionNotice} onClose={() => setActionNotice(null)} />
     </div>
   );
 }
