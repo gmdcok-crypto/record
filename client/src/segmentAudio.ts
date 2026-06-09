@@ -107,3 +107,46 @@ export function attachSegmentStopListener(
     audio.removeEventListener("pause", handlePause);
   };
 }
+
+export function attachPlaybackTimeListener(
+  audio: HTMLAudioElement,
+  callbacks: {
+    onTimeUpdate: (playbackMs: number) => void;
+    onPlayingChange: (playing: boolean) => void;
+  },
+): () => void {
+  const handleTimeUpdate = () => {
+    callbacks.onTimeUpdate(Math.floor(audio.currentTime * 1000));
+  };
+
+  const handlePlay = () => {
+    callbacks.onPlayingChange(true);
+    handleTimeUpdate();
+  };
+
+  const handlePause = () => {
+    callbacks.onPlayingChange(false);
+  };
+
+  const handleEnded = () => {
+    callbacks.onPlayingChange(false);
+    callbacks.onTimeUpdate(0);
+  };
+
+  audio.addEventListener("timeupdate", handleTimeUpdate);
+  audio.addEventListener("play", handlePlay);
+  audio.addEventListener("pause", handlePause);
+  audio.addEventListener("ended", handleEnded);
+
+  if (!audio.paused) {
+    callbacks.onPlayingChange(true);
+    handleTimeUpdate();
+  }
+
+  return () => {
+    audio.removeEventListener("timeupdate", handleTimeUpdate);
+    audio.removeEventListener("play", handlePlay);
+    audio.removeEventListener("pause", handlePause);
+    audio.removeEventListener("ended", handleEnded);
+  };
+}

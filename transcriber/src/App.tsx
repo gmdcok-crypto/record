@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   bootstrapTranscriberTokenFromUrl,
   clearTranscriberSession,
@@ -30,7 +30,14 @@ import TranscriberProfileSettingsModal from "./TranscriberProfileSettingsModal";
 import TranscriberSignup from "./TranscriberSignup";
 import SpeakerSettingsModal from "./SpeakerSettingsModal";
 import TranscriptChangeHistory from "./TranscriptChangeHistory";
-import { attachSegmentStopListener, playSegmentAudio, resolveSegmentEndMs } from "./segmentAudio";
+import SegmentPlaybackText from "./SegmentPlaybackText";
+import { buildSegmentTimedWords, segmentContainsActiveWord } from "./playbackHighlight";
+import {
+  attachPlaybackTimeListener,
+  attachSegmentStopListener,
+  playSegmentAudio,
+  resolveSegmentEndMs,
+} from "./segmentAudio";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 type AuthScreen = "signup" | "login";
@@ -194,7 +201,8 @@ function autoResizeTextarea(element: HTMLTextAreaElement) {
 export default function App() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const segmentEndRef = useRef<number | null>(null);
-  const [playingSegmentIndex, setPlayingSegmentIndex] = useState<number | null>(null);
+  const [playbackMs, setPlaybackMs] = useState(0);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
   const [authScreen, setAuthScreen] = useState<AuthScreen>("signup");
   const [transcriberName, setTranscriberName] = useState<string | null>(null);
@@ -234,6 +242,7 @@ export default function App() {
     () => segmentsToTranscript(job?.transcript_json ?? null, segments, speakerLabels),
     [job, segments, speakerLabels],
   );
+  const transcriptTokens = useMemo(() => job?.transcript_json?.tokens ?? [], [job?.transcript_json?.tokens]);
 
   const loadProjects = useCallback(async () => {
     setLoadingProjects(true);
@@ -329,35 +338,28 @@ export default function App() {
   }, [selectedJobId, showNotice]);
 
   useEffect(() => {
-    setPlayingSegmentIndex(null);
+    setPlaybackMs(0);
+    setIsAudioPlaying(false);
     const audio = audioRef.current;
     if (!audio) return;
-    return attachSegmentStopListener(audio, segmentEndRef, {
-      onPlaybackEnd: () => setPlayingSegmentIndex(null),
+
+    const cleanupStop = attachSegmentStopListener(audio, segmentEndRef);
+    const cleanupTime = attachPlaybackTimeListener(audio, {
+      onTimeUpdate: setPlaybackMs,
+      onPlayingChange: setIsAudioPlaying,
     });
+
+    return () => {
+      cleanupStop();
+      cleanupTime();
+    };
   }, [job?.job_id]);
 
   const playSegment = (index: number, startMs: number | null | undefined) => {
     const audio = audioRef.current;
     if (!audio || startMs == null) return;
     const endMs = resolveSegmentEndMs(segments, index);
-    setPlayingSegmentIndex(index);
-    void playSegmentAudio(audio, segmentEndRef, startMs, endMs).catch(() => {
-      setPlayingSegmentIndex(null);
-    });
-  };
-
-  const handleSegmentTextMouseDown = (
-    event: MouseEvent<HTMLTextAreaElement>,
-    index: number,
-    startMs: number | null | undefined,
-  ) => {
-    const textarea = event.currentTarget;
-    if (document.activeElement !== textarea) {
-      event.preventDefault();
-      playSegment(index, startMs);
-      textarea.focus();
-    }
+    void playSegmentAudio(audio, segmentEndRef, startMs, endMs);
   };
 
   const updateSegment = (index: number, patch: Partial<TranscriptSegment>) => {
@@ -672,13 +674,22 @@ export default function App() {
                     <div className="max-h-[min(62vh,640px)] space-y-2 overflow-y-auto pr-1">
                       {segments.length ? (
                         segments.map((segment, index) => {
-                          const isPlaying = playingSegmentIndex === index;
+                          const segmentWords = buildSegmentTimedWords(
+                            segment.text,
+                            segment,
+                            index,
+                            segments,
+                            transcriptTokens,
+                          );
+                          const hasActiveWord =
+                            isAudioPlaying && segmentContainsActiveWord(segmentWords, playbackMs);
+
                           return (
                           <div
                             key={segment.id}
                             className={`rounded-xl border px-3 py-2.5 transition-colors ${
-                              isPlaying
-                                ? "border-violet-300 bg-violet-400/15"
+                              hasActiveWord
+                                ? "border-violet-300/70 bg-violet-400/10"
                                 : "border-slate-700/80 bg-slate-950/80"
                             }`}
                           >
@@ -699,27 +710,19 @@ export default function App() {
                                 {formatSegmentTime(segment.start_ms)} - {formatSegmentTime(segment.end_ms)}
                               </span>
                             </div>
-                            <textarea
+                            <SegmentPlaybackText
                               value={segment.text}
-                              rows={1}
-                              disabled={aiRunning}
-                              onChange={(e) => {
-                                updateSegment(index, { text: e.target.value });
-                                autoResizeTextarea(e.currentTarget);
-                              }}
-                              onMouseDown={(e) =>
-                                handleSegmentTextMouseDown(e, index, segment.start_ms)
-                              }
-                              onFocus={(e) => autoResizeTextarea(e.currentTarget)}
-                              ref={(element) => {
-                                if (element) autoResizeTextarea(element);
-                              }}
-                              placeholder="텍스트를 눌러 재생하고, 여기서 바로 수정하세요."
-                              className={`w-full resize-none overflow-hidden rounded-lg border px-3 py-2 text-sm leading-6 outline-none transition placeholder:text-slate-500 disabled:opacity-50 ${
-                                isPlaying
-                                  ? "border-violet-300 bg-white text-slate-950 placeholder:text-slate-500 hover:border-violet-300 focus:border-violet-400 focus:bg-white"
-                                  : "border-transparent bg-slate-900/60 text-slate-100 hover:border-slate-700 focus:border-blue-500 focus:bg-slate-900"
-                              }`}
+                              segment={segment}
+                              segmentIndex={index}
+                              segments={segments}
+                              tokens={transcriptTokens}
+                              playbackMs={playbackMs}
+                              isAudioPlaying={isAudioPlaying}
+                              disabled={aiRunning || busy}
+                              placeholder="텍스트를 눌러 재생하고, 더블클릭하면 수정할 수 있습니다."
+                              onChange={(text) => updateSegment(index, { text })}
+                              onPlayRequest={() => playSegment(index, segment.start_ms)}
+                              onAutoResize={autoResizeTextarea}
                             />
                           </div>
                           );
