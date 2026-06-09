@@ -125,6 +125,22 @@ export function hmsToMs({ hour, minute, second }: HmsTime): number {
   return (hour * 3600 + minute * 60 + second) * 1000;
 }
 
+export function clampHms(value: HmsTime, maxMs?: number): HmsTime {
+  if (maxMs == null) return value;
+
+  const max = msToHms(maxMs);
+  const next = { ...value };
+  if (next.hour > max.hour) next.hour = max.hour;
+  const minuteMax = next.hour === max.hour ? max.minute : 59;
+  if (next.minute > minuteMax) next.minute = minuteMax;
+  const secondMax = next.hour === max.hour && next.minute === max.minute ? max.second : 59;
+  if (next.second > secondMax) next.second = secondMax;
+  if (hmsToMs(next) > maxMs) {
+    return msToHms(maxMs);
+  }
+  return next;
+}
+
 export function formatSegmentClock(ms: number): string {
   const { hour, minute, second } = msToHms(ms);
   if (hour > 0) {

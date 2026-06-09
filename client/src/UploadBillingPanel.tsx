@@ -1,0 +1,453 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import TimeHmsSelect from "./TimeHmsSelect";
+import {
+  ZERO_HMS,
+  calculateQuote,
+  clampHms,
+  formatDurationHuman,
+  formatKrw,
+  formatSegmentClock,
+  hmsToMs,
+  msToHms,
+  readMediaDuration,
+  type QuoteSegment,
+} from "./quotePricing";
+import { playSegmentAudio } from "./segmentAudio";
+import {
+  createUploadSegment,
+  fileBillableDurationMs,
+  isUploadBillingReady,
+  totalBillableDurationMs,
+  type UploadBillingFile,
+  type UploadBillingMode,
+} from "./uploadBilling";
+
+type UploadBillingPanelProps = {
+  files: File[];
+  fileIdentity: (file: File) => string;
+  formatSize: (bytes: number) => string;
+  paid: boolean;
+  onPaidChange: (paid: boolean) => void;
+  onBillingReadyChange: (ready: boolean) => void;
+  onRemoveFile: (file: File) => void;
+};
+
+function formatSegmentRange(startMs: number, endMs: number): string {
+  return `${formatSegmentClock(startMs)} ~ ${formatSegmentClock(endMs)}`;
+}
+
+function revokeUrls(entries: UploadBillingFile[]) {
+  for (const entry of entries) {
+    URL.revokeObjectURL(entry.url);
+  }
+}
+
+export default function UploadBillingPanel({
+  files,
+  fileIdentity,
+  formatSize,
+  paid,
+  onPaidChange,
+  onBillingReadyChange,
+  onRemoveFile,
+}: UploadBillingPanelProps) {
+  const entriesRef = useRef<UploadBillingFile[]>([]);
+  const [entries, setEntries] = useState<UploadBillingFile[]>([]);
+  const [segmentForms, setSegmentForms] = useState<Record<string, { start: typeof ZERO_HMS; end: typeof ZERO_HMS }>>({});
+  const [segmentFormErrors, setSegmentFormErrors] = useState<Record<string, string>>({});
+
+  const billableDurationMs = useMemo(() => totalBillableDurationMs(entries), [entries]);
+  const quote = useMemo(() => calculateQuote(billableDurationMs), [billableDurationMs]);
+  const billingReady = useMemo(
+    () => isUploadBillingReady(entries) && !quote.overLimit && quote.tier != null,
+    [entries, quote],
+  );
+
+  entriesRef.current = entries;
+
+  useEffect(() => {
+    return () => {
+      revokeUrls(entriesRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const incomingKeys = new Set(files.map(fileIdentity));
+
+    setEntries((prev) => {
+      const kept = prev.filter((entry) => incomingKeys.has(entry.key));
+      const keptKeys = new Set(kept.map((entry) => entry.key));
+      const added = files
+        .filter((file) => !keptKeys.has(fileIdentity(file)))
+        .map((file) => ({
+          key: fileIdentity(file),
+          file,
+          url: URL.createObjectURL(file),
+          durationMs: null,
+          loading: true,
+          error: "",
+          mode: "full" as UploadBillingMode,
+          segments: [] as QuoteSegment[],
+        }));
+
+      const removed = prev.filter((entry) => !incomingKeys.has(entry.key));
+      for (const entry of removed) {
+        URL.revokeObjectURL(entry.url);
+      }
+
+      return [...kept, ...added];
+    });
+  }, [files, fileIdentity]);
+
+  const loadingKeysRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    const pending = entries.filter((entry) => entry.loading && !loadingKeysRef.current.has(entry.key));
+    if (!pending.length) return;
+
+    for (const entry of pending) {
+      loadingKeysRef.current.add(entry.key);
+      void readMediaDuration(entry.file)
+        .then((durationMs) => {
+          setEntries((prev) =>
+            prev.map((item) =>
+              item.key === entry.key ? { ...item, durationMs, loading: false, error: "" } : item,
+            ),
+          );
+        })
+        .catch((err) => {
+          const message = err instanceof Error ? err.message : "재생 시간을 확인할 수 없습니다.";
+          setEntries((prev) =>
+            prev.map((item) =>
+              item.key === entry.key ? { ...item, durationMs: null, loading: false, error: message } : item,
+            ),
+          );
+        });
+    }
+  }, [entries]);
+
+  useEffect(() => {
+    onBillingReadyChange(billingReady);
+  }, [billingReady, onBillingReadyChange]);
+
+  useEffect(() => {
+    onPaidChange(false);
+  }, [billableDurationMs, onPaidChange]);
+
+  useEffect(() => {
+    if (!billingReady) onPaidChange(false);
+  }, [billingReady, onPaidChange]);
+
+  const updateEntry = (key: string, patch: Partial<UploadBillingFile>) => {
+    setEntries((prev) => prev.map((entry) => (entry.key === key ? { ...entry, ...patch } : entry)));
+  };
+
+  const getSegmentForm = (key: string) => segmentForms[key] ?? { start: ZERO_HMS, end: ZERO_HMS };
+
+  const setSegmentForm = (key: string, patch: Partial<{ start: typeof ZERO_HMS; end: typeof ZERO_HMS }>) => {
+    setSegmentForms((prev) => ({
+      ...prev,
+      [key]: { ...getSegmentForm(key), ...patch },
+    }));
+  };
+
+  const addSegment = (entry: UploadBillingFile) => {
+    if (!entry.durationMs) return;
+
+    const form = getSegmentForm(entry.key);
+    const start_ms = hmsToMs(form.start);
+    const end_ms = hmsToMs(form.end);
+
+    if (end_ms <= start_ms) {
+      setSegmentFormErrors((prev) => ({ ...prev, [entry.key]: "종료 시간은 시작 시간보다 늦어야 합니다." }));
+      return;
+    }
+    if (end_ms > entry.durationMs) {
+      setSegmentFormErrors((prev) => ({ ...prev, [entry.key]: "종료 시간이 파일 길이를 넘을 수 없습니다." }));
+      return;
+    }
+
+    const segment = createUploadSegment(entry.key, start_ms, end_ms);
+    updateEntry(entry.key, {
+      segments: [...entry.segments, segment].sort((left, right) => left.start_ms - right.start_ms || left.end_ms - right.end_ms),
+    });
+    setSegmentForm(entry.key, { start: ZERO_HMS, end: ZERO_HMS });
+    setSegmentFormErrors((prev) => ({ ...prev, [entry.key]: "" }));
+  };
+
+  const handlePay = () => {
+    if (!billingReady || !quote.tier) return;
+    onPaidChange(true);
+  };
+
+  if (!entries.length) return null;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">파일별 업로드 범위</p>
+        <div className="space-y-3">
+          {entries.map((entry) => (
+            <UploadFileBillingCard
+              key={entry.key}
+              entry={entry}
+              formatSize={formatSize}
+              segmentForm={getSegmentForm(entry.key)}
+              segmentFormError={segmentFormErrors[entry.key] ?? ""}
+              billableDurationMs={fileBillableDurationMs(entry)}
+              onModeChange={(mode) => updateEntry(entry.key, { mode })}
+              onRemove={() => onRemoveFile(entry.file)}
+              onSegmentFormChange={(patch) => setSegmentForm(entry.key, patch)}
+              onAddSegment={() => addSegment(entry)}
+              onSegmentsChange={(segments) => updateEntry(entry.key, { segments })}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-cyan-500/30 bg-gradient-to-br from-cyan-500/10 to-slate-950 px-4 py-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">결제 견적</p>
+
+        {entries.some((entry) => entry.loading) ? (
+          <p className="mt-2 text-sm text-slate-400">파일 재생 시간을 확인하는 중입니다…</p>
+        ) : quote.overLimit ? (
+          <p className="mt-2 text-sm text-amber-200">
+            계산 시간 {formatDurationHuman(quote.durationMs)} — 60분 이상은 별도 문의가 필요합니다.
+          </p>
+        ) : !billingReady ? (
+          <p className="mt-2 text-sm text-amber-200">
+            구간 선택 파일은 구간을 추가해야 견적이 완료됩니다.
+          </p>
+        ) : quote.tier ? (
+          <>
+            <p className="mt-2 text-sm text-slate-300">
+              계산 기준 시간: <span className="font-semibold text-white">{formatDurationHuman(quote.durationMs)}</span>
+            </p>
+            <p className="mt-1 text-sm text-slate-300">
+              적용 구간: <span className="font-semibold text-white">{quote.tier.label}</span>
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-3">
+                <p className="text-xs text-slate-500">PDF 기본요금</p>
+                <p className="mt-1 text-lg font-bold text-white">{formatKrw(quote.tier.baseFee)}</p>
+              </div>
+              <div className="rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-3 py-3">
+                <p className="text-xs text-cyan-200/80">부가세 포함 결제금액</p>
+                <p className="mt-1 text-2xl font-bold text-cyan-100">{formatKrw(quote.tier.totalWithVat)}</p>
+              </div>
+            </div>
+          </>
+        ) : null}
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {paid ? (
+            <span className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-200">
+              결제 완료 · 업로드 가능
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={handlePay}
+              disabled={!billingReady || !quote.tier}
+              className="rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+            >
+              {quote.tier ? `${formatKrw(quote.tier.totalWithVat)} 결제하기` : "결제하기"}
+            </button>
+          )}
+          {paid ? (
+            <button
+              type="button"
+              onClick={() => onPaidChange(false)}
+              className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
+            >
+              결제 취소
+            </button>
+          ) : null}
+        </div>
+
+        {!paid && billingReady ? (
+          <p className="mt-3 text-xs text-slate-500">결제 완료 후 업로드 버튼이 활성화됩니다.</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function UploadFileBillingCard({
+  entry,
+  formatSize,
+  segmentForm,
+  segmentFormError,
+  billableDurationMs,
+  onModeChange,
+  onRemove,
+  onSegmentFormChange,
+  onAddSegment,
+  onSegmentsChange,
+}: {
+  entry: UploadBillingFile;
+  formatSize: (bytes: number) => string;
+  segmentForm: { start: typeof ZERO_HMS; end: typeof ZERO_HMS };
+  segmentFormError: string;
+  billableDurationMs: number;
+  onModeChange: (mode: UploadBillingMode) => void;
+  onRemove: () => void;
+  onSegmentFormChange: (patch: Partial<{ start: typeof ZERO_HMS; end: typeof ZERO_HMS }>) => void;
+  onAddSegment: () => void;
+  onSegmentsChange: (segments: QuoteSegment[]) => void;
+}) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const segmentEndRef = useRef<number | null>(null);
+
+  const setCurrentTimeToForm = (field: "start" | "end") => {
+    const audio = audioRef.current;
+    if (!audio || !entry.durationMs) return;
+    const next = clampHms(msToHms(Math.floor(audio.currentTime * 1000)), entry.durationMs);
+    onSegmentFormChange({ [field]: next });
+  };
+
+  const playSegment = (startMs: number, endMs: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    void playSegmentAudio(audio, segmentEndRef, startMs, endMs);
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-white">{entry.file.name}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {formatSize(entry.file.size)}
+            {entry.loading
+              ? " · 재생 시간 확인 중…"
+              : entry.error
+                ? ` · ${entry.error}`
+                : entry.durationMs != null
+                  ? ` · ${formatDurationHuman(entry.durationMs)}`
+                  : ""}
+            {billableDurationMs > 0 ? ` · 견적 ${formatDurationHuman(billableDurationMs)}` : ""}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="rounded-lg border border-rose-500/30 px-2.5 py-1.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10"
+        >
+          제거
+        </button>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-slate-800 bg-slate-950/80 p-1">
+        <button
+          type="button"
+          onClick={() => onModeChange("full")}
+          className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+            entry.mode === "full" ? "bg-cyan-600 text-white" : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          파일 전체
+        </button>
+        <button
+          type="button"
+          onClick={() => onModeChange("segments")}
+          className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+            entry.mode === "segments" ? "bg-cyan-600 text-white" : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          구간 선택
+        </button>
+      </div>
+
+      {entry.mode === "segments" && entry.durationMs != null && !entry.error ? (
+        <div className="mt-3 space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+          <audio ref={audioRef} controls preload="metadata" src={entry.url} className="w-full rounded-xl" />
+          <TimeHmsSelect
+            label="시작"
+            value={segmentForm.start}
+            maxMs={entry.durationMs}
+            onChange={(start) => onSegmentFormChange({ start })}
+          />
+          <TimeHmsSelect
+            label="종료"
+            value={segmentForm.end}
+            maxMs={entry.durationMs}
+            onChange={(end) => onSegmentFormChange({ end })}
+          />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setCurrentTimeToForm("start")}
+              className="rounded-lg border border-slate-700 px-2.5 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800"
+            >
+              현재→시작
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrentTimeToForm("end")}
+              className="rounded-lg border border-slate-700 px-2.5 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800"
+            >
+              현재→종료
+            </button>
+            <button
+              type="button"
+              onClick={onAddSegment}
+              className="rounded-lg bg-cyan-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-cyan-500"
+            >
+              구간 추가
+            </button>
+          </div>
+          {segmentFormError ? <p className="text-sm text-rose-300">{segmentFormError}</p> : null}
+
+          <div className="space-y-2">
+            {entry.segments.length ? (
+              entry.segments.map((segment) => {
+                const segmentDuration = Math.max(0, segment.end_ms - segment.start_ms);
+                return (
+                  <div
+                    key={segment.id}
+                    className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/80 px-3 py-2"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={segment.selected}
+                      onChange={(event) =>
+                        onSegmentsChange(
+                          entry.segments.map((item) =>
+                            item.id === segment.id ? { ...item, selected: event.target.checked } : item,
+                          ),
+                        )
+                      }
+                      className="h-4 w-4 rounded border-slate-600 bg-slate-950 text-cyan-500"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-white">{formatSegmentRange(segment.start_ms, segment.end_ms)}</p>
+                      <p className="text-xs text-slate-500">{formatDurationHuman(segmentDuration)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => playSegment(segment.start_ms, segment.end_ms)}
+                      className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-800"
+                    >
+                      재생
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onSegmentsChange(entry.segments.filter((item) => item.id !== segment.id))}
+                      className="rounded-lg border border-rose-500/30 px-2.5 py-1.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10"
+                    >
+                      삭제
+                    </button>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-center text-xs text-slate-500">추가할 구간을 선택해 주세요.</p>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}

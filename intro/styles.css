@@ -1035,3 +1035,482 @@ body.terms-modal-open {
   opacity: 0.55;
   cursor: not-allowed;
 }
+
+/* —— Free quote modal —— */
+#quote-open-btn {
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.quote-modal__panel {
+  width: min(760px, 100%);
+  max-height: min(92vh, 920px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.quote-modal__body {
+  overflow-y: auto;
+  padding-right: 0.15rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.quote-modal__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.quote-modal__eyebrow {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #67e8f9;
+}
+
+.quote-modal__title {
+  margin: 0.35rem 0 0;
+  font-size: 1.35rem;
+  color: #f8fafc;
+}
+
+.quote-modal__desc {
+  margin: 0.45rem 0 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: #94a3b8;
+}
+
+.quote-reset-btn {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #cbd5e1;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.quote-reset-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.quote-reset-btn:not(:disabled):hover {
+  background: rgba(30, 41, 59, 0.9);
+  color: #f8fafc;
+}
+
+.quote-dropzone {
+  width: 100%;
+  border: 2px dashed rgba(148, 163, 184, 0.28);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.72);
+  padding: 1.5rem 1rem;
+  text-align: center;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.quote-dropzone.is-drag,
+.quote-dropzone:hover {
+  border-color: rgba(34, 211, 238, 0.65);
+  background: rgba(15, 23, 42, 0.95);
+}
+
+.quote-dropzone__icon {
+  display: block;
+  font-size: 2rem;
+}
+
+.quote-dropzone__title {
+  display: block;
+  margin-top: 0.55rem;
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.quote-dropzone__desc {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+  color: #94a3b8;
+}
+
+.quote-files,
+.quote-segment-panel,
+.quote-price-table {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.72);
+  padding: 1rem;
+}
+
+.quote-files__title,
+.quote-segment-panel__title,
+.quote-price-table__title {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.quote-files__sub,
+.quote-segment-panel__desc,
+.quote-price-table__desc {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.quote-files__list,
+.quote-segment-list {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+}
+
+.quote-file-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.45);
+  padding: 0.55rem 0.65rem;
+}
+
+.quote-file-item.is-active {
+  border-color: rgba(34, 211, 238, 0.45);
+  background: rgba(8, 145, 178, 0.12);
+}
+
+.quote-file-item__main {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.quote-file-item__name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.quote-file-item__meta {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.76rem;
+  color: #64748b;
+}
+
+.quote-file-item__remove,
+.quote-chip-btn {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #cbd5e1;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.quote-file-item__remove {
+  border-color: rgba(248, 113, 113, 0.28);
+  color: #fca5a5;
+}
+
+.quote-mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  padding: 0.25rem;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.quote-mode-btn {
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #94a3b8;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.quote-mode-btn.is-active {
+  background: #0891b2;
+  color: #fff;
+}
+
+.quote-mode-note {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgba(34, 211, 238, 0.18);
+  border-radius: 12px;
+  background: rgba(8, 145, 178, 0.1);
+  font-size: 0.86rem;
+  color: #a5f3fc;
+}
+
+.quote-segment-panel__file {
+  margin: 0.75rem 0 0;
+  font-size: 0.8rem;
+  color: #a5f3fc;
+}
+
+.quote-audio {
+  width: 100%;
+  margin-top: 0.65rem;
+  border-radius: 12px;
+}
+
+.quote-hms-field {
+  margin-top: 0.75rem;
+}
+
+.quote-hms-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.quote-hms-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.quote-hms-select {
+  min-width: 3.4rem;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #f8fafc;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.88rem;
+  font-family: inherit;
+}
+
+.quote-hms-unit {
+  font-size: 0.76rem;
+  color: #64748b;
+  margin-right: 0.25rem;
+}
+
+.quote-segment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.75rem;
+}
+
+.quote-chip-btn--primary {
+  background: #0891b2;
+  border-color: #0891b2;
+  color: #fff;
+}
+
+.quote-chip-btn--danger {
+  border-color: rgba(248, 113, 113, 0.28);
+  color: #fca5a5;
+}
+
+.quote-error {
+  margin: 0.55rem 0 0;
+  font-size: 0.84rem;
+  color: #fca5a5;
+}
+
+.quote-segment-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.45);
+  padding: 0.55rem 0.65rem;
+}
+
+.quote-segment-item__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.quote-segment-item__range {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.quote-segment-item__meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.76rem;
+  color: #64748b;
+}
+
+.quote-segment-empty {
+  margin: 0;
+  padding: 1rem;
+  border: 1px dashed rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  text-align: center;
+  font-size: 0.84rem;
+  color: #64748b;
+}
+
+.quote-segment-sum {
+  margin: 0.75rem 0 0;
+  font-size: 0.86rem;
+  color: #a5f3fc;
+}
+
+.quote-summary {
+  border: 1px solid rgba(34, 211, 238, 0.22);
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgba(8, 145, 178, 0.14), rgba(15, 23, 42, 0.92));
+  padding: 1rem;
+}
+
+.quote-summary__label {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #67e8f9;
+}
+
+.quote-summary__meta {
+  margin: 0.55rem 0 0;
+  font-size: 0.86rem;
+  color: #cbd5e1;
+}
+
+.quote-summary__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+}
+
+.quote-summary__box {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.45);
+  padding: 0.75rem;
+}
+
+.quote-summary__box--accent {
+  border-color: rgba(34, 211, 238, 0.28);
+  background: rgba(8, 145, 178, 0.12);
+}
+
+.quote-summary__box-label {
+  margin: 0;
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+.quote-summary__box-value {
+  margin: 0.35rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.quote-summary__box-value--lg {
+  font-size: 1.35rem;
+  color: #a5f3fc;
+}
+
+.quote-summary__note {
+  margin: 0.75rem 0 0;
+  font-size: 0.76rem;
+  color: #64748b;
+}
+
+.quote-notice {
+  border-radius: 12px;
+  padding: 0.85rem 0.95rem;
+  font-size: 0.86rem;
+}
+
+.quote-notice--warn {
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  background: rgba(245, 158, 11, 0.1);
+  color: #fde68a;
+}
+
+.quote-price-table__scroll {
+  overflow-x: auto;
+  margin-top: 0.65rem;
+}
+
+.quote-price-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.quote-price-table th,
+.quote-price-table td {
+  padding: 0.55rem 0.45rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.quote-price-table th {
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.quote-price-table tr.is-active {
+  background: rgba(8, 145, 178, 0.12);
+  color: #a5f3fc;
+}
+
+@media (max-width: 640px) {
+  .quote-summary__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .nav-actions {
+    gap: 0.45rem;
+  }
+
+  #quote-open-btn,
+  #signup-open-btn {
+    padding-inline: 0.75rem;
+    font-size: 0.82rem;
+  }
+}

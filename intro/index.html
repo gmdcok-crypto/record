@@ -25,6 +25,7 @@
           <a href="#output">결과물</a>
         </nav>
         <div class="nav-actions">
+          <button type="button" class="btn btn-ghost" id="quote-open-btn">무료견적</button>
           <button type="button" class="btn btn-primary" id="signup-open-btn">회원가입</button>
         </div>
       </div>
@@ -363,6 +364,28 @@
       </div>
     </div>
 
+    <input
+      id="quote-file-input"
+      type="file"
+      accept="audio/*,video/mp4,video/webm,.wav,.mp3,.m4a,.flac,.ogg"
+      multiple
+      hidden
+    />
+
+    <div class="terms-modal quote-modal" id="quote-modal" hidden aria-hidden="true">
+      <div class="terms-modal__backdrop" data-quote-close aria-hidden="true"></div>
+      <div
+        class="terms-modal__panel quote-modal__panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="quote-modal-title"
+        aria-describedby="quote-modal-desc"
+      >
+        <button type="button" class="modal-close-btn" data-quote-close aria-label="닫기">×</button>
+        <div id="quote-modal-body" class="quote-modal__body"></div>
+      </div>
+    </div>
+
     <div class="terms-modal signup-modal" id="signup-modal" hidden aria-hidden="true">
       <div class="terms-modal__backdrop" aria-hidden="true"></div>
       <div
@@ -442,6 +465,8 @@
       </div>
     </div>
 
+    <script src="./quote-pricing.js?v=1"></script>
+    <script src="./quote-modal.js?v=1"></script>
     <script src="./signup-modal.js?v=5"></script>
   </body>
 </html>

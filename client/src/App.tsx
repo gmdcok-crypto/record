@@ -36,7 +36,7 @@ import {
   mergeSpeakerIds,
   nextSpeakerId,
 } from "./transcriptEditor";
-import QuoteRequestTab from "./QuoteRequestTab";
+import UploadBillingPanel from "./UploadBillingPanel";
 import SegmentPlaybackText from "./SegmentPlaybackText";
 import { buildSegmentTimedWords, segmentContainsActiveWord } from "./playbackHighlight";
 import {
@@ -48,7 +48,7 @@ import {
 
 type Step = "idle" | "uploading" | "ready" | "error";
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
-type ClientTab = "upload" | "archive" | "edit" | "quote";
+type ClientTab = "upload" | "archive" | "edit";
 type UploadProjectMode = "existing" | "new";
 type EditableSegment = TranscriptSegment & { id: string };
 
@@ -275,6 +275,8 @@ export default function App() {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<JobArchiveItem | null>(null);
   const [duplicateDialogMessage, setDuplicateDialogMessage] = useState("");
+  const [uploadPaid, setUploadPaid] = useState(false);
+  const [uploadBillingReady, setUploadBillingReady] = useState(false);
   const [activeTab, setActiveTab] = useState<ClientTab>("archive");
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
   const [memberName, setMemberName] = useState<string | null>(null);
@@ -442,6 +444,8 @@ export default function App() {
 
   const resetUploadUi = (successMessage = "") => {
     setSelectedFiles([]);
+    setUploadPaid(false);
+    setUploadBillingReady(false);
     setProgress(0);
     setStep("idle");
     setUploadStatus("");
@@ -449,6 +453,12 @@ export default function App() {
     if (successMessage) {
       showNotice("success", successMessage);
     }
+  };
+
+  const removeSelectedFile = (file: File) => {
+    setSelectedFiles((prev) => prev.filter((item) => fileIdentity(item) !== fileIdentity(file)));
+    setUploadPaid(false);
+    if (inputRef.current) inputRef.current.value = "";
   };
 
   const onSelect = (files: FileList | null) => {
@@ -476,6 +486,7 @@ export default function App() {
       const appended = incomingFiles.filter((file) => !existing.has(fileIdentity(file)));
       return [...prev, ...appended];
     });
+    setUploadPaid(false);
     setStep("idle");
     setProgress(0);
     setUploadStatus("");
@@ -754,7 +765,6 @@ export default function App() {
   };
 
   const tabs: { id: ClientTab; label: string }[] = [
-    { id: "quote", label: "견적의뢰" },
     { id: "upload", label: "업로드" },
     { id: "archive", label: "보관함" },
     { id: "edit", label: "편집" },
@@ -792,7 +802,7 @@ export default function App() {
         </header>
 
         <nav className="sticky top-0 z-20 -mx-4 mb-4 border-b border-slate-800 bg-slate-950/95 px-4 backdrop-blur lg:-mx-6 lg:px-6">
-          <div className="grid grid-cols-2 gap-1 py-2 sm:grid-cols-4">
+          <div className="grid grid-cols-3 gap-1 py-2">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
@@ -814,15 +824,13 @@ export default function App() {
         </nav>
 
         <main className="flex-1">
-          {activeTab === "quote" ? <QuoteRequestTab /> : null}
-
           {activeTab === "upload" ? (
           <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
             <div className="mb-5">
               <p className="text-sm font-semibold text-blue-300">파일 업로드</p>
               <h2 className="mt-1 text-xl font-bold text-white">새 녹취 의뢰</h2>
               <p className="mt-2 text-sm text-slate-400">
-                먼저 프로젝트(사건) 이름을 정하거나 기존 프로젝트를 선택한 뒤 파일을 올려 주세요.
+                프로젝트를 정한 뒤 파일을 선택하고, 파일별로 전체 또는 구간을 설정해 견적·결제 후 업로드할 수 있습니다.
               </p>
             </div>
 
@@ -965,29 +973,37 @@ export default function App() {
                 </div>
               )}
 
-              {selectedFiles.length > 1 && (
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-3">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">선택된 파일</p>
-                  <div className="space-y-2">
-                    {selectedFiles.map((file) => (
-                      <div key={`${file.name}-${file.size}-${file.lastModified}`} className="flex items-center justify-between gap-3 text-sm">
-                        <span className="truncate text-slate-200">{file.name}</span>
-                        <span className="shrink-0 text-slate-500">{formatSize(file.size)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {selectedFiles.length > 0 ? (
+                <UploadBillingPanel
+                  files={selectedFiles}
+                  fileIdentity={fileIdentity}
+                  formatSize={formatSize}
+                  paid={uploadPaid}
+                  onPaidChange={setUploadPaid}
+                  onBillingReadyChange={setUploadBillingReady}
+                  onRemoveFile={removeSelectedFile}
+                />
+              ) : null}
 
               <button
                 type="button"
                 onClick={onUpload}
                 disabled={
-                  !uploadProjectReady || !selectedFiles.length || busy || r2Ready === false || dbReady === false
+                  !uploadProjectReady ||
+                  !selectedFiles.length ||
+                  !uploadPaid ||
+                  !uploadBillingReady ||
+                  busy ||
+                  r2Ready === false ||
+                  dbReady === false
                 }
                 className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-slate-700"
               >
-                {selectedFiles.length > 1 ? `${selectedFiles.length}개 파일 업로드` : "업로드"}
+                {!uploadPaid || !uploadBillingReady
+                  ? "결제 후 업로드 가능"
+                  : selectedFiles.length > 1
+                    ? `${selectedFiles.length}개 파일 업로드`
+                    : "업로드"}
               </button>
             </div>
           </section>

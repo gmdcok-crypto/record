@@ -97,6 +97,11 @@ function closeTermsModal() {
 }
 
 function openSignupModal() {
+  const quoteModal = document.getElementById("quote-modal");
+  if (quoteModal && !quoteModal.hidden) {
+    quoteModal.hidden = true;
+    quoteModal.setAttribute("aria-hidden", "true");
+  }
   signupModal.hidden = false;
   signupModal.setAttribute("aria-hidden", "false");
   setBodyLocked(true);
