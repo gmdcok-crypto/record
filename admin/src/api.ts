@@ -111,6 +111,7 @@ export type AdminOverviewProjectFile = {
   uploaded_at: string | null;
   due_at: string | null;
   assignee: string | null;
+  assignee_code?: string | null;
   pdf_ready: boolean;
 };
 
@@ -125,6 +126,7 @@ export type AdminOverviewProject = {
   memo?: string | null;
   priority?: string;
   assignee?: string;
+  assignee_code?: string | null;
   files?: AdminOverviewProjectFile[];
 };
 
@@ -221,11 +223,17 @@ export async function assignProject(
   transcriberCode: string,
   jobIds?: string[],
   note?: string,
+  reassign = false,
 ): Promise<void> {
   const res = await fetch(`${apiBase()}/api/projects/${projectId}/assign`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ transcriber_code: transcriberCode, job_ids: jobIds, note }),
+    body: JSON.stringify({
+      transcriber_code: transcriberCode,
+      job_ids: jobIds,
+      note,
+      reassign,
+    }),
   });
   if (!res.ok) {
     throw await parseApiError(res, "프로젝트 배정 실패");

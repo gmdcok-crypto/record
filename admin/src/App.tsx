@@ -73,6 +73,7 @@ type ProjectFileItem = {
   filename: string;
   status: JobStatus;
   assignee: string;
+  assigneeCode: string | null;
   dueAt: string;
   salesAmount: number;
   paymentStatus: PaymentStatus;
@@ -88,6 +89,7 @@ type ProjectItem = {
   fileCount: number;
   completedCount: number;
   assignee: string;
+  assigneeCode: string | null;
   files: ProjectFileItem[];
 };
 
@@ -243,6 +245,41 @@ function projectStatusTone(rawStatus: string): string {
 
 function projectAssignButtonLabel(project: ProjectItem): string {
   return project.assignee !== "-" ? "배정변경" : "프로젝트 배정";
+}
+
+function projectIsReassignMode(project: ProjectItem): boolean {
+  return project.assignee !== "-";
+}
+
+function isFinalFileStatus(status: JobStatus): boolean {
+  return status === "최종 완료";
+}
+
+function isInProgressFileStatus(status: JobStatus): boolean {
+  return status !== "배정 대기" && !isFinalFileStatus(status);
+}
+
+function assignableProjectFiles(project: ProjectItem, reassign: boolean): ProjectFileItem[] {
+  return project.files.filter((file) => {
+    if (isFinalFileStatus(file.status)) return false;
+    if (reassign) return true;
+    return file.status === "배정 대기" || file.status === "재검수 대기";
+  });
+}
+
+function defaultTranscriberCodeForProject(project: ProjectItem, people: Transcriber[]): string {
+  if (project.assigneeCode) return project.assigneeCode;
+  if (project.assignee !== "-" && project.assignee !== "복수") {
+    const matched = people.find((person) => person.name === project.assignee);
+    if (matched) return matched.id;
+  }
+  const assignedFile = project.files.find((file) => file.assigneeCode || (file.assignee && file.assignee !== "-"));
+  if (assignedFile?.assigneeCode) return assignedFile.assigneeCode;
+  if (assignedFile?.assignee && assignedFile.assignee !== "-") {
+    const matched = people.find((person) => person.name === assignedFile.assignee);
+    if (matched) return matched.id;
+  }
+  return people[0]?.id ?? "";
 }
 
 function mapJobStatus(status: string): JobStatus {
@@ -447,6 +484,7 @@ function App() {
   const [detailMember, setDetailMember] = useState<MemberItem | null>(null);
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [selectedTranscriberCode, setSelectedTranscriberCode] = useState("");
+  const [selectedAssignJobIds, setSelectedAssignJobIds] = useState<string[]>([]);
   const [transcriberModalOpen, setTranscriberModalOpen] = useState(false);
   const [editingTranscriberId, setEditingTranscriberId] = useState<string | null>(null);
   const [transcriberForm, setTranscriberForm] = useState<TranscriberForm>(EMPTY_TRANSCRIBER_FORM);
@@ -569,6 +607,7 @@ function App() {
       fileCount: project.file_count,
       completedCount: project.completed_count,
       assignee: project.assignee || "-",
+      assigneeCode: project.assignee_code ?? null,
       files: (project.files ?? []).map((file) => {
         const job = jobById.get(file.job_id);
         return {
@@ -577,6 +616,7 @@ function App() {
           filename: file.filename,
           status: mapJobStatus(file.status),
           assignee: file.assignee || job?.assignee || "-",
+          assigneeCode: file.assignee_code ?? null,
           dueAt: formatDateTime(file.due_at),
           salesAmount: job?.salesAmount ?? 0,
           paymentStatus: job?.paymentStatus ?? "미수",
@@ -677,23 +717,54 @@ function App() {
   };
 
   const openAssignProjectModal = (project: ProjectItem) => {
+    const reassign = projectIsReassignMode(project);
+    const assignableFiles = assignableProjectFiles(project, reassign);
     setAssignProjectTarget(project);
-    setSelectedTranscriberCode(transcribers[0]?.id ?? "TR-001");
+    setSelectedTranscriberCode(defaultTranscriberCodeForProject(project, transcribers));
+    setSelectedAssignJobIds(assignableFiles.map((file) => file.id));
   };
 
   const closeAssignModal = () => {
     setAssignProjectTarget(null);
     setSelectedTranscriberCode("");
+    setSelectedAssignJobIds([]);
+  };
+
+  const toggleAssignJobSelection = (jobId: string) => {
+    setSelectedAssignJobIds((prev) =>
+      prev.includes(jobId) ? prev.filter((id) => id !== jobId) : [...prev, jobId],
+    );
   };
 
   const confirmAssignModal = async () => {
     if (!selectedTranscriberCode || !assignProjectTarget) return;
-    await runAdminAction("프로젝트 배정 중입니다.", async () => {
+
+    const reassign = projectIsReassignMode(assignProjectTarget);
+    const assignableFiles = assignableProjectFiles(assignProjectTarget, reassign);
+    const selectedFiles = assignableFiles.filter((file) => selectedAssignJobIds.includes(file.id));
+
+    if (selectedFiles.length === 0) {
+      window.alert("배정할 파일을 하나 이상 선택해 주세요.");
+      return;
+    }
+
+    const selectedTranscriber = transcribers.find((person) => person.id === selectedTranscriberCode);
+    const inProgressFiles = selectedFiles.filter((file) => isInProgressFileStatus(file.status));
+
+    if (reassign && inProgressFiles.length > 0) {
+      const confirmed = window.confirm(
+        `진행 중인 파일 ${inProgressFiles.length}개를 ${selectedTranscriber?.name ?? "선택한 속기사"}에게 재배정합니다.\n계속하시겠습니까?`,
+      );
+      if (!confirmed) return;
+    }
+
+    await runAdminAction(reassign ? "배정 변경 중입니다." : "프로젝트 배정 중입니다.", async () => {
       await assignProject(
         assignProjectTarget.id,
         selectedTranscriberCode,
-        undefined,
-        "관리자 프로젝트 일괄 배정",
+        selectedFiles.map((file) => file.id),
+        reassign ? "관리자 배정 변경" : "관리자 프로젝트 일괄 배정",
+        reassign,
       );
     });
     closeAssignModal();
@@ -1960,57 +2031,127 @@ function App() {
       {assignProjectTarget ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
           <div className="w-full max-w-xl rounded-[28px] border border-white/10 bg-slate-950 p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-2xl font-semibold text-white">프로젝트 일괄 배정</h3>
-                <p className="mt-2 text-sm text-slate-400">
-                  {`${assignProjectTarget.title} (${assignProjectTarget.fileCount}개 파일)`}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closeAssignModal}
-                className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300"
-              >
-                닫기
-              </button>
-            </div>
-            <div className="mt-6 space-y-4">
-              <div>
-                <label className="mb-2 block text-xs text-slate-500">속기사 선택</label>
-                <select
-                  value={selectedTranscriberCode}
-                  onChange={(e) => setSelectedTranscriberCode(e.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100 outline-none focus:border-cyan-400"
-                >
-                  {transcribers.map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {person.name} / {person.status} / 활성 {person.activeJobs}건
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-300">
-                <p>{assignProjectTarget.client}</p>
-                <p className="mt-1">대기·재검수 파일을 선택 속기사에게 일괄 배정합니다.</p>
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={closeAssignModal}
-                  className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300"
-                >
-                  취소
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void confirmAssignModal()}
-                  className="rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950"
-                >
-                  배정 확정
-                </button>
-              </div>
-            </div>
+            {(() => {
+              const reassign = projectIsReassignMode(assignProjectTarget);
+              const assignableFiles = assignableProjectFiles(assignProjectTarget, reassign);
+              const allSelected =
+                assignableFiles.length > 0 &&
+                assignableFiles.every((file) => selectedAssignJobIds.includes(file.id));
+
+              return (
+                <>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-2xl font-semibold text-white">
+                        {reassign ? "배정 변경" : "프로젝트 일괄 배정"}
+                      </h3>
+                      <p className="mt-2 text-sm text-slate-400">
+                        {`${assignProjectTarget.title} (${assignProjectTarget.fileCount}개 파일)`}
+                      </p>
+                      {reassign ? (
+                        <p className="mt-1 text-sm text-cyan-300">현재 담당: {assignProjectTarget.assignee}</p>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeAssignModal}
+                      className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300"
+                    >
+                      닫기
+                    </button>
+                  </div>
+                  <div className="mt-6 space-y-4">
+                    <div>
+                      <label className="mb-2 block text-xs text-slate-500">
+                        {reassign ? "새 속기사 선택" : "속기사 선택"}
+                      </label>
+                      <select
+                        value={selectedTranscriberCode}
+                        onChange={(e) => setSelectedTranscriberCode(e.target.value)}
+                        className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-slate-100 outline-none focus:border-cyan-400"
+                      >
+                        {transcribers.map((person) => (
+                          <option key={person.id} value={person.id}>
+                            {person.name} / {person.status} / 활성 {person.activeJobs}건
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-slate-200">배정할 파일 선택</p>
+                        {assignableFiles.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedAssignJobIds(allSelected ? [] : assignableFiles.map((file) => file.id))
+                            }
+                            className="text-xs font-medium text-cyan-300 hover:text-cyan-200"
+                          >
+                            {allSelected ? "전체 해제" : "전체 선택"}
+                          </button>
+                        ) : null}
+                      </div>
+                      {assignableFiles.length === 0 ? (
+                        <p className="mt-3 text-sm text-slate-400">
+                          {reassign ? "재배정 가능한 파일이 없습니다." : "배정 대기 또는 재검수 대기 파일이 없습니다."}
+                        </p>
+                      ) : (
+                        <div className="mt-3 max-h-56 space-y-2 overflow-y-auto">
+                          {assignableFiles.map((file) => (
+                            <label
+                              key={file.id}
+                              className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/5 bg-slate-950/70 px-3 py-2.5"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedAssignJobIds.includes(file.id)}
+                                onChange={() => toggleAssignJobSelection(file.id)}
+                                className="mt-1"
+                              />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm text-slate-100">{file.filename}</span>
+                                <span className="mt-1 flex flex-wrap gap-2 text-xs text-slate-400">
+                                  <span>{file.status}</span>
+                                  {file.assignee !== "-" ? <span>담당 {file.assignee}</span> : null}
+                                </span>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-300">
+                      <p>{assignProjectTarget.client}</p>
+                      <p className="mt-1">
+                        {reassign
+                          ? "선택한 파일을 새 속기사에게 재배정합니다. 진행 중 파일은 확인 후 변경됩니다."
+                          : "선택한 배정 대기·재검수 파일을 속기사에게 일괄 배정합니다."}
+                      </p>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={closeAssignModal}
+                        className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300"
+                      >
+                        취소
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void confirmAssignModal()}
+                        disabled={assignableFiles.length === 0}
+                        className="rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {reassign ? "재배정 확정" : "배정 확정"}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       ) : null}

@@ -35,6 +35,7 @@ class ProjectAssignRequest(BaseModel):
     transcriber_code: str
     job_ids: list[str] | None = None
     note: str | None = None
+    reassign: bool = False
 
 
 @router.get("")
@@ -124,6 +125,7 @@ def assign_project(
             transcriber_code=body.transcriber_code,
             job_ids=body.job_ids,
             note=body.note,
+            reassign=body.reassign,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

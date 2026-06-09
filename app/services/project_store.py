@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.admin_models import Client, Job, Member, Project
+from app.models.admin_models import Client, Job, Member, Project, Transcriber
 from app.services.job_store import (
     DEFAULT_CLIENT_NAME,
     _display_status_for_job,
@@ -122,6 +122,7 @@ def serialize_project_file(db: Session, job: Job) -> dict:
         "uploaded_at": job.uploaded_at.isoformat() if job.uploaded_at else None,
         "due_at": job.due_at.isoformat() if job.due_at else None,
         "assignee": visible_transcriber.name if visible_transcriber else None,
+        "assignee_code": visible_transcriber.transcriber_code if visible_transcriber else None,
         "pdf_ready": job.status == "pdf_sent",
     }
 
@@ -132,6 +133,11 @@ def serialize_project_summary(db: Session, project: Project, *, include_files: b
     completed_count = sum(1 for status in display_statuses if status in FINAL_JOB_STATUSES)
     assignees = {
         transcriber.name
+        for job in jobs
+        if (transcriber := _visible_transcriber_for_job(db, job)) is not None
+    }
+    assignee_codes = {
+        transcriber.transcriber_code
         for job in jobs
         if (transcriber := _visible_transcriber_for_job(db, job)) is not None
     }
@@ -150,6 +156,7 @@ def serialize_project_summary(db: Session, project: Project, *, include_files: b
         "file_count": len(jobs),
         "completed_count": completed_count,
         "assignee": next(iter(assignees)) if len(assignees) == 1 else ("-" if not assignees else "복수"),
+        "assignee_code": next(iter(assignee_codes)) if len(assignee_codes) == 1 else None,
         "created_at": project.created_at.isoformat() if project.created_at else None,
         "updated_at": project.updated_at.isoformat() if project.updated_at else None,
     }
@@ -276,20 +283,39 @@ def assign_project_jobs(
     transcriber_code: str,
     job_ids: list[str] | None = None,
     note: str | None = None,
+    reassign: bool = False,
 ) -> list[str]:
+    transcriber = db.scalar(select(Transcriber).where(Transcriber.transcriber_code == transcriber_code))
+    if transcriber is None:
+        raise ValueError("Transcriber not found")
+
     jobs = list_project_jobs(db, project.project_id)
     if job_ids is not None:
         allowed = set(job_ids)
         jobs = [job for job in jobs if job.job_id in allowed]
-    else:
-        jobs = [
-            job
-            for job in jobs
-            if _display_status_for_job(db, job) in WAITING_JOB_STATUSES | {"review_waiting"}
-        ]
+
+    eligible: list[Job] = []
+    for job in jobs:
+        display_status = _display_status_for_job(db, job)
+        if display_status in FINAL_JOB_STATUSES:
+            continue
+        if reassign:
+            eligible.append(job)
+        elif display_status in WAITING_JOB_STATUSES | {"review_waiting"}:
+            eligible.append(job)
+
+    if not eligible:
+        raise ValueError("배정할 파일이 없습니다.")
 
     assigned: list[str] = []
-    for job in jobs:
-        assign_job(db, job, transcriber_code=transcriber_code, note=note)
+    assignment_note = note or ("관리자 배정 변경" if reassign else "관리자 프로젝트 일괄 배정")
+    for job in eligible:
+        if job.assigned_transcriber_id == transcriber.id:
+            continue
+        assign_job(db, job, transcriber_code=transcriber_code, note=assignment_note)
         assigned.append(job.job_id)
+
+    if not assigned:
+        raise ValueError("변경할 배정이 없습니다. 선택한 속기사에게 이미 배정된 파일입니다.")
+
     return assigned
