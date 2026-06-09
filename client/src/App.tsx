@@ -36,6 +36,7 @@ import {
   mergeSpeakerIds,
   nextSpeakerId,
 } from "./transcriptEditor";
+import QuoteRequestTab from "./QuoteRequestTab";
 import SegmentPlaybackText from "./SegmentPlaybackText";
 import { buildSegmentTimedWords, segmentContainsActiveWord } from "./playbackHighlight";
 import {
@@ -47,7 +48,7 @@ import {
 
 type Step = "idle" | "uploading" | "ready" | "error";
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
-type ClientTab = "upload" | "archive" | "edit";
+type ClientTab = "upload" | "archive" | "edit" | "quote";
 type UploadProjectMode = "existing" | "new";
 type EditableSegment = TranscriptSegment & { id: string };
 
@@ -753,6 +754,7 @@ export default function App() {
   };
 
   const tabs: { id: ClientTab; label: string }[] = [
+    { id: "quote", label: "견적의뢰" },
     { id: "upload", label: "업로드" },
     { id: "archive", label: "보관함" },
     { id: "edit", label: "편집" },
@@ -790,7 +792,7 @@ export default function App() {
         </header>
 
         <nav className="sticky top-0 z-20 -mx-4 mb-4 border-b border-slate-800 bg-slate-950/95 px-4 backdrop-blur lg:-mx-6 lg:px-6">
-          <div className="grid grid-cols-3 gap-1 py-2">
+          <div className="grid grid-cols-2 gap-1 py-2 sm:grid-cols-4">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
@@ -812,6 +814,8 @@ export default function App() {
         </nav>
 
         <main className="flex-1">
+          {activeTab === "quote" ? <QuoteRequestTab /> : null}
+
           {activeTab === "upload" ? (
           <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
             <div className="mb-5">
