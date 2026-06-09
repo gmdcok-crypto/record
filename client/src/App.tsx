@@ -1185,9 +1185,10 @@ export default function App() {
                             playbackMs={playbackMs}
                             isAudioPlaying={isAudioPlaying}
                             disabled={busy}
-                            placeholder="텍스트를 눌러 재생하고, 더블클릭하면 수정할 수 있습니다."
+                            placeholder="한 번 클릭: 재생 · 더블클릭: 수정"
                             onChange={(text) => updateSegment(index, { text })}
                             onPlayRequest={() => playSegment(index, segment.start_ms)}
+                            onEditStart={() => audioRef.current?.pause()}
                             onAutoResize={autoResizeTextarea}
                           />
                         </div>
