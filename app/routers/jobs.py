@@ -1,5 +1,6 @@
 import re
 from pathlib import Path
+from datetime import datetime, timezone
 from typing import Annotated
 from urllib.parse import quote
 
@@ -9,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.dependencies.member_auth import get_optional_current_member
+from app.dependencies.member_auth import get_current_member, get_optional_current_member
 from app.dependencies.transcriber_auth import get_current_transcriber, get_optional_current_transcriber
 from app.models.admin_models import Job, Member, Transcriber
 from app.db import ensure_db_initialized, get_db, get_engine
@@ -28,6 +29,7 @@ from app.services.job_store import (
     get_job_record,
     get_invoice_record,
     get_settlement_record,
+    get_or_create_client_for_member,
     get_transcriber_by_code,
     list_client_jobs,
     list_transcriber_jobs,
@@ -42,6 +44,13 @@ from app.services.job_store import (
     update_invoice_status,
     update_settlement_status,
     update_transcriber,
+)
+from app.services.transcript_shares import (
+    SHARE_EXPIRE_DAYS,
+    create_transcript_share,
+    deactivate_transcript_share,
+    get_transcript_share_by_token,
+    transcript_share_is_valid,
 )
 from app.services.pdf_export import build_transcript_pdf
 from app.services.member_auth import get_member_by_id, serialize_member_admin, set_member_active
@@ -128,6 +137,11 @@ class InvoiceStatusUpdateRequest(BaseModel):
     status: str
 
 
+class TranscriptShareCreateRequest(BaseModel):
+    allow_audio: bool = True
+    allow_pdf_download: bool = True
+
+
 def _media_type(voice_key: str) -> str:
     if voice_key.endswith(".m4a"):
         return "audio/mp4"
@@ -171,6 +185,30 @@ def _ensure_job_exists(job_id: str) -> None:
         raise HTTPException(status_code=404, detail="Voice file not found")
 
 
+def _share_response(share_token: str, expires_at: datetime) -> dict:
+    base = settings.public_client_url.rstrip("/")
+    return {
+        "share_url": f"{base}/share/transcript/{share_token}",
+        "expires_at": expires_at.isoformat(),
+        "expires_in_days": SHARE_EXPIRE_DAYS,
+    }
+
+
+def _get_valid_share_or_404(db: Session, token: str):
+    share = get_transcript_share_by_token(db, token)
+    if share is None:
+        raise HTTPException(status_code=404, detail="공유 링크를 찾을 수 없습니다.")
+    if not transcript_share_is_valid(share):
+        raise HTTPException(status_code=410, detail="공유 링크가 만료되었거나 비활성화되었습니다.")
+    return share
+
+
+def _ensure_member_owns_job(db: Session, member: Member, job: Job) -> None:
+    client = get_or_create_client_for_member(db, member)
+    if job.client_id is None or job.client_id != client.id:
+        raise HTTPException(status_code=403, detail="이 작업은 공유할 수 없습니다.")
+
+
 @router.get("")
 def list_jobs(
     db: Annotated[Session, Depends(get_db)],
@@ -204,6 +242,53 @@ def cancel_client_job(job_id: str, db: Annotated[Session, Depends(get_db)]) -> d
 
     publish_admin_event("job_deleted", {"job_id": job_id})
     return {"job_id": job_id, "deleted": True}
+
+
+@router.post("/{job_id}/share")
+def create_job_share(
+    job_id: str,
+    body: TranscriptShareCreateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    member: Annotated[Member, Depends(get_current_member)],
+) -> dict:
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _ensure_member_owns_job(db, member, job)
+    if not transcript_visible_to_client(job):
+        raise HTTPException(status_code=409, detail="현재 상태에서는 공유 링크를 만들 수 없습니다.")
+
+    share = create_transcript_share(
+        db,
+        job=job,
+        member=member,
+        allow_audio=body.allow_audio,
+        allow_pdf_download=body.allow_pdf_download,
+    )
+    return {
+        "job_id": job_id,
+        "token": share.token,
+        "allow_audio": bool(share.allow_audio),
+        "allow_pdf_download": bool(share.allow_pdf_download),
+        **_share_response(share.token, share.expires_at),
+    }
+
+
+@router.delete("/share/{token}")
+def revoke_job_share(
+    token: str,
+    db: Annotated[Session, Depends(get_db)],
+    member: Annotated[Member, Depends(get_current_member)],
+) -> dict:
+    share = get_transcript_share_by_token(db, token)
+    if share is None:
+        raise HTTPException(status_code=404, detail="공유 링크를 찾을 수 없습니다.")
+    job = get_job_record(db, share.job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _ensure_member_owns_job(db, member, job)
+    deactivate_transcript_share(db, share)
+    return {"token": token, "revoked": True}
 
 
 @router.post("/admin/maintenance/migrate-transcriber-profile")
@@ -656,6 +741,29 @@ def get_job(
     return serialize_job(db, job, transcript_json=transcript, audio_url=f"/api/jobs/{job_id}/audio")
 
 
+@router.get("/share/{token}")
+def get_shared_job(token: str, db: Annotated[Session, Depends(get_db)]) -> dict:
+    share = _get_valid_share_or_404(db, token)
+    job = get_job_record(db, share.job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    transcript = get_transcript_json(job.job_id) or empty_transcript_json(job.original_filename)
+    audio_url = f"/api/jobs/share/{token}/audio" if share.allow_audio else ""
+    pdf_url = f"/api/jobs/share/{token}/transcript.pdf/final" if share.allow_pdf_download and job.final_pdf_r2_key else ""
+
+    return {
+        "job": serialize_job(db, job, transcript_json=transcript, audio_url=audio_url),
+        "share": {
+            "token": share.token,
+            "expires_at": share.expires_at.isoformat(),
+            "allow_audio": bool(share.allow_audio),
+            "allow_pdf_download": bool(share.allow_pdf_download),
+            "final_pdf_url": pdf_url,
+        },
+    }
+
+
 @router.get("/{job_id}/audio")
 def stream_audio(job_id: str, request: Request) -> Response:
     voice_key = get_voice_object_key(job_id)
@@ -709,6 +817,14 @@ def stream_audio(job_id: str, request: Request) -> Response:
             "Cache-Control": "no-cache",
         },
     )
+
+
+@router.get("/share/{token}/audio")
+def stream_shared_audio(token: str, request: Request, db: Annotated[Session, Depends(get_db)]) -> Response:
+    share = _get_valid_share_or_404(db, token)
+    if not share.allow_audio:
+        raise HTTPException(status_code=403, detail="오디오 재생이 허용되지 않았습니다.")
+    return stream_audio(share.job_id, request)
 
 
 @router.get("/{job_id}/transcript.pdf")
@@ -793,6 +909,17 @@ def download_final_transcript_pdf(
     )
 
 
+@router.get("/share/{token}/transcript.pdf/final")
+def download_shared_final_transcript_pdf(
+    token: str,
+    db: Annotated[Session, Depends(get_db)],
+) -> Response:
+    share = _get_valid_share_or_404(db, token)
+    if not share.allow_pdf_download:
+        raise HTTPException(status_code=403, detail="PDF 다운로드가 허용되지 않았습니다.")
+    return download_final_transcript_pdf(share.job_id, db)
+
+
 @router.put("/{job_id}/transcript")
 def save_transcript(
     job_id: str,
@@ -811,14 +938,14 @@ def save_transcript(
     try:
         if job is not None:
             transcript_key = persist_job_transcript(
-                db,
+            db,
                 job,
-                job_id,
-                body.transcript_json,
+            job_id,
+            body.transcript_json,
                 transcriber=transcriber,
                 member=member,
                 save_kind=save_kind,
-            )
+        )
         else:
             transcript_key = save_transcript_json(job_id, body.transcript_json)
     except ValueError as exc:

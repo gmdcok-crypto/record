@@ -410,6 +410,19 @@ export type MemberProfile = {
   phone: string | null;
 };
 
+export type TranscriptShareInfo = {
+  token: string;
+  expires_at: string;
+  allow_audio: boolean;
+  allow_pdf_download: boolean;
+  final_pdf_url?: string;
+};
+
+export type SharedJobResponse = {
+  job: JobResponse;
+  share: TranscriptShareInfo;
+};
+
 export function clearMemberSession(): void {
   localStorage.removeItem(MEMBER_TOKEN_KEY);
 }
@@ -427,6 +440,34 @@ export async function fetchMemberMe(): Promise<MemberProfile | null> {
   }
   const data = await res.json();
   return data.member as MemberProfile;
+}
+
+export async function createTranscriptShare(
+  jobId: string,
+  options?: { allow_audio?: boolean; allow_pdf_download?: boolean },
+): Promise<{ share_url: string; expires_at: string; token: string }> {
+  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/share`, {
+    method: "POST",
+    headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      allow_audio: options?.allow_audio ?? true,
+      allow_pdf_download: options?.allow_pdf_download ?? true,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data));
+  }
+  return data as { share_url: string; expires_at: string; token: string };
+}
+
+export async function fetchSharedTranscript(token: string): Promise<SharedJobResponse> {
+  const res = await fetch(`${apiBase()}/api/jobs/share/${encodeURIComponent(token)}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data));
+  }
+  return data as SharedJobResponse;
 }
 
 export async function loginMember(email: string, password: string): Promise<MemberProfile> {

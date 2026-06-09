@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     maintenance_reset_token: str = ""
     purge_db_on_startup: str = ""
     jwt_secret: str = ""
+    public_client_url: str = "https://record-user.netlify.app"
     # 0 = never expire (no exp claim). Set e.g. 10080 for 7 days.
     jwt_expire_minutes: int = 0
 

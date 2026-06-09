@@ -181,6 +181,20 @@ class TranscriptChangeLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
 
 
+class TranscriptShare(Base):
+    __tablename__ = "transcript_shares"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    job_id: Mapped[str] = mapped_column(ForeignKey("jobs.job_id"), nullable=False, index=True)
+    token: Mapped[str] = mapped_column(String(96), unique=True, nullable=False, index=True)
+    created_by_member_id: Mapped[int | None] = mapped_column(ForeignKey("members.id"), nullable=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    is_active: Mapped[int] = mapped_column(Integer, nullable=False, default=1, index=True)
+    allow_audio: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    allow_pdf_download: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+
 class Invoice(Base):
     __tablename__ = "invoices"
 

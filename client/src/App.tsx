@@ -4,6 +4,7 @@ import {
   checkHealth,
   createAdminEventsSource,
   createProject,
+  createTranscriptShare,
   downloadTranscriptPdf,
   downloadFinalTranscriptPdf,
   fetchJob,
@@ -272,6 +273,7 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [creatingShare, setCreatingShare] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<JobArchiveItem | null>(null);
   const [duplicateDialogMessage, setDuplicateDialogMessage] = useState("");
   const [uploadPaid, setUploadPaid] = useState(false);
@@ -709,6 +711,23 @@ export default function App() {
       showNotice("error", err instanceof Error ? err.message : "PDF 다운로드 실패");
     } finally {
       setDownloadingPdf(false);
+    }
+  };
+
+  const onCreateShareLink = async () => {
+    if (!job) return;
+    setCreatingShare(true);
+    try {
+      const shared = await createTranscriptShare(job.job_id);
+      const copyText = `${shared.share_url}\n만료: ${formatDateTime(shared.expires_at)}`;
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shared.share_url);
+      }
+      showNotice("success", `공유 링크를 복사했습니다.\n${copyText}`, "읽기 전용 공유 링크 생성");
+    } catch (err) {
+      showNotice("error", err instanceof Error ? err.message : "공유 링크 생성 실패", "공유 링크 생성 실패");
+    } finally {
+      setCreatingShare(false);
     }
   };
 
@@ -1320,7 +1339,7 @@ export default function App() {
                   loadEntries={fetchTranscriptChanges}
                 />
 
-                <div className="grid gap-3 sm:grid-cols-4">
+                <div className="grid gap-3 sm:grid-cols-5">
                   <button
                     type="button"
                     onClick={onSaveDraft}
@@ -1344,6 +1363,14 @@ export default function App() {
                     className="rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
                   >
                     속기사 재검수 요청
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onCreateShareLink}
+                    disabled={busy || creatingShare}
+                    className="rounded-xl border border-cyan-500/40 bg-cyan-500/10 py-3 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
+                  >
+                    {creatingShare ? "링크 생성 중..." : "공유 링크 만들기"}
                   </button>
                   <button
                     type="button"
