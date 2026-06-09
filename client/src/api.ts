@@ -470,6 +470,25 @@ export async function fetchSharedTranscript(token: string): Promise<SharedJobRes
   return data as SharedJobResponse;
 }
 
+export async function saveSharedTranscript(
+  token: string,
+  transcript: TranscriptJson,
+  saveKind: string = "shared_edit",
+): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/share/${encodeURIComponent(token)}/transcript`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      transcript_json: transcript,
+      save_kind: saveKind,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err));
+  }
+}
+
 export async function loginMember(email: string, password: string): Promise<MemberProfile> {
   const res = await fetch(`${apiBase()}/api/member/auth/login`, {
     method: "POST",

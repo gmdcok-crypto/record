@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Annotated
 from urllib.parse import quote
 
@@ -957,6 +957,37 @@ def save_transcript(
         publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
 
     return {"job_id": job_id, "status": "saved", "transcript_key": transcript_key}
+
+
+@router.put("/share/{token}/transcript")
+def save_shared_transcript(
+    token: str,
+    body: SaveTranscriptRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    share = _get_valid_share_or_404(db, token)
+    job = get_job_record(db, share.job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    save_kind = body.save_kind or "shared_edit"
+    try:
+        transcript_key = persist_job_transcript(
+            db,
+            job,
+            job.job_id,
+            body.transcript_json,
+            save_kind=save_kind,
+        )
+        if job.status != "client_editing":
+            job = set_job_status(db, job, "client_editing", "공유 링크 수정본 저장")
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Save failed: {exc}") from exc
+
+    publish_admin_event("job_updated", {"job_id": job.job_id, "status": job.status})
+    return {"job_id": job.job_id, "status": job.status, "transcript_key": transcript_key}
 
 
 @router.post("/{job_id}/status")

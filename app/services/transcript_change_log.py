@@ -12,6 +12,7 @@ SAVE_KIND_LABELS: dict[str, str] = {
     "draft": "임시 저장",
     "deliver": "초벌 전달",
     "review_request": "재검수 요청",
+    "shared_edit": "공유 링크 수정",
     "ai_draft": "AI 초벌",
     "finalize": "최종본 저장",
     "pdf_finalize": "PDF 확정",
