@@ -32,9 +32,9 @@ import TranscriptChangeHistory from "./TranscriptChangeHistory";
 import {
   createManualSegmentId,
   deriveExtraSpeakerIds,
+  insertSegmentAfter,
   mergeSpeakerIds,
   nextSpeakerId,
-  sortEditableSegments,
 } from "./transcriptEditor";
 import SegmentPlaybackText from "./SegmentPlaybackText";
 import { buildSegmentTimedWords, segmentContainsActiveWord } from "./playbackHighlight";
@@ -259,7 +259,7 @@ export default function App() {
   const [speakerLabels, setSpeakerLabels] = useState<Record<string, string>>({});
   const [speakerSettingsOpen, setSpeakerSettingsOpen] = useState(false);
   const [extraSpeakerIds, setExtraSpeakerIds] = useState<string[]>([]);
-  const [addSegmentOpen, setAddSegmentOpen] = useState(false);
+  const [addSegmentAfterIndex, setAddSegmentAfterIndex] = useState<number | null>(null);
   const [changeHistoryRefresh, setChangeHistoryRefresh] = useState(0);
   const [jobIdInput, setJobIdInput] = useState("");
   const [archive, setArchive] = useState<JobArchiveItem[]>([]);
@@ -696,16 +696,22 @@ export default function App() {
     showNotice("info", `${speakerLabel(id)}이(가) 추가되었습니다. 이름을 입력한 뒤 적용하세요.`);
   };
 
+  const openAddSegmentAfter = (index: number) => {
+    if (busy || !speakerIds.length) return;
+    setAddSegmentAfterIndex(index);
+  };
+
   const handleAddSegment = (draft: AddSegmentDraft) => {
+    if (addSegmentAfterIndex == null) return;
     const segment: EditableSegment = {
       id: createManualSegmentId(),
       speaker: draft.speaker,
       text: draft.text,
-      start_ms: draft.start_ms,
-      end_ms: draft.end_ms,
+      start_ms: null,
+      end_ms: null,
     };
-    setSegments((prev) => sortEditableSegments([...prev, segment]));
-    setAddSegmentOpen(false);
+    setSegments((prev) => insertSegmentAfter(prev, addSegmentAfterIndex, segment));
+    setAddSegmentAfterIndex(null);
     showNotice("success", "대화 구간이 추가되었습니다.");
   };
 
@@ -1167,24 +1173,14 @@ export default function App() {
                     <label className="text-sm font-medium text-slate-300">
                       녹취 초안 / 의뢰인 수정본
                     </label>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setSpeakerSettingsOpen(true)}
-                        disabled={busy}
-                        className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
-                      >
-                        화자 설정
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAddSegmentOpen(true)}
-                        disabled={busy || !speakerIds.length}
-                        className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
-                      >
-                        대화 추가
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSpeakerSettingsOpen(true)}
+                      disabled={busy}
+                      className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      화자 설정
+                    </button>
                   </div>
                   <div className="space-y-2">
                     {segments.length ? (
@@ -1208,9 +1204,27 @@ export default function App() {
                               : "border-slate-700/80 bg-slate-950/80"
                           }`}
                         >
-                          <div className="mb-1.5 flex min-w-0 items-center gap-2">
+                          <div
+                            role="button"
+                            tabIndex={busy || !speakerIds.length ? -1 : 0}
+                            onClick={() => openAddSegmentAfter(index)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                openAddSegmentAfter(index);
+                              }
+                            }}
+                            title="클릭하여 이 대화 다음에 새 대화 추가"
+                            className={`mb-1.5 flex w-full min-w-0 items-center gap-2 rounded-lg border border-transparent px-1 py-0.5 text-left transition ${
+                              busy || !speakerIds.length
+                                ? "cursor-not-allowed opacity-50"
+                                : "cursor-pointer hover:border-cyan-500/30 hover:bg-cyan-500/10"
+                            }`}
+                          >
                             <select
                               value={segment.speaker}
+                              onClick={(event) => event.stopPropagation()}
+                              onMouseDown={(event) => event.stopPropagation()}
                               onChange={(e) => updateSegment(index, { speaker: e.target.value })}
                               className="max-w-[9rem] shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-semibold text-slate-100 outline-none transition focus:border-blue-500"
                             >
@@ -1223,6 +1237,7 @@ export default function App() {
                             <span className="text-[11px] text-slate-500">
                               {formatSegmentTime(segment.start_ms)} - {formatSegmentTime(segment.end_ms)}
                             </span>
+                            <span className="ml-auto text-[10px] font-semibold text-cyan-400/80">+ 추가</span>
                           </div>
                           <SegmentPlaybackText
                             value={segment.text}
@@ -1358,10 +1373,13 @@ export default function App() {
         />
 
         <AddSegmentModal
-          open={addSegmentOpen}
+          open={addSegmentAfterIndex != null}
           speakerIds={speakerIds}
           speakerLabels={speakerLabels}
-          onClose={() => setAddSegmentOpen(false)}
+          defaultSpeakerId={
+            addSegmentAfterIndex != null ? segments[addSegmentAfterIndex]?.speaker : undefined
+          }
+          onClose={() => setAddSegmentAfterIndex(null)}
           onAdd={handleAddSegment}
         />
       </div>

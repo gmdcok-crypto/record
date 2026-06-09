@@ -82,3 +82,14 @@ export function sortEditableSegments(segments: EditableSegment[]): EditableSegme
 export function createManualSegmentId(): string {
   return `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
+
+export function insertSegmentAfter<T extends EditableSegment>(
+  segments: T[],
+  afterIndex: number,
+  segment: T,
+): T[] {
+  const insertAt = Math.min(Math.max(afterIndex + 1, 0), segments.length);
+  const next = [...segments];
+  next.splice(insertAt, 0, segment);
+  return next;
+}
