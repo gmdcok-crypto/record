@@ -26,6 +26,7 @@
         </nav>
         <div class="nav-actions">
           <button type="button" class="btn btn-ghost" id="quote-open-btn">무료견적</button>
+          <button type="button" class="btn btn-ghost" id="channel-talk-btn">상담문의</button>
           <button type="button" class="btn btn-primary" id="signup-open-btn">회원가입</button>
         </div>
       </div>
@@ -463,5 +464,55 @@
     <script src="./quote-pricing.js?v=1"></script>
     <script src="./quote-modal.js?v=5"></script>
     <script src="./signup-modal.js?v=5"></script>
+    <script>
+      (function () {
+        var pluginKey = "e1f207ad-90e5-485b-8e33-30fabefc9436";
+        if (!pluginKey) return;
+
+        (function () {
+          var w = window;
+          if (w.ChannelIO) {
+            return;
+          }
+          var ch = function () {
+            ch.c(arguments);
+          };
+          ch.q = [];
+          ch.c = function (args) {
+            ch.q.push(args);
+          };
+          w.ChannelIO = ch;
+          function l() {
+            if (w.ChannelIOInitialized) {
+              return;
+            }
+            w.ChannelIOInitialized = true;
+            var s = document.createElement("script");
+            s.type = "text/javascript";
+            s.async = true;
+            s.src = "https://cdn.channel.io/plugin/ch-plugin-web.js";
+            var x = document.getElementsByTagName("script")[0];
+            x.parentNode.insertBefore(s, x);
+          }
+          if (document.readyState === "complete") {
+            l();
+          } else {
+            w.addEventListener("DOMContentLoaded", l);
+            w.addEventListener("load", l);
+          }
+        })();
+
+        window.ChannelIO("boot", {
+          pluginKey: pluginKey,
+        });
+
+        var channelTalkButton = document.getElementById("channel-talk-btn");
+        if (channelTalkButton) {
+          channelTalkButton.addEventListener("click", function () {
+            window.ChannelIO("showMessenger");
+          });
+        }
+      })();
+    </script>
   </body>
 </html>

@@ -40,6 +40,7 @@ import {
 } from "./transcriptEditor";
 import UploadBillingPanel from "./UploadBillingPanel";
 import SegmentPlaybackText from "./SegmentPlaybackText";
+import { bootChannelTalk, showChannelTalkMessenger, shutdownChannelTalk, channelTalkEnabled } from "./channelTalk";
 import { buildSegmentTimedWords, segmentContainsActiveWord } from "./playbackHighlight";
 import {
   attachPlaybackTimeListener,
@@ -375,9 +376,16 @@ export default function App() {
     const member = await fetchMemberMe();
     if (member) {
       setMemberName(member.name);
+      bootChannelTalk({
+        memberId: member.id,
+        name: member.name,
+        email: member.email,
+        mobileNumber: member.phone,
+      });
       setAuthStatus("authenticated");
       return member;
     }
+    bootChannelTalk();
     setMemberName(null);
     setAuthStatus("unauthenticated");
     return null;
@@ -385,11 +393,18 @@ export default function App() {
 
   const handleLoginSuccess = (member: MemberProfile) => {
     setMemberName(member.name);
+    bootChannelTalk({
+      memberId: member.id,
+      name: member.name,
+      email: member.email,
+      mobileNumber: member.phone,
+    });
     setAuthStatus("authenticated");
     void refreshWorkspace();
   };
 
   const handleLogout = () => {
+    shutdownChannelTalk();
     clearMemberSession();
     setMemberName(null);
     setAuthStatus("unauthenticated");
@@ -848,13 +863,24 @@ export default function App() {
               {memberName ? `${memberName}님` : GUEST_CLIENT_NAME}
             </h1>
           </div>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="shrink-0 rounded-xl border border-slate-700 px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
-          >
-            로그아웃
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {channelTalkEnabled() ? (
+              <button
+                type="button"
+                onClick={showChannelTalkMessenger}
+                className="rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-sm font-medium text-cyan-200 transition hover:bg-cyan-500/20"
+              >
+                상담톡
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-xl border border-slate-700 px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+            >
+              로그아웃
+            </button>
+          </div>
         </header>
 
         <nav className="sticky top-0 z-20 -mx-4 mb-4 border-b border-slate-800 bg-slate-950/95 px-4 backdrop-blur lg:-mx-6 lg:px-6">
