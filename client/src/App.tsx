@@ -13,7 +13,6 @@ import {
   clearMemberSession,
   resolveUrl,
   saveTranscript,
-  collectSpeakerIds,
   speakerLabel,
   updateJobStatus,
   uploadVoice,
@@ -27,8 +26,16 @@ import {
 } from "./api";
 import ActionNoticeModal, { type ActionNotice, type ActionNoticeKind } from "./ActionNoticeModal";
 import MemberLogin from "./MemberLogin";
+import AddSegmentModal, { type AddSegmentDraft } from "./AddSegmentModal";
 import SpeakerSettingsModal from "./SpeakerSettingsModal";
 import TranscriptChangeHistory from "./TranscriptChangeHistory";
+import {
+  createManualSegmentId,
+  deriveExtraSpeakerIds,
+  mergeSpeakerIds,
+  nextSpeakerId,
+  sortEditableSegments,
+} from "./transcriptEditor";
 import SegmentPlaybackText from "./SegmentPlaybackText";
 import { buildSegmentTimedWords, segmentContainsActiveWord } from "./playbackHighlight";
 import {
@@ -251,6 +258,8 @@ export default function App() {
   const [segments, setSegments] = useState<EditableSegment[]>([]);
   const [speakerLabels, setSpeakerLabels] = useState<Record<string, string>>({});
   const [speakerSettingsOpen, setSpeakerSettingsOpen] = useState(false);
+  const [extraSpeakerIds, setExtraSpeakerIds] = useState<string[]>([]);
+  const [addSegmentOpen, setAddSegmentOpen] = useState(false);
   const [changeHistoryRefresh, setChangeHistoryRefresh] = useState(0);
   const [jobIdInput, setJobIdInput] = useState("");
   const [archive, setArchive] = useState<JobArchiveItem[]>([]);
@@ -281,7 +290,10 @@ export default function App() {
     () => new Set(archive.map((item) => normalizeUploadFilename(item.filename))),
     [archive],
   );
-  const speakerIds = useMemo(() => collectSpeakerIds(segments), [segments]);
+  const speakerIds = useMemo(
+    () => mergeSpeakerIds(segments, extraSpeakerIds),
+    [segments, extraSpeakerIds],
+  );
   const currentTranscript = useMemo(
     () => segmentsToTranscript(job?.transcript_json ?? null, segments, speakerLabels),
     [job, segments, speakerLabels],
@@ -489,8 +501,11 @@ export default function App() {
       const data = await fetchJob(jobId.trim());
       setJob(data);
       setJobIdInput(data.job_id);
-      setSegments(buildEditableSegments(data.transcript_json));
-      setSpeakerLabels(data.transcript_json?.speaker_labels ?? {});
+      const loadedSegments = buildEditableSegments(data.transcript_json);
+      const loadedLabels = data.transcript_json?.speaker_labels ?? {};
+      setSegments(loadedSegments);
+      setSpeakerLabels(loadedLabels);
+      setExtraSpeakerIds(deriveExtraSpeakerIds(loadedSegments, loadedLabels));
       setStep("ready");
       const workflowStatus = jobWorkflowStatus(data);
       const shouldOpenEdit = options?.switchToEdit ?? isEditableArchiveStatus(workflowStatus);
@@ -656,8 +671,11 @@ export default function App() {
 
   const restoreFromServerDraft = () => {
     if (!job) return;
-    setSegments(buildEditableSegments(job.transcript_json));
-    setSpeakerLabels(job.transcript_json?.speaker_labels ?? {});
+    const restoredSegments = buildEditableSegments(job.transcript_json);
+    const restoredLabels = job.transcript_json?.speaker_labels ?? {};
+    setSegments(restoredSegments);
+    setSpeakerLabels(restoredLabels);
+    setExtraSpeakerIds(deriveExtraSpeakerIds(restoredSegments, restoredLabels));
     showNotice("info", "서버에 저장된 최신 문서로 되돌렸습니다.");
   };
 
@@ -667,8 +685,28 @@ export default function App() {
       if (name.trim()) cleaned[id] = name.trim();
     }
     setSpeakerLabels(cleaned);
+    setExtraSpeakerIds((prev) => prev.filter((id) => speakerIds.includes(id)));
     setSpeakerSettingsOpen(false);
     showNotice("info", "화자 이름이 적용되었습니다. 저장하면 서버에 반영됩니다.");
+  };
+
+  const handleAddSpeaker = () => {
+    const id = nextSpeakerId(speakerIds);
+    setExtraSpeakerIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    showNotice("info", `${speakerLabel(id)}이(가) 추가되었습니다. 이름을 입력한 뒤 적용하세요.`);
+  };
+
+  const handleAddSegment = (draft: AddSegmentDraft) => {
+    const segment: EditableSegment = {
+      id: createManualSegmentId(),
+      speaker: draft.speaker,
+      text: draft.text,
+      start_ms: draft.start_ms,
+      end_ms: draft.end_ms,
+    };
+    setSegments((prev) => sortEditableSegments([...prev, segment]));
+    setAddSegmentOpen(false);
+    showNotice("success", "대화 구간이 추가되었습니다.");
   };
 
   const onCancelUpload = async (jobId: string) => {
@@ -1125,18 +1163,28 @@ export default function App() {
                 </div>
 
                 <div>
-                  <div className="mb-1 flex items-center justify-between gap-2">
+                  <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
                     <label className="text-sm font-medium text-slate-300">
                       녹취 초안 / 의뢰인 수정본
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setSpeakerSettingsOpen(true)}
-                      disabled={!speakerIds.length || busy}
-                      className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
-                    >
-                      화자 설정
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSpeakerSettingsOpen(true)}
+                        disabled={busy}
+                        className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        화자 설정
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAddSegmentOpen(true)}
+                        disabled={busy || !speakerIds.length}
+                        className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
+                      >
+                        대화 추가
+                      </button>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     {segments.length ? (
@@ -1306,6 +1354,15 @@ export default function App() {
           labels={speakerLabels}
           onClose={() => setSpeakerSettingsOpen(false)}
           onApply={applySpeakerLabels}
+          onAddSpeaker={handleAddSpeaker}
+        />
+
+        <AddSegmentModal
+          open={addSegmentOpen}
+          speakerIds={speakerIds}
+          speakerLabels={speakerLabels}
+          onClose={() => setAddSegmentOpen(false)}
+          onAdd={handleAddSegment}
         />
       </div>
     </div>

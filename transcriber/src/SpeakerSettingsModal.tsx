@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+
 import { speakerLabel } from "./api";
 
 type Props = {
@@ -7,6 +8,7 @@ type Props = {
   labels: Record<string, string>;
   onClose: () => void;
   onApply: (labels: Record<string, string>) => void;
+  onAddSpeaker: () => void;
 };
 
 export default function SpeakerSettingsModal({
@@ -15,6 +17,7 @@ export default function SpeakerSettingsModal({
   labels,
   onClose,
   onApply,
+  onAddSpeaker,
 }: Props) {
   const [draft, setDraft] = useState<Record<string, string>>({});
 
@@ -38,14 +41,25 @@ export default function SpeakerSettingsModal({
         className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold text-white">화자 설정</h2>
-        <p className="mt-1 text-sm text-slate-400">
-          표시 이름을 바꿉니다. 비워 두면 기본 이름(화자 1, 화자 2…)이 사용됩니다.
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-white">화자 설정</h2>
+            <p className="mt-1 text-sm text-slate-400">
+              표시 이름을 바꾸거나 새 화자를 추가할 수 있습니다.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onAddSpeaker}
+            className="shrink-0 rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-xs font-semibold text-violet-200 transition hover:bg-violet-500/20"
+          >
+            화자 추가
+          </button>
+        </div>
 
         <div className="mt-4 max-h-64 space-y-3 overflow-y-auto">
           {speakerIds.length === 0 && (
-            <p className="text-sm text-slate-500">인식된 화자가 없습니다.</p>
+            <p className="text-sm text-slate-500">등록된 화자가 없습니다. 화자 추가를 눌러 주세요.</p>
           )}
           {speakerIds.map((id) => (
             <label key={id} className="block">
@@ -57,7 +71,7 @@ export default function SpeakerSettingsModal({
                 value={draft[id] ?? ""}
                 onChange={(e) => setDraft((prev) => ({ ...prev, [id]: e.target.value }))}
                 placeholder={speakerLabel(id)}
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-blue-500"
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-violet-500"
               />
             </label>
           ))}
@@ -74,7 +88,7 @@ export default function SpeakerSettingsModal({
           <button
             type="button"
             onClick={() => onApply(draft)}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
+            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-violet-500"
           >
             적용
           </button>

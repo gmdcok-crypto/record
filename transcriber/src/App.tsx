@@ -15,7 +15,6 @@ import {
   saveTranscript,
   updateTranscriberProfile,
   uploadTranscriberLicense,
-  collectSpeakerIds,
   speakerLabel,
   type JobResponse,
   type TranscriberAuthProfile,
@@ -28,8 +27,16 @@ import ActionNoticeModal, { type ActionNotice, type ActionNoticeKind } from "./A
 import TranscriberLogin from "./TranscriberLogin";
 import TranscriberProfileSettingsModal from "./TranscriberProfileSettingsModal";
 import TranscriberSignup from "./TranscriberSignup";
+import AddSegmentModal, { type AddSegmentDraft } from "./AddSegmentModal";
 import SpeakerSettingsModal from "./SpeakerSettingsModal";
 import TranscriptChangeHistory from "./TranscriptChangeHistory";
+import {
+  createManualSegmentId,
+  deriveExtraSpeakerIds,
+  mergeSpeakerIds,
+  nextSpeakerId,
+  sortEditableSegments,
+} from "./transcriptEditor";
 import SegmentPlaybackText from "./SegmentPlaybackText";
 import { buildSegmentTimedWords, segmentContainsActiveWord } from "./playbackHighlight";
 import {
@@ -215,6 +222,8 @@ export default function App() {
   const [segments, setSegments] = useState<EditableSegment[]>([]);
   const [speakerLabels, setSpeakerLabels] = useState<Record<string, string>>({});
   const [speakerSettingsOpen, setSpeakerSettingsOpen] = useState(false);
+  const [extraSpeakerIds, setExtraSpeakerIds] = useState<string[]>([]);
+  const [addSegmentOpen, setAddSegmentOpen] = useState(false);
   const [changeHistoryRefresh, setChangeHistoryRefresh] = useState(0);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
@@ -237,7 +246,10 @@ export default function App() {
     return currentProject.files.find((file) => file.job_id === selectedJobId) ?? currentProject.files[0] ?? null;
   }, [currentProject, selectedJobId]);
 
-  const speakerIds = useMemo(() => collectSpeakerIds(segments), [segments]);
+  const speakerIds = useMemo(
+    () => mergeSpeakerIds(segments, extraSpeakerIds),
+    [segments, extraSpeakerIds],
+  );
   const currentTranscript = useMemo(
     () => segmentsToTranscript(job?.transcript_json ?? null, segments, speakerLabels),
     [job, segments, speakerLabels],
@@ -328,8 +340,11 @@ export default function App() {
     fetchJob(selectedJobId)
       .then((data) => {
         setJob(data);
-        setSegments(buildEditableSegments(data.transcript_json));
-        setSpeakerLabels(data.transcript_json?.speaker_labels ?? {});
+        const loadedSegments = buildEditableSegments(data.transcript_json);
+        const loadedLabels = data.transcript_json?.speaker_labels ?? {};
+        setSegments(loadedSegments);
+        setSpeakerLabels(loadedLabels);
+        setExtraSpeakerIds(deriveExtraSpeakerIds(loadedSegments, loadedLabels));
       })
       .catch((err) => {
         showNotice("error", err instanceof Error ? err.message : "작업을 불러오지 못했습니다.");
@@ -370,8 +385,11 @@ export default function App() {
 
   const restoreFromServerDraft = () => {
     if (!job) return;
-    setSegments(buildEditableSegments(job.transcript_json));
-    setSpeakerLabels(job.transcript_json?.speaker_labels ?? {});
+    const restoredSegments = buildEditableSegments(job.transcript_json);
+    const restoredLabels = job.transcript_json?.speaker_labels ?? {};
+    setSegments(restoredSegments);
+    setSpeakerLabels(restoredLabels);
+    setExtraSpeakerIds(deriveExtraSpeakerIds(restoredSegments, restoredLabels));
     showNotice("info", "서버에 저장된 최신 문서로 되돌렸습니다.");
   };
 
@@ -381,8 +399,28 @@ export default function App() {
       if (name.trim()) cleaned[id] = name.trim();
     }
     setSpeakerLabels(cleaned);
+    setExtraSpeakerIds((prev) => prev.filter((id) => speakerIds.includes(id)));
     setSpeakerSettingsOpen(false);
     showNotice("info", "화자 이름이 적용되었습니다. 저장하면 서버에 반영됩니다.");
+  };
+
+  const handleAddSpeaker = () => {
+    const id = nextSpeakerId(speakerIds);
+    setExtraSpeakerIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    showNotice("info", `${speakerLabel(id)}이(가) 추가되었습니다. 이름을 입력한 뒤 적용하세요.`);
+  };
+
+  const handleAddSegment = (draft: AddSegmentDraft) => {
+    const segment: EditableSegment = {
+      id: createManualSegmentId(),
+      speaker: draft.speaker,
+      text: draft.text,
+      start_ms: draft.start_ms,
+      end_ms: draft.end_ms,
+    };
+    setSegments((prev) => sortEditableSegments([...prev, segment]));
+    setAddSegmentOpen(false);
+    showNotice("success", "대화 구간이 추가되었습니다.");
   };
 
   const busy = saving || aiRunning || downloadingPdf;
@@ -404,8 +442,11 @@ export default function App() {
       const result = await runAiDraft(job.job_id);
       const transcript = result.transcript_json;
       setJob({ ...job, transcript_json: transcript, status: job.status === "assigned" ? "working" : job.status });
-      setSegments(buildEditableSegments(transcript));
-      setSpeakerLabels(transcript.speaker_labels ?? {});
+      const aiSegments = buildEditableSegments(transcript);
+      const aiLabels = transcript.speaker_labels ?? {};
+      setSegments(aiSegments);
+      setSpeakerLabels(aiLabels);
+      setExtraSpeakerIds(deriveExtraSpeakerIds(aiSegments, aiLabels));
       setChangeHistoryRefresh((value) => value + 1);
       showNotice("success", "AI 초벌 작업이 완료되었습니다. 검토 후 ‘의뢰인에게 초벌 전달’을 눌러 주세요.");
     } catch (err) {
@@ -660,16 +701,26 @@ export default function App() {
                   </div>
 
                   <div>
-                    <div className="mb-1 flex items-center justify-between gap-2">
+                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
                       <label className="text-sm font-medium text-slate-300">녹취 초벌 / 속기사 편집본</label>
-                      <button
-                        type="button"
-                        onClick={() => setSpeakerSettingsOpen(true)}
-                        disabled={!speakerIds.length || busy}
-                        className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
-                      >
-                        화자 설정
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSpeakerSettingsOpen(true)}
+                          disabled={busy}
+                          className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+                        >
+                          화자 설정
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAddSegmentOpen(true)}
+                          disabled={busy || !speakerIds.length}
+                          className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-semibold text-violet-200 transition hover:bg-violet-500/20 disabled:opacity-50"
+                        >
+                          대화 추가
+                        </button>
+                      </div>
                     </div>
                     <div className="max-h-[min(62vh,640px)] space-y-2 overflow-y-auto pr-1">
                       {segments.length ? (
@@ -809,6 +860,15 @@ export default function App() {
           labels={speakerLabels}
           onClose={() => setSpeakerSettingsOpen(false)}
           onApply={applySpeakerLabels}
+          onAddSpeaker={handleAddSpeaker}
+        />
+
+        <AddSegmentModal
+          open={addSegmentOpen}
+          speakerIds={speakerIds}
+          speakerLabels={speakerLabels}
+          onClose={() => setAddSegmentOpen(false)}
+          onAdd={handleAddSegment}
         />
 
         <TranscriberProfileSettingsModal
