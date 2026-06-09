@@ -57,33 +57,53 @@ export async function playSegmentAudio(
 
   try {
     await audio.play();
-  } catch {
+  } catch (err) {
     segmentEndRef.current = null;
+    throw err;
   }
 }
+
+type SegmentStopListenerOptions = {
+  onPlaybackEnd?: () => void;
+};
 
 export function attachSegmentStopListener(
   audio: HTMLAudioElement,
   segmentEndRef: { current: number | null },
+  options?: SegmentStopListenerOptions,
 ): () => void {
+  const endPlayback = () => {
+    options?.onPlaybackEnd?.();
+  };
+
   const handleTimeUpdate = () => {
     const stopAt = segmentEndRef.current;
     if (stopAt == null) return;
     if (audio.currentTime >= stopAt - 0.05) {
       segmentEndRef.current = null;
       audio.pause();
+      endPlayback();
     }
   };
 
   const handleEnded = () => {
     segmentEndRef.current = null;
+    endPlayback();
+  };
+
+  const handlePause = () => {
+    if (segmentEndRef.current == null) {
+      endPlayback();
+    }
   };
 
   audio.addEventListener("timeupdate", handleTimeUpdate);
   audio.addEventListener("ended", handleEnded);
+  audio.addEventListener("pause", handlePause);
 
   return () => {
     audio.removeEventListener("timeupdate", handleTimeUpdate);
     audio.removeEventListener("ended", handleEnded);
+    audio.removeEventListener("pause", handlePause);
   };
 }

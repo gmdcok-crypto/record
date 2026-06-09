@@ -262,6 +262,7 @@ export default function App() {
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
   const [memberName, setMemberName] = useState<string | null>(null);
   const segmentEndRef = useRef<number | null>(null);
+  const [playingSegmentIndex, setPlayingSegmentIndex] = useState<number | null>(null);
 
   const showNotice = useCallback((kind: ActionNoticeKind, message: string, title?: string) => {
     setActionNotice({ kind, message, title });
@@ -400,9 +401,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    setPlayingSegmentIndex(null);
     const audio = audioRef.current;
     if (!audio) return;
-    return attachSegmentStopListener(audio, segmentEndRef);
+    return attachSegmentStopListener(audio, segmentEndRef, {
+      onPlaybackEnd: () => setPlayingSegmentIndex(null),
+    });
   }, [job?.job_id]);
 
   const resetUploadUi = (successMessage = "") => {
@@ -457,7 +461,10 @@ export default function App() {
     const audio = audioRef.current;
     if (!audio || startMs == null) return;
     const endMs = resolveSegmentEndMs(segments, index);
-    void playSegmentAudio(audio, segmentEndRef, startMs, endMs);
+    setPlayingSegmentIndex(index);
+    void playSegmentAudio(audio, segmentEndRef, startMs, endMs).catch(() => {
+      setPlayingSegmentIndex(null);
+    });
   };
 
   const handleSegmentTextMouseDown = (
@@ -1131,8 +1138,17 @@ export default function App() {
                   </div>
                   <div className="space-y-2">
                     {segments.length ? (
-                      segments.map((segment, index) => (
-                        <div key={segment.id} className="rounded-xl border border-slate-700/80 bg-slate-950/80 px-3 py-2.5">
+                      segments.map((segment, index) => {
+                        const isPlaying = playingSegmentIndex === index;
+                        return (
+                        <div
+                          key={segment.id}
+                          className={`rounded-xl border px-3 py-2.5 transition-colors ${
+                            isPlaying
+                              ? "border-cyan-300 bg-cyan-400/15"
+                              : "border-slate-700/80 bg-slate-950/80"
+                          }`}
+                        >
                           <div className="mb-1.5 flex min-w-0 items-center gap-2">
                             <select
                               value={segment.speaker}
@@ -1164,10 +1180,15 @@ export default function App() {
                               if (element) autoResizeTextarea(element);
                             }}
                             placeholder="텍스트를 눌러 재생하고, 여기서 바로 수정하세요."
-                            className="w-full resize-none overflow-hidden rounded-lg border border-transparent bg-slate-900/60 px-3 py-2 text-sm leading-6 text-slate-100 outline-none transition placeholder:text-slate-500 hover:border-slate-700 focus:border-blue-500 focus:bg-slate-900"
+                            className={`w-full resize-none overflow-hidden rounded-lg border px-3 py-2 text-sm leading-6 outline-none transition placeholder:text-slate-500 ${
+                              isPlaying
+                                ? "border-cyan-300 bg-white text-slate-950 placeholder:text-slate-500 hover:border-cyan-300 focus:border-cyan-400 focus:bg-white"
+                                : "border-transparent bg-slate-900/60 text-slate-100 hover:border-slate-700 focus:border-blue-500 focus:bg-slate-900"
+                            }`}
                           />
                         </div>
-                      ))
+                        );
+                      })
                     ) : (
                       <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-5 py-10 text-center text-sm text-slate-400">
                         수정할 대화 구간이 없습니다.

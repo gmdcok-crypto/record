@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { resolveUrl, type JobResponse, type Segment, type TranscriptJson } from "./api";
 import { attachSegmentStopListener, playSegmentAudio, resolveSegmentEndMs } from "./segmentAudio";
@@ -44,20 +44,27 @@ type JobTranscriptViewerProps = {
 export default function JobTranscriptViewer({ job }: JobTranscriptViewerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const segmentEndRef = useRef<number | null>(null);
+  const [playingSegmentIndex, setPlayingSegmentIndex] = useState<number | null>(null);
   const segments = useMemo(() => buildViewerSegments(job.transcript_json), [job.transcript_json]);
   const speakerLabels = job.transcript_json?.speaker_labels ?? {};
 
   useEffect(() => {
+    setPlayingSegmentIndex(null);
     const audio = audioRef.current;
     if (!audio) return;
-    return attachSegmentStopListener(audio, segmentEndRef);
+    return attachSegmentStopListener(audio, segmentEndRef, {
+      onPlaybackEnd: () => setPlayingSegmentIndex(null),
+    });
   }, [job.job_id]);
 
   const playSegment = (index: number, startMs: number | null | undefined) => {
     const audio = audioRef.current;
     if (!audio || startMs == null) return;
     const endMs = resolveSegmentEndMs(segments, index);
-    void playSegmentAudio(audio, segmentEndRef, startMs, endMs);
+    setPlayingSegmentIndex(index);
+    void playSegmentAudio(audio, segmentEndRef, startMs, endMs).catch(() => {
+      setPlayingSegmentIndex(null);
+    });
   };
 
   return (
@@ -77,8 +84,15 @@ export default function JobTranscriptViewer({ job }: JobTranscriptViewerProps) {
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">녹취록</p>
         {segments.length ? (
           <div className="max-h-[52vh] space-y-2 overflow-y-auto pr-1">
-            {segments.map((segment, index) => (
-              <div key={`${segment.speaker}-${segment.start_ms ?? "na"}-${index}`} className="rounded-xl border border-white/5 bg-slate-950/70 px-3 py-2.5">
+            {segments.map((segment, index) => {
+              const isPlaying = playingSegmentIndex === index;
+              return (
+              <div
+                key={`${segment.speaker}-${segment.start_ms ?? "na"}-${index}`}
+                className={`rounded-xl border px-3 py-2.5 transition-colors ${
+                  isPlaying ? "border-cyan-300 bg-cyan-400/15" : "border-white/5 bg-slate-950/70"
+                }`}
+              >
                 <div className="mb-1.5 flex min-w-0 items-center gap-2">
                   <span className="rounded-lg border border-white/10 bg-slate-900 px-2 py-1 text-xs font-semibold text-cyan-300">
                     {speakerLabel(segment.speaker, speakerLabels)}
@@ -91,12 +105,17 @@ export default function JobTranscriptViewer({ job }: JobTranscriptViewerProps) {
                   type="button"
                   onClick={() => playSegment(index, segment.start_ms)}
                   disabled={segment.start_ms == null}
-                  className="w-full rounded-lg border border-transparent bg-slate-900/60 px-3 py-2 text-left text-sm leading-6 text-slate-100 transition hover:border-white/10 hover:bg-slate-900 disabled:cursor-default disabled:text-slate-400"
+                  className={`w-full rounded-lg border px-3 py-2 text-left text-sm leading-6 transition disabled:cursor-default disabled:text-slate-400 ${
+                    isPlaying
+                      ? "border-cyan-300 bg-white text-slate-950 hover:border-cyan-300 hover:bg-white"
+                      : "border-transparent bg-slate-900/60 text-slate-100 hover:border-white/10 hover:bg-slate-900"
+                  }`}
                 >
                   {segment.text || "(내용 없음)"}
                 </button>
               </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-slate-400">
