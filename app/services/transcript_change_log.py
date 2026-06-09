@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models.admin_models import Job, Member, TranscriptChangeLog, Transcriber
 from app.services.job_store import get_or_create_client_for_member, mark_transcript_saved
+from app.services.r2 import get_transcript_json, save_transcript_json
 
 SAVE_KIND_LABELS: dict[str, str] = {
     "draft": "임시 저장",
