@@ -1,27 +1,25 @@
-# syntax=docker/dockerfile:1.4
-# BuildKit: frontend stages run in parallel; npm/pip caches persist across deploys.
+# Frontend stages build in parallel via BuildKit; layer order caches npm/pip when lockfiles unchanged.
+# Railway cache mounts need id=s/<service-id>-<path> (hardcode service ID in Railway dashboard).
+# Layer caching below works without --mount=type=cache.
 
 FROM node:20-alpine AS client-build
 WORKDIR /app/client
 COPY client/package.json client/package-lock.json ./
-RUN --mount=type=cache,id=record-client-npm,target=/root/.npm \
-    npm ci --prefer-offline --no-audit --no-fund
+RUN npm ci --prefer-offline --no-audit --no-fund
 COPY client/ ./
 RUN npm run build
 
 FROM node:20-alpine AS admin-build
 WORKDIR /app/admin
 COPY admin/package.json admin/package-lock.json ./
-RUN --mount=type=cache,id=record-admin-npm,target=/root/.npm \
-    npm ci --prefer-offline --no-audit --no-fund
+RUN npm ci --prefer-offline --no-audit --no-fund
 COPY admin/ ./
 RUN npm run build
 
 FROM node:20-alpine AS transcriber-build
 WORKDIR /app/transcriber
 COPY transcriber/package.json transcriber/package-lock.json ./
-RUN --mount=type=cache,id=record-transcriber-npm,target=/root/.npm \
-    npm ci --prefer-offline --no-audit --no-fund
+RUN npm ci --prefer-offline --no-audit --no-fund
 COPY transcriber/ ./
 RUN npm run build
 
@@ -36,8 +34,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 COPY requirements.txt .
-RUN --mount=type=cache,id=record-pip,target=/root/.cache/pip \
-    pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 RUN mkdir -p /app/app/assets/fonts \
     && curl -fsSL -o /app/app/assets/fonts/NotoSansKR-Regular.ttf \
