@@ -453,61 +453,50 @@ section {
   align-items: center;
 }
 
-.pdf-mock {
+.pdf-sample {
   border-radius: var(--radius);
   background: #fff;
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
-  padding: 2rem 1.75rem 1.5rem;
-  font-size: 0.82rem;
-  color: var(--ink-soft);
+  overflow: hidden;
 }
 
-.pdf-mock-header {
+.pdf-sample__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: #f8fafc;
+}
+
+.pdf-sample__label {
   font-family: var(--font-display);
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   font-weight: 800;
   color: var(--ink);
-  margin-bottom: 1.25rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 2px solid var(--ink);
 }
 
-.pdf-line {
-  margin-bottom: 0.85rem;
-}
-
-.pdf-line strong {
-  display: block;
-  color: var(--ink);
-  font-size: 0.78rem;
-  margin-bottom: 0.2rem;
-}
-
-.pdf-footer-mock {
-  margin-top: 2rem;
-  padding-top: 0.65rem;
-  border-top: 1px solid var(--ink);
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  font-size: 0.7rem;
-  color: var(--ink);
-}
-
-.pdf-stamp {
-  width: 2.2rem;
-  height: 2.2rem;
-  border: 2px solid var(--accent);
-  border-radius: 4px;
-  opacity: 0.85;
-}
-
-.pdf-note {
-  margin-top: 1rem;
-  font-size: 0.75rem;
-  color: var(--accent-deep);
+.pdf-sample__open {
+  font-size: 0.82rem;
   font-weight: 600;
+  color: var(--accent-deep);
+  text-decoration: none;
+}
+
+.pdf-sample__open:hover {
+  text-decoration: underline;
+}
+
+.pdf-sample__frame {
+  display: block;
+  width: 100%;
+  height: min(72vh, 640px);
+  min-height: 420px;
+  border: 0;
+  background: #fff;
 }
 
 /* —— CTA —— */
@@ -1086,6 +1075,30 @@ body.terms-modal-open {
 
 .quote-modal__body::-webkit-scrollbar-track {
   margin-block: 0.35rem;
+}
+
+.quote-modal__footer {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.75rem 1.25rem 1.15rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.quote-modal__cancel {
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 12px;
+  background: rgba(14, 165, 233, 0.08);
+  color: #7dd3fc;
+  padding: 0.65rem 1.15rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.quote-modal__cancel:hover {
+  background: rgba(14, 165, 233, 0.14);
 }
 
 .quote-modal__head {

@@ -237,26 +237,16 @@
             </ul>
           </div>
 
-          <div class="pdf-mock" aria-label="PDF 결과물 예시">
-            <div class="pdf-mock-header">녹취록 출력 예시</div>
-            <div class="pdf-line">
-              <strong>화자 1</strong>
-              안녕하세요. 본 건 관련하여 통화 내용 확인 부탁드립니다.
+          <div class="pdf-sample" aria-label="PDF 결과물 예시">
+            <div class="pdf-sample__toolbar">
+              <span class="pdf-sample__label">녹취록 출력 예시</span>
+              <a class="pdf-sample__open" href="./assets/transcript-sample.pdf" target="_blank" rel="noreferrer">PDF 전체 보기</a>
             </div>
-            <div class="pdf-line">
-              <strong>화자 2</strong>
-              네, 확인 후 재판부 제출용 문서 형태로 정리해드리겠습니다.
-            </div>
-            <div class="pdf-line">
-              <strong>화자 1</strong>
-              의뢰인 확인 문구와 페이지 표기까지 포함해 주세요.
-            </div>
-            <div class="pdf-note">※대화자는 의뢰인이 확인함.</div>
-            <div class="pdf-footer-mock">
-              <span>통합증거센터 녹취사무소 010-8271-4970</span>
-              <span>5</span>
-              <span class="pdf-stamp" aria-hidden="true"></span>
-            </div>
+            <iframe
+              class="pdf-sample__frame"
+              src="./assets/transcript-sample.pdf#view=FitH"
+              title="녹취록 PDF 출력 예시"
+            ></iframe>
           </div>
         </div>
       </section>
@@ -373,7 +363,7 @@
     />
 
     <div class="terms-modal quote-modal" id="quote-modal" hidden aria-hidden="true">
-      <div class="terms-modal__backdrop" data-quote-close aria-hidden="true"></div>
+      <div class="terms-modal__backdrop" aria-hidden="true"></div>
       <div
         class="terms-modal__panel quote-modal__panel"
         role="dialog"
@@ -385,6 +375,9 @@
           <button type="button" class="modal-close-btn quote-modal__close" data-quote-close aria-label="닫기">×</button>
         </div>
         <div id="quote-modal-body" class="quote-modal__body"></div>
+        <div class="quote-modal__footer">
+          <button type="button" class="quote-modal__cancel" data-quote-close>취소</button>
+        </div>
       </div>
     </div>
 
@@ -468,7 +461,7 @@
     </div>
 
     <script src="./quote-pricing.js?v=1"></script>
-    <script src="./quote-modal.js?v=4"></script>
+    <script src="./quote-modal.js?v=5"></script>
     <script src="./signup-modal.js?v=5"></script>
   </body>
 </html>

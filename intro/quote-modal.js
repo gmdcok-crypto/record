@@ -401,12 +401,6 @@
     el.addEventListener("click", closeQuoteModal);
   });
 
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !quoteModal.hidden) {
-      closeQuoteModal();
-    }
-  });
-
   fileInput.addEventListener("change", (event) => {
     addFiles(event.target.files);
   });
