@@ -331,9 +331,11 @@
     bodyEl.innerHTML = `
       <div class="quote-modal__head">
         <p class="quote-modal__eyebrow">무료 견적</p>
-        <h2 class="quote-modal__title" id="quote-modal-title">녹취록 작성 비용 계산</h2>
+        <div class="quote-modal__title-row">
+          <h2 class="quote-modal__title" id="quote-modal-title">녹취록 작성 비용 계산</h2>
+          <button type="button" class="quote-reset-btn" data-action="reset-quote" ${hasContent ? "" : "disabled"}>견적초기화</button>
+        </div>
         <p class="quote-modal__desc" id="quote-modal-desc">음성·영상 파일을 올리면 예상 견적을 확인할 수 있습니다.</p>
-        <button type="button" class="quote-reset-btn" data-action="reset-quote" ${hasContent ? "" : "disabled"}>견적초기화</button>
       </div>
 
       <button type="button" class="quote-dropzone" data-action="pick-files">

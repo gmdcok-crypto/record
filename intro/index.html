@@ -381,7 +381,9 @@
         aria-labelledby="quote-modal-title"
         aria-describedby="quote-modal-desc"
       >
-        <button type="button" class="modal-close-btn" data-quote-close aria-label="닫기">×</button>
+        <div class="quote-modal__topbar">
+          <button type="button" class="modal-close-btn quote-modal__close" data-quote-close aria-label="닫기">×</button>
+        </div>
         <div id="quote-modal-body" class="quote-modal__body"></div>
       </div>
     </div>
@@ -466,7 +468,7 @@
     </div>
 
     <script src="./quote-pricing.js?v=1"></script>
-    <script src="./quote-modal.js?v=3"></script>
+    <script src="./quote-modal.js?v=4"></script>
     <script src="./signup-modal.js?v=5"></script>
   </body>
 </html>
