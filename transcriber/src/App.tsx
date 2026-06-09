@@ -6,6 +6,7 @@ import {
   fetchAssignedProjects,
   fetchJob,
   fetchTranscriberMe,
+  fetchTranscriptChanges,
   finalizeTranscriptPdf,
   resolveUrl,
   deliverDraftToClient,
@@ -23,6 +24,7 @@ import {
 import TranscriberLogin from "./TranscriberLogin";
 import TranscriberSignup from "./TranscriberSignup";
 import SpeakerSettingsModal from "./SpeakerSettingsModal";
+import TranscriptChangeHistory from "./TranscriptChangeHistory";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 type AuthScreen = "signup" | "login";
@@ -196,6 +198,7 @@ export default function App() {
   const [segments, setSegments] = useState<EditableSegment[]>([]);
   const [speakerLabels, setSpeakerLabels] = useState<Record<string, string>>({});
   const [speakerSettingsOpen, setSpeakerSettingsOpen] = useState(false);
+  const [changeHistoryRefresh, setChangeHistoryRefresh] = useState(0);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -402,6 +405,7 @@ export default function App() {
       setJob({ ...job, transcript_json: transcript, status: job.status === "assigned" ? "working" : job.status });
       setSegments(buildEditableSegments(transcript));
       setSpeakerLabels(transcript.speaker_labels ?? {});
+      setChangeHistoryRefresh((value) => value + 1);
       setMessage("AI 초벌 작업이 완료되었습니다. 검토 후 ‘의뢰인에게 초벌 전달’을 눌러 주세요.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "AI 초벌 작업에 실패했습니다.");
@@ -416,8 +420,9 @@ export default function App() {
     setError("");
     setMessage("");
     try {
-      await saveTranscript(job.job_id, currentTranscript);
+      await saveTranscript(job.job_id, currentTranscript, "draft");
       setJob({ ...job, transcript_json: currentTranscript });
+      setChangeHistoryRefresh((value) => value + 1);
       setMessage("초벌 임시 저장이 완료되었습니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "저장 실패");
@@ -444,6 +449,7 @@ export default function App() {
         workflow_status: result.workflow_status ?? result.status,
       });
       await loadProjects();
+      setChangeHistoryRefresh((value) => value + 1);
       setMessage("의뢰인에게 초벌을 전달했습니다. 의뢰인 화면에서 검토요망 상태로 확인할 수 있습니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "전달 실패");
@@ -458,8 +464,9 @@ export default function App() {
     setError("");
     setMessage("");
     try {
-      await saveTranscript(job.job_id, currentTranscript);
+      await saveTranscript(job.job_id, currentTranscript, "finalize");
       setJob({ ...job, transcript_json: currentTranscript });
+      setChangeHistoryRefresh((value) => value + 1);
       setMessage("최종본이 저장되었습니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "확정 실패");
@@ -474,10 +481,11 @@ export default function App() {
     setError("");
     setMessage("");
     try {
-      await saveTranscript(job.job_id, currentTranscript);
+      await saveTranscript(job.job_id, currentTranscript, "pdf_finalize");
       await finalizeTranscriptPdf(job.job_id, currentTranscript);
       await downloadFinalTranscriptPdf(job.job_id);
       setJob({ ...job, transcript_json: currentTranscript, final_pdf_ready: true, status: "pdf_sent" });
+      setChangeHistoryRefresh((value) => value + 1);
       setMessage("최종 PDF를 R2에 저장하고 다운로드했습니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "PDF 다운로드 실패");
@@ -718,6 +726,12 @@ export default function App() {
                       )}
                     </div>
                   </div>
+
+                  <TranscriptChangeHistory
+                    jobId={job.job_id}
+                    refreshKey={changeHistoryRefresh}
+                    loadEntries={fetchTranscriptChanges}
+                  />
 
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                     <button

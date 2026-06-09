@@ -11,6 +11,7 @@ DELETE FROM job_status_logs;
 DELETE FROM job_assignments;
 DELETE FROM jobs;
 DELETE FROM transcribers;
+DELETE FROM transcript_change_logs;
 DELETE FROM transcript_history;
 DELETE FROM clients;
 DELETE FROM members;

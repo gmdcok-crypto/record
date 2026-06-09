@@ -20,6 +20,7 @@ DROP_TABLES = [
     "admin_users",
     "clients",
     "transcript_history",
+    "transcript_change_logs",
 ]
 
 INIT_SQL_FILES = [
@@ -63,6 +64,7 @@ PURGE_TABLES = [
     "invoices",
     "job_notes",
     "job_status_logs",
+    "transcript_change_logs",
     "job_assignments",
     "jobs",
     "projects",

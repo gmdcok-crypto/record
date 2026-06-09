@@ -1,6 +1,6 @@
 from datetime import datetime, date
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -163,6 +163,20 @@ class JobStatusLog(Base):
     changed_by_transcriber_id: Mapped[int | None] = mapped_column(ForeignKey("transcribers.id"), nullable=True)
     change_note: Mapped[str | None] = mapped_column(String(255), nullable=True)
     changed_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+
+class TranscriptChangeLog(Base):
+    __tablename__ = "transcript_change_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    job_id: Mapped[str] = mapped_column(ForeignKey("jobs.job_id"), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    editor_role: Mapped[str] = mapped_column(String(20), nullable=False)
+    editor_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    editor_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    save_kind: Mapped[str] = mapped_column(String(40), nullable=False, default="draft")
+    changes_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
 
 
 class Invoice(Base):

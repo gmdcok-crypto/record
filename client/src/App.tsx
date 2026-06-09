@@ -8,6 +8,7 @@ import {
   fetchJob,
   fetchMemberMe,
   fetchProjects,
+  fetchTranscriptChanges,
   bootstrapMemberTokenFromUrl,
   clearMemberSession,
   resolveUrl,
@@ -26,6 +27,7 @@ import {
 } from "./api";
 import MemberLogin from "./MemberLogin";
 import SpeakerSettingsModal from "./SpeakerSettingsModal";
+import TranscriptChangeHistory from "./TranscriptChangeHistory";
 
 type Step = "idle" | "uploading" | "ready" | "error";
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -240,6 +242,7 @@ export default function App() {
   const [segments, setSegments] = useState<EditableSegment[]>([]);
   const [speakerLabels, setSpeakerLabels] = useState<Record<string, string>>({});
   const [speakerSettingsOpen, setSpeakerSettingsOpen] = useState(false);
+  const [changeHistoryRefresh, setChangeHistoryRefresh] = useState(0);
   const [jobIdInput, setJobIdInput] = useState("");
   const [archive, setArchive] = useState<JobArchiveItem[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -617,9 +620,10 @@ export default function App() {
     setError("");
     setMessage("");
     try {
-      await saveTranscript(job.job_id, currentTranscript);
+      await saveTranscript(job.job_id, currentTranscript, "draft");
       await updateJobStatus(job.job_id, "client_editing", "의뢰인 수정본 저장");
       setJob({ ...job, transcript_json: currentTranscript, status: "client_editing" });
+      setChangeHistoryRefresh((value) => value + 1);
       setMessage("의뢰인 수정본이 DB와 R2에 저장되었습니다.");
       await refreshWorkspace();
     } catch (err) {
@@ -635,9 +639,10 @@ export default function App() {
     setError("");
     setMessage("");
     try {
-      await saveTranscript(job.job_id, currentTranscript);
+      await saveTranscript(job.job_id, currentTranscript, "review_request");
       await updateJobStatus(job.job_id, "review_waiting", "의뢰인 수정 후 속기사 재검수 요청");
       setJob({ ...job, transcript_json: currentTranscript, status: "review_waiting" });
+      setChangeHistoryRefresh((value) => value + 1);
       setMessage("재검수 요청이 DB에 반영되었습니다.");
       await refreshWorkspace();
     } catch (err) {
@@ -1220,6 +1225,12 @@ export default function App() {
                     )}
                   </div>
                 </div>
+
+                <TranscriptChangeHistory
+                  jobId={job.job_id}
+                  refreshKey={changeHistoryRefresh}
+                  loadEntries={fetchTranscriptChanges}
+                />
 
                 <div className="grid gap-3 sm:grid-cols-4">
                   <button

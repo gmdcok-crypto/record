@@ -257,21 +257,54 @@ export async function cancelClientJob(jobId: string): Promise<void> {
   }
 }
 
+export type TranscriptChangeItem = {
+  type: string;
+  segment_index?: number;
+  speaker_id?: string;
+  speaker?: string;
+  before?: string;
+  after?: string;
+};
+
+export type TranscriptChangeEntry = {
+  version: number;
+  save_kind: string;
+  save_kind_label: string;
+  editor_role: string;
+  editor_name: string;
+  changes: TranscriptChangeItem[];
+  created_at: string | null;
+};
+
 export async function saveTranscript(
   jobId: string,
   transcript: TranscriptJson,
+  saveKind: string = "draft",
 ): Promise<void> {
   const res = await fetch(`${apiBase()}/api/jobs/${jobId}/transcript`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify({
       transcript_json: transcript,
+      save_kind: saveKind,
     }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(parseErrorDetail(err));
   }
+}
+
+export async function fetchTranscriptChanges(jobId: string): Promise<TranscriptChangeEntry[]> {
+  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/transcript/changes`, {
+    headers: memberAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err));
+  }
+  const data = (await res.json()) as { entries?: TranscriptChangeEntry[] };
+  return data.entries ?? [];
 }
 
 export async function updateJobStatus(jobId: string, status: string, note?: string): Promise<void> {
