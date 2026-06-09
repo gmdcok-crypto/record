@@ -318,6 +318,23 @@ def admin_assign_job(
     return {"job_id": job.job_id, "status": job.status, "assigned_transcriber_id": job.assigned_transcriber_id}
 
 
+@router.get("/admin/jobs/{job_id}")
+def admin_get_job(
+    job_id: str,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    voice_key = get_voice_object_key(job_id)
+    if not voice_key:
+        raise HTTPException(status_code=404, detail="Voice file not found")
+
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found in database")
+
+    transcript = get_transcript_json(job_id) or empty_transcript_json(job.original_filename)
+    return serialize_job(db, job, transcript_json=transcript, audio_url=f"/api/jobs/{job_id}/audio")
+
+
 @router.get("/admin/transcribers/next-code")
 def admin_next_transcriber_code(db: Annotated[Session, Depends(get_db)]) -> dict:
     return {"code": generate_transcriber_code(db)}

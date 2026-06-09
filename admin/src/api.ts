@@ -187,7 +187,7 @@ export function createAdminEventsSource(): EventSource {
 }
 
 export async function fetchJob(jobId: string): Promise<JobResponse> {
-  const res = await fetch(`${apiBase()}/api/jobs/${jobId}`);
+  const res = await fetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}`);
   if (!res.ok) {
     throw await parseApiError(res, "작업을 불러올 수 없습니다");
   }

@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 
+import JobTranscriptViewer from "./JobTranscriptViewer";
 import {
   assignProject,
   createTranscriber,
@@ -10,7 +11,6 @@ import {
   fetchNextTranscriberCode,
   fetchJob,
   updateInvoiceStatus,
-  updateJobStatus,
   updateMemberActive,
   updateSettlementStatus,
   updateTranscriber,
@@ -365,18 +365,6 @@ function activityTitle(job: JobItem): string {
   }
 }
 
-function transcriptPreview(job: JobResponse | null): string {
-  if (!job?.transcript_json) return "전사 내용이 없습니다.";
-  const segments = job.transcript_json.segments ?? [];
-  if (segments.length) {
-    return segments
-      .slice(0, 6)
-      .map((segment) => `${segment.speaker}: ${segment.text}`)
-      .join("\n\n");
-  }
-  return (job.transcript_json.text || job.transcript_json.plain_text || "전사 내용이 없습니다.").trim();
-}
-
 function statusTone(status: JobStatus | SettlementStatus | PaymentStatus | TranscriberStatus): string {
   switch (status) {
     case "최종 완료":
@@ -692,6 +680,8 @@ function App() {
       setDetailJob(data);
     } catch (err) {
       console.error(err);
+      window.alert(err instanceof Error ? err.message : "작업을 불러올 수 없습니다.");
+      closeDetailModal();
     } finally {
       setDetailLoading(false);
     }
@@ -768,20 +758,6 @@ function App() {
       );
     });
     closeAssignModal();
-  };
-
-  const handleJobAdvance = async (job: JobItem) => {
-    const nextStatus: Record<JobStatus, string> = {
-      "배정 대기": "assigned",
-      "속기사 작업 중": "review_waiting",
-      "1차 완료": "client_editing",
-      "의뢰인 수정 중": "review_waiting",
-      "재검수 대기": "final_done",
-      "최종 완료": "pdf_sent",
-    };
-    await runAdminAction("상태 변경 중입니다.", async () => {
-      await updateJobStatus(job.id, nextStatus[job.status], "관리자 상태 변경");
-    });
   };
 
   const handleSettlementConfirm = async (item: SettlementItem) => {
@@ -1167,8 +1143,15 @@ function App() {
                             <td className="px-4 py-2 pl-8 font-mono text-xs text-slate-500" title={file.id}>
                               {file.id}
                             </td>
-                            <td colSpan={2} className="max-w-[220px] truncate px-4 py-2" title={file.filename}>
-                              {file.filename}
+                            <td colSpan={2} className="max-w-[220px] truncate px-4 py-2">
+                              <button
+                                type="button"
+                                onClick={() => void openDetailModal(file.id)}
+                                className="max-w-full truncate text-left text-cyan-300 transition hover:text-cyan-200"
+                                title={file.filename}
+                              >
+                                {file.filename}
+                              </button>
                             </td>
                             <td className="px-4 py-2">{file.assignee}</td>
                             <td className="px-4 py-2 text-slate-400">{file.dueAt}</td>
@@ -1754,75 +1737,52 @@ function App() {
       </div>
 
       {detailJobId ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-3xl rounded-[28px] border border-white/10 bg-slate-950 p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-2xl font-semibold text-white">{detailJob?.title || detailJobId}</h3>
-                <p className="mt-2 text-sm text-slate-400">{detailJob?.client?.name || "-"}</p>
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm">
+          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] border border-white/10 bg-slate-950 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-cyan-300">녹취 편집 보기</p>
+                <h3 className="mt-1 truncate text-2xl font-semibold text-white">
+                  {detailJob?.transcript_json?.filename || detailJob?.title || detailJobId}
+                </h3>
+                <p className="mt-2 text-sm text-slate-400">
+                  {detailJob?.client?.name || "-"}
+                  {detailJob?.transcriber?.name ? ` · 담당 ${detailJob.transcriber.name}` : ""}
+                  {detailJob?.status ? ` · ${mapJobStatus(detailJob.status)}` : ""}
+                </p>
               </div>
               <button
                 type="button"
                 onClick={closeDetailModal}
-                className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300"
+                className="shrink-0 rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-300"
               >
                 닫기
               </button>
             </div>
 
-            {detailLoading ? (
-              <div className="mt-6 text-sm text-slate-400">상세 정보를 불러오는 중입니다.</div>
-            ) : detailJob ? (
-              <div className="mt-6 grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-                <div className="space-y-4 rounded-3xl border border-white/10 bg-slate-900/60 p-5">
-                  <div className="grid gap-3 sm:grid-cols-2">
+            <div className="overflow-y-auto px-6 py-5">
+              {detailLoading ? (
+                <div className="text-sm text-slate-400">녹취록을 불러오는 중입니다...</div>
+              ) : detailJob ? (
+                <div className="space-y-5">
+                  <div className="grid gap-3 rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-sm sm:grid-cols-3">
                     <div>
                       <p className="text-xs text-slate-500">작업번호</p>
-                      <p className="mt-1 text-sm text-white">{detailJob.job_id}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">상태</p>
-                      <p className="mt-1 text-sm text-white">{mapJobStatus(detailJob.status || "")}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">담당</p>
-                      <p className="mt-1 text-sm text-white">{detailJob.transcriber?.name || "-"}</p>
+                      <p className="mt-1 font-mono text-xs text-white">{detailJob.job_id}</p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-500">마감</p>
-                      <p className="mt-1 text-sm text-white">{formatDateTime(detailJob.due_at)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">음성 키</p>
-                      <p className="mt-1 break-all text-sm text-white">{detailJob.voice_key}</p>
+                      <p className="mt-1 text-white">{formatDateTime(detailJob.due_at)}</p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-500">최종 PDF</p>
-                      <p className="mt-1 text-sm text-white">{detailJob.final_pdf_ready ? "준비됨" : "미준비"}</p>
+                      <p className="mt-1 text-white">{detailJob.final_pdf_ready ? "준비됨" : "미준비"}</p>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const matching = jobs.find((job) => job.id === detailJob.job_id);
-                        if (matching) void handleJobAdvance(matching);
-                      }}
-                      className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200"
-                    >
-                      상태 진행
-                    </button>
-                  </div>
-                  <p className="text-xs text-slate-500">속기사 배정은 프로젝트 단위로 진행합니다.</p>
+                  <JobTranscriptViewer job={detailJob} />
                 </div>
-                <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-5">
-                  <p className="text-xs text-slate-500">전사 미리보기</p>
-                  <pre className="mt-3 max-h-[420px] overflow-auto whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">
-                    {transcriptPreview(detailJob)}
-                  </pre>
-                </div>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}
@@ -1982,8 +1942,15 @@ function App() {
                     <tbody>
                       {detailProject.files.map((file) => (
                         <tr key={file.id} className="border-t border-white/5 text-slate-200">
-                          <td className="max-w-[240px] truncate px-4 py-3" title={file.filename}>
-                            {file.filename}
+                          <td className="max-w-[240px] truncate px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() => openFileDetailFromProject(file.id)}
+                              className="max-w-full truncate text-left text-cyan-300 transition hover:text-cyan-200"
+                              title={file.filename}
+                            >
+                              {file.filename}
+                            </button>
                           </td>
                           <td className="px-4 py-3">{file.assignee}</td>
                           <td className="px-4 py-3 text-slate-400">{file.dueAt}</td>
