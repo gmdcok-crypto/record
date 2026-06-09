@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   bootstrapTranscriberTokenFromUrl,
   clearTranscriberSession,
+  createAdminEventsSource,
   downloadFinalTranscriptPdf,
   fetchAssignedProjects,
   fetchJob,
@@ -261,21 +262,34 @@ export default function App() {
     try {
       const data = await fetchAssignedProjects();
       setProjects(data);
-      const first = data[0];
-      if (first) {
-        const key = projectKey(first);
-        setSelectedProjectKey(key);
-        setSelectedJobId(first.files[0]?.job_id ?? "");
-      } else {
+      const currentProjectExists = selectedProjectKey
+        ? data.some((project) => projectKey(project) === selectedProjectKey)
+        : false;
+      const currentJobExists = selectedJobId
+        ? data.some((project) => project.files.some((file) => file.job_id === selectedJobId))
+        : false;
+
+      if (data.length === 0) {
         setSelectedProjectKey("");
         setSelectedJobId("");
+      } else {
+        if (!currentProjectExists) {
+          const first = data[0];
+          setSelectedProjectKey(projectKey(first));
+          setSelectedJobId(first.files[0]?.job_id ?? "");
+        } else if (!currentJobExists) {
+          const selectedProject =
+            data.find((project) => projectKey(project) === selectedProjectKey) ?? data[0];
+          setSelectedProjectKey(projectKey(selectedProject));
+          setSelectedJobId(selectedProject.files[0]?.job_id ?? "");
+        }
       }
     } catch (err) {
       showNotice("error", err instanceof Error ? err.message : "배정 프로젝트를 불러오지 못했습니다.");
     } finally {
       setLoadingProjects(false);
     }
-  }, [showNotice]);
+  }, [selectedJobId, selectedProjectKey, showNotice]);
 
   const loadLicensePreviewUrl = useCallback(async () => fetchTranscriberLicenseObjectUrl(), []);
 
@@ -328,6 +342,45 @@ export default function App() {
       if (transcriber) void loadProjects();
     });
   }, [loadProjects]);
+
+  const refreshVisibleProjects = useCallback(() => {
+    if (document.visibilityState === "visible" && authStatus === "authenticated") {
+      void loadProjects();
+    }
+  }, [authStatus, loadProjects]);
+
+  useEffect(() => {
+    if (authStatus !== "authenticated") return;
+
+    let alive = true;
+    const eventSource = createAdminEventsSource();
+    const handleAdminUpdate = () => {
+      if (!alive) return;
+      void loadProjects();
+    };
+
+    eventSource.addEventListener("admin_update", handleAdminUpdate);
+    eventSource.addEventListener("error", () => {
+      console.error("transcriber SSE connection error");
+    });
+
+    const intervalId = window.setInterval(() => {
+      if (!alive || document.visibilityState !== "visible") return;
+      void loadProjects();
+    }, 10000);
+
+    window.addEventListener("focus", refreshVisibleProjects);
+    document.addEventListener("visibilitychange", refreshVisibleProjects);
+
+    return () => {
+      alive = false;
+      eventSource.removeEventListener("admin_update", handleAdminUpdate);
+      eventSource.close();
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshVisibleProjects);
+      document.removeEventListener("visibilitychange", refreshVisibleProjects);
+    };
+  }, [authStatus, loadProjects, refreshVisibleProjects]);
 
   useEffect(() => {
     if (!selectedJobId) {

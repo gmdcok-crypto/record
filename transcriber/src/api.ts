@@ -121,6 +121,10 @@ function apiBase(): string {
   return API_URL || window.location.origin;
 }
 
+export function createAdminEventsSource(): EventSource {
+  return new EventSource(`${apiBase()}/api/jobs/admin/events`);
+}
+
 function transcriberAuthHeaders(): HeadersInit {
   const token = localStorage.getItem(TRANSCRIBER_TOKEN_KEY);
   const headers: HeadersInit = { Accept: "application/json" };

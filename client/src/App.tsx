@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   cancelClientJob,
   checkHealth,
+  createAdminEventsSource,
   createProject,
   downloadTranscriptPdf,
   downloadFinalTranscriptPdf,
@@ -345,6 +346,12 @@ export default function App() {
     }
   };
 
+  const refreshVisibleWorkspace = useCallback(() => {
+    if (document.visibilityState === "visible" && authStatus === "authenticated") {
+      void refreshWorkspace();
+    }
+  }, [authStatus, refreshWorkspace]);
+
   const isProjectExpanded = (projectId: string) => expandedProjects[projectId] ?? true;
 
   const toggleProjectExpanded = (projectId: string) => {
@@ -408,6 +415,39 @@ export default function App() {
       if (member) void refreshWorkspace();
     });
   }, []);
+
+  useEffect(() => {
+    if (authStatus !== "authenticated") return;
+
+    let alive = true;
+    const eventSource = createAdminEventsSource();
+    const handleAdminUpdate = () => {
+      if (!alive) return;
+      void refreshWorkspace();
+    };
+
+    eventSource.addEventListener("admin_update", handleAdminUpdate);
+    eventSource.addEventListener("error", () => {
+      console.error("client SSE connection error");
+    });
+
+    const intervalId = window.setInterval(() => {
+      if (!alive || document.visibilityState !== "visible") return;
+      void refreshWorkspace();
+    }, 10000);
+
+    window.addEventListener("focus", refreshVisibleWorkspace);
+    document.addEventListener("visibilitychange", refreshVisibleWorkspace);
+
+    return () => {
+      alive = false;
+      eventSource.removeEventListener("admin_update", handleAdminUpdate);
+      eventSource.close();
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshVisibleWorkspace);
+      document.removeEventListener("visibilitychange", refreshVisibleWorkspace);
+    };
+  }, [authStatus, refreshVisibleWorkspace]);
 
   useEffect(() => {
     const preventWindowDrop = (event: DragEvent) => {

@@ -84,6 +84,10 @@ function apiBase(): string {
   return API_URL || window.location.origin;
 }
 
+export function createAdminEventsSource(): EventSource {
+  return new EventSource(`${apiBase()}/api/jobs/admin/events`);
+}
+
 function parseErrorDetail(body: unknown): string {
   if (typeof body === "object" && body !== null && "detail" in body) {
     const detail = (body as { detail: unknown }).detail;
