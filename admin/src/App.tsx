@@ -241,6 +241,10 @@ function projectStatusTone(rawStatus: string): string {
   }
 }
 
+function projectAssignButtonLabel(project: ProjectItem): string {
+  return project.assignee !== "-" ? "배정변경" : "프로젝트 배정";
+}
+
 function mapJobStatus(status: string): JobStatus {
   switch (status) {
     case "waiting_assignment":
@@ -1080,7 +1084,7 @@ function App() {
                             onClick={() => openAssignProjectModal(project)}
                             className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-300 transition hover:bg-cyan-500/20"
                           >
-                            프로젝트 배정
+                            {projectAssignButtonLabel(project)}
                           </button>
                         </div>
                       </td>
@@ -1157,7 +1161,7 @@ function App() {
                   onClick={() => openAssignProjectModal(project)}
                   className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950"
                 >
-                  프로젝트 배정
+                  {projectAssignButtonLabel(project)}
                 </button>
               </div>
             </div>
@@ -1946,7 +1950,7 @@ function App() {
                 }}
                 className="rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950"
               >
-                프로젝트 배정
+                {projectAssignButtonLabel(detailProject)}
               </button>
             </div>
           </div>

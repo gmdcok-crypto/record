@@ -207,6 +207,9 @@ export default function App() {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [saveDraftDialog, setSaveDraftDialog] = useState<{ kind: "success" | "error"; message: string } | null>(
+    null,
+  );
 
   const currentProject = useMemo(
     () => projects.find((project) => projectKey(project) === selectedProjectKey) ?? null,
@@ -396,13 +399,17 @@ export default function App() {
     setSaving(true);
     setError("");
     setMessage("");
+    setSaveDraftDialog(null);
     try {
       await saveTranscript(job.job_id, currentTranscript, "draft");
       setJob({ ...job, transcript_json: currentTranscript });
       setChangeHistoryRefresh((value) => value + 1);
-      setMessage("초벌 임시 저장이 완료되었습니다.");
+      setSaveDraftDialog({ kind: "success", message: "초벌 임시 저장이 완료되었습니다." });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "저장 실패");
+      setSaveDraftDialog({
+        kind: "error",
+        message: err instanceof Error ? err.message : "저장 실패",
+      });
     } finally {
       setSaving(false);
     }
@@ -778,6 +785,34 @@ export default function App() {
           onClose={() => setSpeakerSettingsOpen(false)}
           onApply={applySpeakerLabels}
         />
+
+        {saveDraftDialog ? (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-2xl shadow-black/40">
+              <h3
+                className={`text-lg font-semibold ${
+                  saveDraftDialog.kind === "error" ? "text-rose-300" : "text-white"
+                }`}
+              >
+                {saveDraftDialog.kind === "error" ? "임시 저장 실패" : "임시 저장 완료"}
+              </h3>
+              <p className="mt-3 text-sm leading-6 text-slate-300">{saveDraftDialog.message}</p>
+              <div className="mt-5 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setSaveDraftDialog(null)}
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                    saveDraftDialog.kind === "error"
+                      ? "bg-rose-600 text-white hover:bg-rose-500"
+                      : "bg-violet-600 text-white hover:bg-violet-500"
+                  }`}
+                >
+                  확인
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
