@@ -25,6 +25,7 @@ import TranscriberLogin from "./TranscriberLogin";
 import TranscriberSignup from "./TranscriberSignup";
 import SpeakerSettingsModal from "./SpeakerSettingsModal";
 import TranscriptChangeHistory from "./TranscriptChangeHistory";
+import { attachSegmentStopListener, playSegmentAudio, resolveSegmentEndMs } from "./segmentAudio";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 type AuthScreen = "signup" | "login";
@@ -310,49 +311,25 @@ export default function App() {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-
-    const handleTimeUpdate = () => {
-      if (segmentEndRef.current == null) return;
-      if (audio.currentTime >= segmentEndRef.current) {
-        audio.pause();
-        segmentEndRef.current = null;
-      }
-    };
-
-    const clearSegmentTarget = () => {
-      segmentEndRef.current = null;
-    };
-
-    audio.addEventListener("timeupdate", handleTimeUpdate);
-    audio.addEventListener("ended", clearSegmentTarget);
-    audio.addEventListener("pause", clearSegmentTarget);
-    return () => {
-      audio.removeEventListener("timeupdate", handleTimeUpdate);
-      audio.removeEventListener("ended", clearSegmentTarget);
-      audio.removeEventListener("pause", clearSegmentTarget);
-    };
+    return attachSegmentStopListener(audio, segmentEndRef);
   }, [job?.job_id]);
 
-  const playSegment = (startMs: number | null | undefined, endMs: number | null | undefined) => {
+  const playSegment = (index: number, startMs: number | null | undefined) => {
     const audio = audioRef.current;
     if (!audio || startMs == null) return;
-
-    segmentEndRef.current = endMs != null ? Math.max(startMs / 1000, endMs / 1000) : null;
-    audio.currentTime = Math.max(0, startMs / 1000);
-    void audio.play().catch(() => {
-      segmentEndRef.current = null;
-    });
+    const endMs = resolveSegmentEndMs(segments, index);
+    void playSegmentAudio(audio, segmentEndRef, startMs, endMs);
   };
 
   const handleSegmentTextMouseDown = (
     event: MouseEvent<HTMLTextAreaElement>,
+    index: number,
     startMs: number | null | undefined,
-    endMs: number | null | undefined,
   ) => {
     const textarea = event.currentTarget;
     if (document.activeElement !== textarea) {
       event.preventDefault();
-      playSegment(startMs, endMs);
+      playSegment(index, startMs);
       textarea.focus();
     }
   };
@@ -708,7 +685,7 @@ export default function App() {
                                 autoResizeTextarea(e.currentTarget);
                               }}
                               onMouseDown={(e) =>
-                                handleSegmentTextMouseDown(e, segment.start_ms, segment.end_ms)
+                                handleSegmentTextMouseDown(e, index, segment.start_ms)
                               }
                               onFocus={(e) => autoResizeTextarea(e.currentTarget)}
                               ref={(element) => {
