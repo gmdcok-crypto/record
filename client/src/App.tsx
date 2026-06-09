@@ -253,8 +253,6 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState("");
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
-  const [r2Ready, setR2Ready] = useState<boolean | null>(null);
-  const [dbReady, setDbReady] = useState<boolean | null>(null);
   const [job, setJob] = useState<JobResponse | null>(null);
   const [segments, setSegments] = useState<EditableSegment[]>([]);
   const [speakerLabels, setSpeakerLabels] = useState<Record<string, string>>({});
@@ -326,10 +324,9 @@ export default function App() {
     if (!uploadProjectReady) return "프로젝트를 먼저 정해 주세요";
     if (!selectedFiles.length) return "파일을 선택해 주세요";
     if (!uploadPaid) return "결제 후 업로드 가능";
-    if (r2Ready === false || dbReady === false) return "서버 연결을 확인해 주세요";
     if (busy) return "처리 중…";
     return selectedFiles.length > 1 ? `${selectedFiles.length}개 파일 업로드` : "업로드";
-  }, [uploadProjectReady, selectedFiles.length, uploadPaid, r2Ready, dbReady, busy]);
+  }, [uploadProjectReady, selectedFiles.length, uploadPaid, busy]);
 
   const refreshWorkspace = async () => {
     try {
@@ -406,14 +403,7 @@ export default function App() {
 
   useEffect(() => {
     checkHealth()
-      .then((h) => {
-        setR2Ready(h.r2_configured);
-        setDbReady(Boolean(h.database_configured));
-      })
-      .catch(() => {
-        setR2Ready(false);
-        setDbReady(false);
-      });
+      .catch(() => undefined);
     void restoreSession().then((member) => {
       if (member) void refreshWorkspace();
     });
@@ -998,9 +988,7 @@ export default function App() {
                   !uploadProjectReady ||
                   !selectedFiles.length ||
                   !uploadPaid ||
-                  busy ||
-                  r2Ready === false ||
-                  dbReady === false
+                  busy
                 }
                 className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-slate-700"
               >
