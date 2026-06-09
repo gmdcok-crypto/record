@@ -101,8 +101,18 @@ export type TranscriberAuthProfile = {
   phone: string | null;
   bank_name: string | null;
   account_number: string | null;
+  resident_id: string | null;
+  license_filename: string | null;
+  has_license: boolean;
   status: string;
   auth_status: string;
+};
+
+export type TranscriberProfileUpdateInput = {
+  phone?: string;
+  bank_name?: string;
+  account_number?: string;
+  resident_id?: string;
 };
 
 export const TRANSCRIBER_TOKEN_KEY = "transcriber_access_token";
@@ -149,6 +159,48 @@ export async function fetchTranscriberMe(): Promise<TranscriberAuthProfile | nul
   }
   const data = await res.json();
   return data.transcriber as TranscriberAuthProfile;
+}
+
+export async function updateTranscriberProfile(input: TranscriberProfileUpdateInput): Promise<TranscriberAuthProfile> {
+  const res = await fetch(`${apiBase()}/api/transcriber/auth/profile`, {
+    method: "PATCH",
+    headers: { ...transcriberAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data) || "개인정보 저장에 실패했습니다.");
+  }
+  return (data as { transcriber: TranscriberAuthProfile }).transcriber;
+}
+
+export async function uploadTranscriberLicense(file: File): Promise<TranscriberAuthProfile> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${apiBase()}/api/transcriber/auth/profile/license`, {
+    method: "POST",
+    headers: transcriberAuthHeaders(),
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data) || "자격증 업로드에 실패했습니다.");
+  }
+  return (data as { transcriber: TranscriberAuthProfile }).transcriber;
+}
+
+export async function fetchTranscriberLicenseObjectUrl(): Promise<string | null> {
+  const res = await fetch(`${apiBase()}/api/transcriber/auth/profile/license`, {
+    headers: transcriberAuthHeaders(),
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(data) || "자격증 미리보기를 불러오지 못했습니다.");
+  }
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
 }
 
 export type TranscriberSignupInput = {

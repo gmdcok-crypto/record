@@ -6,12 +6,15 @@ import {
   fetchAssignedProjects,
   fetchJob,
   fetchTranscriberMe,
+  fetchTranscriberLicenseObjectUrl,
   fetchTranscriptChanges,
   finalizeTranscriptPdf,
   resolveUrl,
   deliverDraftToClient,
   runAiDraft,
   saveTranscript,
+  updateTranscriberProfile,
+  uploadTranscriberLicense,
   collectSpeakerIds,
   speakerLabel,
   type JobResponse,
@@ -22,6 +25,7 @@ import {
   type TranscriptSegment,
 } from "./api";
 import TranscriberLogin from "./TranscriberLogin";
+import TranscriberProfileSettingsModal from "./TranscriberProfileSettingsModal";
 import TranscriberSignup from "./TranscriberSignup";
 import SpeakerSettingsModal from "./SpeakerSettingsModal";
 import TranscriptChangeHistory from "./TranscriptChangeHistory";
@@ -192,6 +196,8 @@ export default function App() {
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
   const [authScreen, setAuthScreen] = useState<AuthScreen>("signup");
   const [transcriberName, setTranscriberName] = useState<string | null>(null);
+  const [transcriberProfile, setTranscriberProfile] = useState<TranscriberAuthProfile | null>(null);
+  const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
   const [projects, setProjects] = useState<TranscriberProject[]>([]);
   const [selectedProjectKey, setSelectedProjectKey] = useState("");
   const [selectedJobId, setSelectedJobId] = useState("");
@@ -249,21 +255,35 @@ export default function App() {
     }
   }, []);
 
+  const loadLicensePreviewUrl = useCallback(async () => fetchTranscriberLicenseObjectUrl(), []);
+
+  const openProfileSettings = async () => {
+    const fresh = await fetchTranscriberMe();
+    if (fresh) {
+      setTranscriberProfile(fresh);
+      setTranscriberName(fresh.name);
+    }
+    setProfileSettingsOpen(true);
+  };
+
   const restoreSession = async () => {
     bootstrapTranscriberTokenFromUrl();
     const transcriber = await fetchTranscriberMe();
     if (transcriber) {
       setTranscriberName(transcriber.name);
+      setTranscriberProfile(transcriber);
       setAuthStatus("authenticated");
       return transcriber;
     }
     setTranscriberName(null);
+    setTranscriberProfile(null);
     setAuthStatus("unauthenticated");
     return null;
   };
 
   const handleLoginSuccess = (transcriber: TranscriberAuthProfile) => {
     setTranscriberName(transcriber.name);
+    setTranscriberProfile(transcriber);
     setAuthStatus("authenticated");
     setError("");
     void loadProjects();
@@ -272,6 +292,7 @@ export default function App() {
   const handleLogout = () => {
     clearTranscriberSession();
     setTranscriberName(null);
+    setTranscriberProfile(null);
     setAuthStatus("unauthenticated");
     setProjects([]);
     setSelectedProjectKey("");
@@ -499,9 +520,20 @@ export default function App() {
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.12),transparent_24%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.12),transparent_22%),linear-gradient(to_bottom,rgba(15,23,42,0.84),rgba(2,6,23,0.98))]" />
         <div className="relative mx-auto min-h-screen max-w-[1680px] px-4 py-4 lg:px-6">
           <header className="mb-4 flex items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-semibold text-cyan-300">속기사 녹취</p>
-              <h1 className="mt-1 text-2xl font-bold text-white">{transcriberName ? `${transcriberName}님` : "속기사"}</h1>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-bold text-white">
+                  {transcriberName ? `${transcriberName}님` : "속기사"}
+                </h1>
+                <button
+                  type="button"
+                  onClick={() => void openProfileSettings()}
+                  className="rounded-lg border border-white/10 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5 hover:text-white"
+                >
+                  설정
+                </button>
+              </div>
             </div>
             <button
               type="button"
@@ -784,6 +816,20 @@ export default function App() {
           labels={speakerLabels}
           onClose={() => setSpeakerSettingsOpen(false)}
           onApply={applySpeakerLabels}
+        />
+
+        <TranscriberProfileSettingsModal
+          open={profileSettingsOpen}
+          profile={transcriberProfile}
+          onClose={() => setProfileSettingsOpen(false)}
+          onSaved={(next) => {
+            setTranscriberProfile(next);
+            setTranscriberName(next.name);
+            setMessage("개인정보가 저장되었습니다.");
+          }}
+          onSaveProfile={updateTranscriberProfile}
+          onUploadLicense={uploadTranscriberLicense}
+          loadLicensePreviewUrl={loadLicensePreviewUrl}
         />
 
         {saveDraftDialog ? (

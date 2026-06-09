@@ -1,6 +1,7 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
@@ -9,16 +10,27 @@ from app.db import get_db
 from app.dependencies.transcriber_auth import get_current_transcriber
 from app.models.admin_models import Transcriber
 from app.services.jwt_tokens import create_transcriber_access_token
+from app.services.r2 import get_object_bytes, get_object_metadata, upload_transcriber_license_bytes
 from app.services.transcriber_auth import (
     TranscriberAuthError,
     authenticate_transcriber,
     get_transcriber_by_login_id,
     register_transcriber,
     serialize_transcriber_auth,
+    update_transcriber_license,
+    update_transcriber_profile,
     validate_login_id,
 )
 
 router = APIRouter(prefix="/api/transcriber/auth", tags=["transcriber-auth"])
+
+LICENSE_CONTENT_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "application/pdf",
+}
+MAX_LICENSE_BYTES = 10 * 1024 * 1024
 
 
 class TranscriberSignupRequest(BaseModel):
@@ -44,6 +56,13 @@ class TranscriberLoginRequest(BaseModel):
     @classmethod
     def check_login_id(cls, value: str) -> str:
         return validate_login_id(value)
+
+
+class TranscriberProfileUpdateRequest(BaseModel):
+    phone: str | None = None
+    bank_name: str | None = None
+    account_number: str | None = None
+    resident_id: str | None = None
 
 
 class AuthTokenResponse(BaseModel):
@@ -133,3 +152,78 @@ def transcriber_login(body: TranscriberLoginRequest, db: Annotated[Session, Depe
 @router.get("/me")
 def transcriber_me(current: Annotated[Transcriber, Depends(get_current_transcriber)]) -> dict:
     return {"transcriber": serialize_transcriber_auth(current)}
+
+
+@router.patch("/profile")
+def transcriber_update_profile(
+    body: TranscriberProfileUpdateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current: Annotated[Transcriber, Depends(get_current_transcriber)],
+) -> dict:
+    transcriber = update_transcriber_profile(
+        db,
+        current,
+        phone=body.phone,
+        bank_name=body.bank_name,
+        account_number=body.account_number,
+        resident_id=body.resident_id,
+    )
+    return {"transcriber": serialize_transcriber_auth(transcriber)}
+
+
+@router.post("/profile/license")
+async def transcriber_upload_license(
+    db: Annotated[Session, Depends(get_db)],
+    current: Annotated[Transcriber, Depends(get_current_transcriber)],
+    file: UploadFile = File(...),
+) -> dict:
+    if not settings.r2_configured:
+        raise HTTPException(status_code=503, detail="R2 is not configured")
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type not in LICENSE_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail="jpg, png, webp, pdf 파일만 업로드할 수 있습니다.")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="업로드할 파일이 비어 있습니다.")
+    if len(data) > MAX_LICENSE_BYTES:
+        raise HTTPException(status_code=400, detail="파일 크기는 10MB 이하여야 합니다.")
+
+    filename = file.filename or "license.jpg"
+    try:
+        uploaded = upload_transcriber_license_bytes(current.transcriber_code, data, filename, content_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"자격증 업로드 실패: {exc}") from exc
+
+    transcriber = update_transcriber_license(
+        db,
+        current,
+        object_key=uploaded["object_key"],
+        filename=uploaded["filename"],
+    )
+    return {"transcriber": serialize_transcriber_auth(transcriber)}
+
+
+@router.get("/profile/license")
+def transcriber_get_license(current: Annotated[Transcriber, Depends(get_current_transcriber)]) -> Response:
+    if not current.license_r2_key:
+        raise HTTPException(status_code=404, detail="등록된 자격증 파일이 없습니다.")
+
+    try:
+        metadata = get_object_metadata(current.license_r2_key)
+        content = get_object_bytes(current.license_r2_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"자격증 파일을 불러오지 못했습니다: {exc}") from exc
+
+    media_type = metadata.get("content_type") or "application/octet-stream"
+    filename = current.license_filename or "license"
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )

@@ -17,6 +17,7 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_member_phone_optional.sql",
     SCRIPTS_DIR / "migrate_projects.sql",
     SCRIPTS_DIR / "migrate_transcript_change_logs.sql",
+    SCRIPTS_DIR / "migrate_transcriber_license.sql",
 ]
 
 

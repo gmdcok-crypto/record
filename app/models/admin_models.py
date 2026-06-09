@@ -73,6 +73,8 @@ class Transcriber(Base):
     account_holder: Mapped[str | None] = mapped_column(String(100), nullable=True)
     account_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     resident_id_masked: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    license_r2_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    license_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[int] = mapped_column(default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

@@ -80,6 +80,33 @@ def build_transcript_history_object_key(job_id: str, revision_id: str) -> str:
     return f"{settings.r2_text_prefix}{job_id}/history/{revision_id}.json"
 
 
+def build_transcriber_license_object_key(transcriber_code: str, filename: str) -> str:
+    safe_name = _safe_filename(filename)
+    return f"transcribers/{transcriber_code}/license/{safe_name}"
+
+
+def upload_transcriber_license_bytes(transcriber_code: str, data: bytes, filename: str, content_type: str) -> dict:
+    if not settings.r2_configured:
+        raise ValueError("R2 is not configured")
+
+    safe_name = _safe_filename(filename)
+    object_key = build_transcriber_license_object_key(transcriber_code, safe_name)
+
+    client = _client()
+    client.put_object(
+        Bucket=settings.r2_bucket_name,
+        Key=object_key,
+        Body=data,
+        ContentType=content_type,
+    )
+
+    return {
+        "object_key": object_key,
+        "filename": safe_name,
+        "content_type": content_type,
+    }
+
+
 def create_voice_upload_url(filename: str, content_type: str) -> dict:
     if not settings.r2_configured:
         raise ValueError("R2 is not configured")

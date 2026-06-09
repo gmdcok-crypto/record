@@ -59,9 +59,50 @@ def serialize_transcriber_auth(transcriber: Transcriber) -> dict:
         "phone": transcriber.phone,
         "bank_name": transcriber.bank_name,
         "account_number": transcriber.account_number,
+        "resident_id": transcriber.resident_id_masked,
+        "license_filename": transcriber.license_filename,
+        "has_license": bool(transcriber.license_r2_key),
         "status": transcriber.status,
         "auth_status": transcriber.auth_status,
     }
+
+
+def update_transcriber_profile(
+    db: Session,
+    transcriber: Transcriber,
+    *,
+    phone: str | None = None,
+    bank_name: str | None = None,
+    account_number: str | None = None,
+    resident_id: str | None = None,
+) -> Transcriber:
+    if phone is not None:
+        transcriber.phone = phone.strip() or None
+    if bank_name is not None:
+        transcriber.bank_name = bank_name.strip() or None
+    if account_number is not None:
+        transcriber.account_number = account_number.strip() or None
+    if resident_id is not None:
+        transcriber.resident_id_masked = resident_id.strip() or None
+    if transcriber.name and not transcriber.account_holder:
+        transcriber.account_holder = transcriber.name
+    db.commit()
+    db.refresh(transcriber)
+    return transcriber
+
+
+def update_transcriber_license(
+    db: Session,
+    transcriber: Transcriber,
+    *,
+    object_key: str,
+    filename: str,
+) -> Transcriber:
+    transcriber.license_r2_key = object_key
+    transcriber.license_filename = filename
+    db.commit()
+    db.refresh(transcriber)
+    return transcriber
 
 
 def unassign_transcriber_jobs(db: Session, transcriber_id: int) -> None:
