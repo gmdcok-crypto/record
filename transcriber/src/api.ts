@@ -267,6 +267,20 @@ function parseErrorDetail(body: unknown): string {
   return "요청 처리 중 오류가 발생했습니다";
 }
 
+async function fetchWithRetry(input: string, init?: RequestInit, retries = 1): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await fetch(input, init);
+    } catch (error) {
+      lastError = error;
+      if (attempt === retries) break;
+      await new Promise((resolve) => window.setTimeout(resolve, 400));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("서버 연결 오류");
+}
+
 function parseFilenameFromDisposition(header: string | null, fallback: string): string {
   if (!header) return fallback;
   const utf8Match = header.match(/filename\*=UTF-8''([^;]+)/i);
@@ -298,7 +312,7 @@ export async function fetchJob(jobId: string): Promise<JobResponse> {
 }
 
 export async function fetchAssignedProjects(): Promise<TranscriberProject[]> {
-  const res = await fetch(`${apiBase()}/api/jobs/transcriber/projects`, {
+  const res = await fetchWithRetry(`${apiBase()}/api/jobs/transcriber/projects`, {
     headers: transcriberAuthHeaders(),
   });
   if (!res.ok) {

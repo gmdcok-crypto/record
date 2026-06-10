@@ -1,4 +1,6 @@
+import logging
 import re
+import time
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -6,6 +8,8 @@ from sqlalchemy.orm import Session
 from app.models.admin_models import Client, Job, Member, Project
 from app.services.job_store import member_client_code
 from app.services.passwords import hash_password, verify_password
+
+logger = logging.getLogger(__name__)
 
 EMAIL_PATTERN = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
 PASSWORD_PATTERN = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)(?=.*[#?!@$%^&*\-]).{8,16}$")
@@ -87,17 +91,39 @@ def register_member(
 
 
 def authenticate_member(db: Session, *, email: str, password: str) -> Member:
+    started = time.perf_counter()
     normalized_email = validate_email(email)
     if not password:
         raise MemberAuthError("이메일 또는 비밀번호가 올바르지 않습니다")
 
+    db_lookup_started = time.perf_counter()
     member = get_member_by_email(db, normalized_email)
+    db_lookup_ms = round((time.perf_counter() - db_lookup_started) * 1000, 1)
     if member is None or not member.password_hash:
+        logger.info("member_login_timing email=%s db_lookup_ms=%s result=missing_user", normalized_email, db_lookup_ms)
         raise MemberAuthError("이메일 또는 비밀번호가 올바르지 않습니다")
     if not member.is_active:
+        logger.info("member_login_timing email=%s db_lookup_ms=%s result=inactive", normalized_email, db_lookup_ms)
         raise MemberAuthError("비활성화된 계정입니다")
+    password_verify_started = time.perf_counter()
     if not verify_password(password, member.password_hash):
+        password_verify_ms = round((time.perf_counter() - password_verify_started) * 1000, 1)
+        logger.info(
+            "member_login_timing email=%s db_lookup_ms=%s password_verify_ms=%s total_ms=%s result=invalid_password",
+            normalized_email,
+            db_lookup_ms,
+            password_verify_ms,
+            round((time.perf_counter() - started) * 1000, 1),
+        )
         raise MemberAuthError("이메일 또는 비밀번호가 올바르지 않습니다")
+    password_verify_ms = round((time.perf_counter() - password_verify_started) * 1000, 1)
+    logger.info(
+        "member_login_timing email=%s db_lookup_ms=%s password_verify_ms=%s total_ms=%s result=success",
+        normalized_email,
+        db_lookup_ms,
+        password_verify_ms,
+        round((time.perf_counter() - started) * 1000, 1),
+    )
     return member
 
 

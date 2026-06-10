@@ -1,3 +1,5 @@
+import logging
+import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -18,6 +20,7 @@ from app.services.member_auth import (
 )
 
 router = APIRouter(prefix="/api/member/auth", tags=["member-auth"])
+logger = logging.getLogger(__name__)
 
 
 class MemberSignupRequest(BaseModel):
@@ -105,9 +108,22 @@ def member_login(body: MemberLoginRequest, db: Annotated[Session, Depends(get_db
 
     from app.services.member_auth import authenticate_member
 
+    started = time.perf_counter()
     try:
+        auth_started = time.perf_counter()
         member = authenticate_member(db, email=body.email, password=body.password)
+        auth_ms = round((time.perf_counter() - auth_started) * 1000, 1)
     except MemberAuthError as exc:
         raise _auth_error_to_http(exc) from exc
 
-    return _issue_token(member)
+    token_started = time.perf_counter()
+    response = _issue_token(member)
+    token_ms = round((time.perf_counter() - token_started) * 1000, 1)
+    logger.info(
+        "member_login_route_timing email=%s auth_ms=%s token_ms=%s total_ms=%s",
+        body.email.strip().lower(),
+        auth_ms,
+        token_ms,
+        round((time.perf_counter() - started) * 1000, 1),
+    )
+    return response

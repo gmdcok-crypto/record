@@ -111,6 +111,20 @@ function parseFilenameFromDisposition(header: string | null, fallback: string): 
   return plainMatch?.[1] || fallback;
 }
 
+async function fetchWithRetry(input: string, init?: RequestInit, retries = 1): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await fetch(input, init);
+    } catch (error) {
+      lastError = error;
+      if (attempt === retries) break;
+      await new Promise((resolve) => window.setTimeout(resolve, 400));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("서버 연결 오류");
+}
+
 export function resolveUrl(path: string): string {
   if (path.startsWith("http")) return path;
   return `${apiBase()}${path}`;
@@ -159,7 +173,7 @@ function memberAuthHeaders(): HeadersInit {
 
 export async function fetchProjects(includeFiles = true): Promise<ProjectSummary[]> {
   const query = includeFiles ? "?include_files=true" : "";
-  const res = await fetch(`${apiBase()}/api/projects${query}`, { headers: memberAuthHeaders() });
+  const res = await fetchWithRetry(`${apiBase()}/api/projects${query}`, { headers: memberAuthHeaders() });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(parseErrorDetail(err));

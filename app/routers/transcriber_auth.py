@@ -1,3 +1,5 @@
+import logging
+import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -23,6 +25,7 @@ from app.services.transcriber_auth import (
 )
 
 router = APIRouter(prefix="/api/transcriber/auth", tags=["transcriber-auth"])
+logger = logging.getLogger(__name__)
 
 LICENSE_CONTENT_TYPES = {
     "image/jpeg",
@@ -141,12 +144,25 @@ def transcriber_login(body: TranscriberLoginRequest, db: Annotated[Session, Depe
     if not settings.jwt_configured:
         raise HTTPException(status_code=503, detail="JWT is not configured")
 
+    started = time.perf_counter()
     try:
+        auth_started = time.perf_counter()
         transcriber = authenticate_transcriber(db, login_id=body.login_id, password=body.password)
+        auth_ms = round((time.perf_counter() - auth_started) * 1000, 1)
     except TranscriberAuthError as exc:
         raise _auth_error_to_http(exc) from exc
 
-    return _issue_token(transcriber)
+    token_started = time.perf_counter()
+    response = _issue_token(transcriber)
+    token_ms = round((time.perf_counter() - token_started) * 1000, 1)
+    logger.info(
+        "transcriber_login_route_timing login_id=%s auth_ms=%s token_ms=%s total_ms=%s",
+        body.login_id.strip(),
+        auth_ms,
+        token_ms,
+        round((time.perf_counter() - started) * 1000, 1),
+    )
+    return response
 
 
 @router.get("/me")

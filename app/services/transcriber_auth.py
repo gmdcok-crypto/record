@@ -1,4 +1,6 @@
+import logging
 import re
+import time
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -6,6 +8,8 @@ from sqlalchemy.orm import Session
 from app.models.admin_models import Job, Transcriber
 from app.services.job_store import ACTIVE_JOB_STATUSES, generate_transcriber_code, _sync_transcriber_load
 from app.services.passwords import hash_password, verify_password
+
+logger = logging.getLogger(__name__)
 
 LOGIN_ID_PATTERN = re.compile(r"^[A-Za-z0-9]{1,8}$")
 MIN_PASSWORD_LENGTH = 8
@@ -194,20 +198,55 @@ def register_transcriber(
 
 
 def authenticate_transcriber(db: Session, *, login_id: str, password: str) -> Transcriber:
+    started = time.perf_counter()
     normalized_login_id = validate_login_id(login_id)
     normalized_password = validate_password(password)
 
+    db_lookup_started = time.perf_counter()
     transcriber = get_transcriber_by_login_id(db, normalized_login_id)
+    db_lookup_ms = round((time.perf_counter() - db_lookup_started) * 1000, 1)
     if transcriber is None or not transcriber.password_hash:
+        logger.info(
+            "transcriber_login_timing login_id=%s db_lookup_ms=%s result=missing_user",
+            normalized_login_id,
+            db_lookup_ms,
+        )
         raise TranscriberAuthError("로그인 ID 또는 비밀번호가 올바르지 않습니다")
 
     if not transcriber.is_active:
+        logger.info(
+            "transcriber_login_timing login_id=%s db_lookup_ms=%s result=inactive",
+            normalized_login_id,
+            db_lookup_ms,
+        )
         raise TranscriberAuthError("비활성화된 계정입니다")
 
     if transcriber.auth_status != AUTH_STATUS_ACTIVE:
+        logger.info(
+            "transcriber_login_timing login_id=%s db_lookup_ms=%s result=reset_required",
+            normalized_login_id,
+            db_lookup_ms,
+        )
         raise TranscriberAuthError("로그인 초기화된 계정입니다. 다시 가입해 주세요")
 
+    password_verify_started = time.perf_counter()
     if not verify_password(normalized_password, transcriber.password_hash):
+        password_verify_ms = round((time.perf_counter() - password_verify_started) * 1000, 1)
+        logger.info(
+            "transcriber_login_timing login_id=%s db_lookup_ms=%s password_verify_ms=%s total_ms=%s result=invalid_password",
+            normalized_login_id,
+            db_lookup_ms,
+            password_verify_ms,
+            round((time.perf_counter() - started) * 1000, 1),
+        )
         raise TranscriberAuthError("로그인 ID 또는 비밀번호가 올바르지 않습니다")
 
+    password_verify_ms = round((time.perf_counter() - password_verify_started) * 1000, 1)
+    logger.info(
+        "transcriber_login_timing login_id=%s db_lookup_ms=%s password_verify_ms=%s total_ms=%s result=success",
+        normalized_login_id,
+        db_lookup_ms,
+        password_verify_ms,
+        round((time.perf_counter() - started) * 1000, 1),
+    )
     return transcriber
