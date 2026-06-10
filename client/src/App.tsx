@@ -708,6 +708,7 @@ export default function App() {
     setSubmittingReview(true);
     setSaving(true);
     try {
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
       await saveTranscript(job.job_id, currentTranscript, "review_request");
       await updateJobStatus(job.job_id, "review_waiting", "의뢰인 수정 후 속기사검토 요청");
       setJob({

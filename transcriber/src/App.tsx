@@ -542,6 +542,7 @@ export default function App() {
     setSendingToClient(true);
     setSaving(true);
     try {
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
       const result = await deliverDraftToClient(job.job_id, currentTranscript);
       setJob({
         ...job,
