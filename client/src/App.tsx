@@ -333,7 +333,7 @@ export default function App() {
     return selectedFiles.length > 1 ? `${selectedFiles.length}개 파일 업로드` : "업로드";
   }, [uploadProjectReady, selectedFiles.length, uploadPaid, busy]);
 
-  const refreshWorkspace = async (showLoading = false) => {
+  const refreshWorkspace = async (showLoading = false, suppressError = false) => {
     if (showLoading) setLoadingWorkspace(true);
     try {
       const projectList = await fetchProjects(true);
@@ -347,7 +347,9 @@ export default function App() {
         setSelectedUploadProjectId(projectList[0].project_id);
       }
     } catch (err) {
-      showNotice("error", err instanceof Error ? err.message : "보관함을 불러오지 못했습니다.");
+      if (!suppressError) {
+        showNotice("error", err instanceof Error ? err.message : "보관함을 불러오지 못했습니다.");
+      }
     } finally {
       if (showLoading) setLoadingWorkspace(false);
     }
@@ -355,7 +357,7 @@ export default function App() {
 
   const refreshVisibleWorkspace = useCallback(() => {
     if (document.visibilityState === "visible" && authStatus === "authenticated") {
-      void refreshWorkspace();
+      void refreshWorkspace(false, true);
     }
   }, [authStatus, refreshWorkspace]);
 
@@ -450,7 +452,7 @@ export default function App() {
     const eventSource = createAdminEventsSource();
     const handleAdminUpdate = () => {
       if (!alive) return;
-      void refreshWorkspace();
+      void refreshWorkspace(false, true);
     };
 
     eventSource.addEventListener("admin_update", handleAdminUpdate);
@@ -1167,7 +1169,8 @@ export default function App() {
                                   <button
                                     type="button"
                                     onClick={() => openArchiveJob(item, project.title)}
-                                    className="min-w-0 flex-1 text-left"
+                                    disabled={loadingJob}
+                                    className="min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-60"
                                   >
                                     <p className="truncate text-sm font-semibold text-slate-100">{file.filename}</p>
                                     <p className="mt-1 truncate text-xs text-slate-500">{file.title}</p>

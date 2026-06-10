@@ -258,7 +258,7 @@ export default function App() {
   );
   const transcriptTokens = useMemo(() => job?.transcript_json?.tokens ?? [], [job?.transcript_json?.tokens]);
 
-  const loadProjects = useCallback(async () => {
+  const loadProjects = useCallback(async (suppressError = false) => {
     setLoadingProjects(true);
     try {
       const data = await fetchAssignedProjects();
@@ -286,7 +286,9 @@ export default function App() {
         }
       }
     } catch (err) {
-      showNotice("error", err instanceof Error ? err.message : "배정 프로젝트를 불러오지 못했습니다.");
+      if (!suppressError) {
+        showNotice("error", err instanceof Error ? err.message : "배정 프로젝트를 불러오지 못했습니다.");
+      }
     } finally {
       setLoadingProjects(false);
     }
@@ -312,7 +314,7 @@ export default function App() {
       setLoadingProjectsAfterLogin(true);
       setAuthStatus("authenticated");
       window.setTimeout(() => {
-        void loadProjects().finally(() => setLoadingProjectsAfterLogin(false));
+        void loadProjects(false).finally(() => setLoadingProjectsAfterLogin(false));
       }, 0);
       return transcriber;
     }
@@ -329,7 +331,7 @@ export default function App() {
     setLoadingProjectsAfterLogin(true);
     setAuthStatus("authenticated");
     window.setTimeout(() => {
-      void loadProjects().finally(() => setLoadingProjectsAfterLogin(false));
+      void loadProjects(false).finally(() => setLoadingProjectsAfterLogin(false));
     }, 0);
   };
 
@@ -352,7 +354,7 @@ export default function App() {
 
   const refreshVisibleProjects = useCallback(() => {
     if (document.visibilityState === "visible" && authStatus === "authenticated") {
-      void loadProjects();
+      void loadProjects(true);
     }
   }, [authStatus, loadProjects]);
 
@@ -363,7 +365,7 @@ export default function App() {
     const eventSource = createAdminEventsSource();
     const handleAdminUpdate = () => {
       if (!alive) return;
-      void loadProjects();
+      void loadProjects(true);
     };
 
     eventSource.addEventListener("admin_update", handleAdminUpdate);
@@ -680,11 +682,12 @@ export default function App() {
                       key={file.job_id}
                       type="button"
                       onClick={() => setSelectedJobId(file.job_id)}
+                      disabled={loadingJob}
                       className={`block w-full rounded-2xl border px-3 py-3 text-left transition ${
                         active
                           ? "border-violet-500/40 bg-violet-500/10"
                           : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
-                      }`}
+                      } disabled:cursor-not-allowed disabled:opacity-60`}
                     >
                       <p className="truncate text-sm font-medium text-white">{file.filename}</p>
                       <p className="mt-1 text-[10px] text-slate-500">{formatDateTime(file.due_at)}</p>
