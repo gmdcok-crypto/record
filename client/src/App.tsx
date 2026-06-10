@@ -557,7 +557,6 @@ export default function App() {
   const loadJobById = async (jobId: string, options?: { switchToEdit?: boolean }) => {
     if (!jobId.trim()) return;
     setLoadingJob(true);
-    showNotice("info", "작업을 불러오는 중입니다.");
     try {
       const data = await fetchJob(jobId.trim());
       setJob(data);
@@ -572,20 +571,12 @@ export default function App() {
       const shouldOpenEdit = options?.switchToEdit ?? isEditableArchiveStatus(workflowStatus);
       if (shouldOpenEdit) {
         setActiveTab("edit");
-        showNotice(
-          "info",
-          workflowStatus === "first_done"
-            ? "의뢰인 검토 문서를 불러왔습니다. 내용을 검토하고 수정하세요."
-            : "편집 문서를 불러왔습니다.",
-        );
       } else if (workflowStatus === "assigned" || workflowStatus === "working") {
         setActiveTab("archive");
         showNotice("info", "속기사가 작업 중입니다. 의뢰인 검토요청 후 편집 화면에서 확인할 수 있습니다.");
       } else if (workflowStatus === "review_waiting") {
         setActiveTab("archive");
         showNotice("info", "속기사검토중입니다.");
-      } else {
-        showNotice("info", "작업을 불러왔습니다.");
       }
       const context = resolveEditContext(data.job_id, projects);
       setEditContext(context);
@@ -1213,7 +1204,14 @@ export default function App() {
           ) : null}
 
           {activeTab === "edit" ? (
-          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
+          <section className="relative rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
+            {loadingJob ? (
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl bg-slate-950/75 px-6 backdrop-blur-sm">
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/95 px-6 py-5 text-center shadow-2xl shadow-black/30">
+                  <p className="text-sm font-semibold text-white">작업을 불러오는 중입니다.</p>
+                </div>
+              </div>
+            ) : null}
             <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-violet-300">편집</p>

@@ -384,7 +384,6 @@ export default function App() {
       return;
     }
     setLoadingJob(true);
-    showNotice("info", "작업을 불러오는 중입니다.");
     fetchJob(selectedJobId)
       .then((data) => {
         setJob(data);
