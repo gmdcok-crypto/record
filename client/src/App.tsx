@@ -333,7 +333,7 @@ export default function App() {
     return selectedFiles.length > 1 ? `${selectedFiles.length}개 파일 업로드` : "업로드";
   }, [uploadProjectReady, selectedFiles.length, uploadPaid, busy]);
 
-  const refreshWorkspace = async (showLoading = false, suppressError = false) => {
+  const refreshWorkspace = useCallback(async (showLoading = false, suppressError = false) => {
     if (showLoading) setLoadingWorkspace(true);
     try {
       const projectList = await fetchProjects(true);
@@ -343,8 +343,8 @@ export default function App() {
         (project.files ?? []).map((file) => projectFileToArchiveItem(file, clientLabel)),
       );
       setArchive(flatArchive);
-      if (projectList.length > 0 && !selectedUploadProjectId) {
-        setSelectedUploadProjectId(projectList[0].project_id);
+      if (projectList.length > 0) {
+        setSelectedUploadProjectId((current) => current || projectList[0].project_id);
       }
     } catch (err) {
       if (!suppressError) {
@@ -353,7 +353,7 @@ export default function App() {
     } finally {
       if (showLoading) setLoadingWorkspace(false);
     }
-  };
+  }, [memberName, showNotice]);
 
   const refreshVisibleWorkspace = useCallback(() => {
     if (document.visibilityState === "visible" && authStatus === "authenticated") {

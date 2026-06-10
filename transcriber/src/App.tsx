@@ -263,28 +263,6 @@ export default function App() {
     try {
       const data = await fetchAssignedProjects();
       setProjects(data);
-      const currentProjectExists = selectedProjectKey
-        ? data.some((project) => projectKey(project) === selectedProjectKey)
-        : false;
-      const currentJobExists = selectedJobId
-        ? data.some((project) => project.files.some((file) => file.job_id === selectedJobId))
-        : false;
-
-      if (data.length === 0) {
-        setSelectedProjectKey("");
-        setSelectedJobId("");
-      } else {
-        if (!currentProjectExists) {
-          const first = data[0];
-          setSelectedProjectKey(projectKey(first));
-          setSelectedJobId(first.files[0]?.job_id ?? "");
-        } else if (!currentJobExists) {
-          const selectedProject =
-            data.find((project) => projectKey(project) === selectedProjectKey) ?? data[0];
-          setSelectedProjectKey(projectKey(selectedProject));
-          setSelectedJobId(selectedProject.files[0]?.job_id ?? "");
-        }
-      }
     } catch (err) {
       if (!suppressError) {
         showNotice("error", err instanceof Error ? err.message : "배정 프로젝트를 불러오지 못했습니다.");
@@ -292,7 +270,35 @@ export default function App() {
     } finally {
       setLoadingProjects(false);
     }
-  }, [selectedJobId, selectedProjectKey, showNotice]);
+  }, [showNotice]);
+
+  useEffect(() => {
+    const currentProjectExists = selectedProjectKey
+      ? projects.some((project) => projectKey(project) === selectedProjectKey)
+      : false;
+    const currentJobExists = selectedJobId
+      ? projects.some((project) => project.files.some((file) => file.job_id === selectedJobId))
+      : false;
+
+    if (projects.length === 0) {
+      if (selectedProjectKey) setSelectedProjectKey("");
+      if (selectedJobId) setSelectedJobId("");
+      return;
+    }
+
+    if (!currentProjectExists) {
+      const first = projects[0];
+      setSelectedProjectKey(projectKey(first));
+      setSelectedJobId(first.files[0]?.job_id ?? "");
+      return;
+    }
+
+    if (!currentJobExists) {
+      const selectedProject = projects.find((project) => projectKey(project) === selectedProjectKey) ?? projects[0];
+      setSelectedProjectKey(projectKey(selectedProject));
+      setSelectedJobId(selectedProject.files[0]?.job_id ?? "");
+    }
+  }, [projects, selectedProjectKey, selectedJobId]);
 
   const loadLicensePreviewUrl = useCallback(async () => fetchTranscriberLicenseObjectUrl(), []);
 
@@ -350,7 +356,9 @@ export default function App() {
 
   useEffect(() => {
     void restoreSession();
-  }, [loadProjects]);
+    // restoreSession is intentionally run once on mount; it schedules the initial project load itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const refreshVisibleProjects = useCallback(() => {
     if (document.visibilityState === "visible" && authStatus === "authenticated") {
