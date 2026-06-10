@@ -158,7 +158,7 @@ function mapClientJobStatus(status: string): string {
     case "first_done":
       return "의뢰인 검토";
     case "client_editing":
-      return "수정 중";
+      return "의뢰인 검토";
     case "review_waiting":
       return "속기사검토";
     case "final_done":
@@ -557,6 +557,7 @@ export default function App() {
   const loadJobById = async (jobId: string, options?: { switchToEdit?: boolean }) => {
     if (!jobId.trim()) return;
     setLoadingJob(true);
+    showNotice("info", "작업을 불러오는 중입니다.");
     try {
       const data = await fetchJob(jobId.trim());
       setJob(data);
@@ -579,7 +580,7 @@ export default function App() {
         );
       } else if (workflowStatus === "assigned" || workflowStatus === "working") {
         setActiveTab("archive");
-        showNotice("info", "속기사가 초벌 작업 중입니다. 초벌 전달 후 편집 화면에서 확인할 수 있습니다.");
+        showNotice("info", "속기사가 작업 중입니다. 의뢰인 검토요청 후 편집 화면에서 확인할 수 있습니다.");
       } else if (workflowStatus === "review_waiting") {
         setActiveTab("archive");
         showNotice("info", "속기사검토중입니다.");

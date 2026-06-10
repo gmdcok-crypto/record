@@ -94,7 +94,7 @@ function mapFileStatusLabel(status: string): string {
     case "first_done":
       return "의뢰인 검토";
     case "client_editing":
-      return "의뢰인 수정 중";
+      return "의뢰인 검토";
     case "review_waiting":
       return "속기사검토";
     case "final_done":
@@ -384,6 +384,7 @@ export default function App() {
       return;
     }
     setLoadingJob(true);
+    showNotice("info", "작업을 불러오는 중입니다.");
     fetchJob(selectedJobId)
       .then((data) => {
         setJob(data);
