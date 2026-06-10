@@ -180,16 +180,6 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
     );
   };
 
-  const restoreFromServer = () => {
-    if (!data) return;
-    const restoredSegments = buildEditableSegments(data.job.transcript_json);
-    const restoredLabels = data.job.transcript_json?.speaker_labels ?? {};
-    setSegments(restoredSegments);
-    setSpeakerLabels(restoredLabels);
-    setExtraSpeakerIds(deriveExtraSpeakerIds(restoredSegments, restoredLabels));
-    showNotice("info", "공유 링크에서 다시 서버본을 불러왔습니다.");
-  };
-
   const onSave = async () => {
     if (!data) return;
     setSaving(true);
@@ -429,14 +419,6 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
               className="rounded-xl bg-cyan-500 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-50"
             >
               {saving ? "저장 중..." : "공유 링크에서 저장"}
-            </button>
-            <button
-              type="button"
-              onClick={restoreFromServer}
-              disabled={saving}
-              className="rounded-xl border border-slate-700 bg-slate-950 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
-            >
-              서버본 다시 불러오기
             </button>
             <button
               type="button"

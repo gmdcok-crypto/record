@@ -430,16 +430,6 @@ export default function App() {
     );
   };
 
-  const restoreFromServerDraft = () => {
-    if (!job) return;
-    const restoredSegments = buildEditableSegments(job.transcript_json);
-    const restoredLabels = job.transcript_json?.speaker_labels ?? {};
-    setSegments(restoredSegments);
-    setSpeakerLabels(restoredLabels);
-    setExtraSpeakerIds(deriveExtraSpeakerIds(restoredSegments, restoredLabels));
-    showNotice("info", "서버에 저장된 최신 문서로 되돌렸습니다.");
-  };
-
   const applySpeakerLabels = (labels: Record<string, string>) => {
     const cleaned: Record<string, string> = {};
     for (const [id, name] of Object.entries(labels)) {
@@ -870,15 +860,7 @@ export default function App() {
                       disabled={busy}
                       className="rounded-xl border border-slate-700 bg-slate-950 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
                     >
-                      {saving ? "저장 중..." : "초벌 임시 저장"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={restoreFromServerDraft}
-                      disabled={busy}
-                      className="rounded-xl border border-slate-700 bg-slate-950 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
-                    >
-                      서버본 다시 불러오기
+                      {saving ? "저장 중..." : "저장"}
                     </button>
                     <button
                       type="button"
