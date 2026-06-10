@@ -228,7 +228,9 @@ export async function uploadVoice(
 }
 
 export async function fetchJob(jobId: string): Promise<JobResponse> {
-  const res = await fetch(`${apiBase()}/api/jobs/${jobId}`);
+  const res = await fetch(`${apiBase()}/api/jobs/${jobId}`, {
+    headers: memberAuthHeaders(),
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(parseErrorDetail(err));

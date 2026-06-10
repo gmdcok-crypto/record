@@ -727,6 +727,7 @@ def get_job(
     job_id: str,
     db: Annotated[Session, Depends(get_db)],
     current: Annotated[Transcriber | None, Depends(get_optional_current_transcriber)] = None,
+    member: Annotated[Member | None, Depends(get_optional_current_member)] = None,
 ) -> dict:
     voice_key = get_voice_object_key(job_id)
     if not voice_key:
