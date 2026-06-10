@@ -4,7 +4,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.admin_models import Job, Member, TranscriptChangeLog, Transcriber
+from app.models.admin_models import AdminUser, Job, Member, TranscriptChangeLog, Transcriber
 from app.services.job_store import get_or_create_client_for_member, mark_transcript_saved
 from app.services.r2 import get_transcript_json, save_transcript_json
 
@@ -119,12 +119,15 @@ def resolve_editor(
     transcriber: Transcriber | None,
     member: Member | None,
     *,
+    admin: AdminUser | None = None,
     shared_editor: bool = False,
 ) -> tuple[str, int | None, str]:
     if transcriber is not None:
         return "transcriber", transcriber.id, transcriber.name
     if member is not None:
         return "client", member.id, member.name
+    if admin is not None:
+        return "admin", admin.id, admin.name
     if shared_editor:
         return "share", None, "공유 사용자"
     return "unknown", None, "알 수 없음"
@@ -137,13 +140,19 @@ def record_transcript_change_log(
     changes: list[dict],
     transcriber: Transcriber | None,
     member: Member | None,
+    admin: AdminUser | None = None,
     save_kind: str,
     shared_editor: bool = False,
 ) -> TranscriptChangeLog | None:
     if not changes:
         return None
 
-    editor_role, editor_id, editor_name = resolve_editor(transcriber, member, shared_editor=shared_editor)
+    editor_role, editor_id, editor_name = resolve_editor(
+        transcriber,
+        member,
+        admin=admin,
+        shared_editor=shared_editor,
+    )
     row = TranscriptChangeLog(
         job_id=job.job_id,
         version=job.transcript_version or 1,
@@ -167,6 +176,7 @@ def persist_job_transcript(
     *,
     transcriber: Transcriber | None = None,
     member: Member | None = None,
+    admin: AdminUser | None = None,
     save_kind: str = "draft",
     previous: dict | None = None,
     shared_editor: bool = False,
@@ -185,6 +195,7 @@ def persist_job_transcript(
             changes=changes,
             transcriber=transcriber,
             member=member,
+            admin=admin,
             save_kind=save_kind,
             shared_editor=shared_editor,
         )

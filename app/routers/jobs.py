@@ -7,12 +7,13 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.dependencies.member_auth import get_current_member, get_optional_current_member
 from app.dependencies.transcriber_auth import get_current_transcriber, get_optional_current_transcriber
-from app.models.admin_models import Job, Member, Transcriber
+from app.models.admin_models import AdminUser, Job, Member, Transcriber
 from app.db import ensure_db_initialized, get_db, get_engine
 from app.services.audio import remux_faststart, should_faststart
 from app.services.admin_events import publish_admin_event, stream_admin_events
@@ -23,6 +24,7 @@ from app.services.job_store import (
     assign_job,
     create_transcriber,
     dashboard_overview,
+    DEFAULT_ADMIN_EMAIL,
     generate_transcriber_code,
     delete_job_if_unassigned,
     delete_transcriber,
@@ -420,6 +422,41 @@ def admin_get_job(
     return serialize_job(db, job, transcript_json=transcript, audio_url=f"/api/jobs/{job_id}/audio")
 
 
+@router.put("/admin/jobs/{job_id}/transcript")
+def admin_save_transcript(
+    job_id: str,
+    body: SaveTranscriptRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    voice_key = get_voice_object_key(job_id)
+    if not voice_key:
+        raise HTTPException(status_code=404, detail="Voice file not found")
+
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
+    save_kind = body.save_kind or "draft"
+
+    try:
+        transcript_key = persist_job_transcript(
+            db,
+            job,
+            job_id,
+            body.transcript_json,
+            admin=admin,
+            save_kind=save_kind,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Save failed: {exc}") from exc
+
+    publish_admin_event("job_updated", {"job_id": job.job_id, "status": job.status})
+    return {"job_id": job.job_id, "status": "saved", "transcript_key": transcript_key}
+
+
 @router.get("/admin/transcribers/next-code")
 def admin_next_transcriber_code(db: Annotated[Session, Depends(get_db)]) -> dict:
     return {"code": generate_transcriber_code(db)}
@@ -705,6 +742,109 @@ def transcriber_deliver_draft(
         "transcript_key": transcript_key,
         "transcript_json": body.transcript_json,
     }
+
+
+@router.post("/admin/jobs/{job_id}/ai-draft")
+def admin_ai_draft(
+    job_id: str,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
+
+    try:
+        previous = get_transcript_json(job_id) or {}
+        transcript_json, transcript_key, voice_key = transcribe_job_voice(job_id)
+    except ValueError as exc:
+        message = str(exc)
+        if "not found" in message.lower():
+            raise HTTPException(status_code=404, detail=message) from exc
+        raise HTTPException(status_code=503, detail=message) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Transcription failed: {exc}") from exc
+
+    mark_transcript_saved(db, job, transcript_key, transcript_json)
+    changes = compute_transcript_changes(previous, transcript_json)
+    if changes:
+        record_transcript_change_log(
+            db,
+            job,
+            changes=changes,
+            transcriber=None,
+            member=None,
+            admin=admin,
+            save_kind="ai_draft",
+        )
+    if job.status == "assigned":
+        job = set_job_status(db, job, "working", "관리자 AI 초벌 생성")
+    publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
+
+    return {
+        "status": "AI_DONE",
+        "job_id": job_id,
+        "voice_key": voice_key,
+        "transcript_key": transcript_key,
+        "workflow_status": job.status,
+        "transcript_json": transcript_json,
+    }
+
+
+@router.post("/admin/jobs/{job_id}/deliver-draft")
+def admin_deliver_draft(
+    job_id: str,
+    body: SaveTranscriptRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status not in TRANSCRIBER_DRAFT_STATUSES | {"review_waiting"}:
+        raise HTTPException(status_code=409, detail="현재 상태에서는 초벌을 전달할 수 없습니다.")
+
+    voice_key = get_voice_object_key(job_id)
+    if not voice_key:
+        raise HTTPException(status_code=404, detail="Voice file not found")
+
+    admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
+
+    try:
+        transcript_key = persist_job_transcript(
+            db,
+            job,
+            job_id,
+            body.transcript_json,
+            admin=admin,
+            save_kind="deliver",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Save failed: {exc}") from exc
+
+    job = set_job_status(db, job, "first_done", "관리자 초벌 전달")
+    publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
+
+    return {
+        "job_id": job_id,
+        "status": job.status,
+        "workflow_status": job.status,
+        "transcript_key": transcript_key,
+        "transcript_json": body.transcript_json,
+    }
+
+
+@router.get("/admin/jobs/{job_id}/transcript/changes")
+def admin_list_job_transcript_changes(
+    job_id: str,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"job_id": job_id, "entries": list_transcript_change_logs(db, job_id)}
 
 
 @router.get("/{job_id}/transcript/changes")

@@ -23,6 +23,7 @@ export type JobResponse = {
   transcript_json: TranscriptJson;
   title?: string;
   status?: string;
+  workflow_status?: string;
   due_at?: string | null;
   client?: {
     id: number | null;
@@ -33,6 +34,32 @@ export type JobResponse = {
     name: string | null;
   };
   final_pdf_ready?: boolean;
+};
+
+export type AiDraftResponse = {
+  status: string;
+  job_id: string;
+  workflow_status?: string;
+  transcript_json: TranscriptJson;
+};
+
+export type TranscriptChangeItem = {
+  type: string;
+  segment_index?: number;
+  speaker_id?: string;
+  speaker?: string;
+  before?: string;
+  after?: string;
+};
+
+export type TranscriptChangeEntry = {
+  version: number;
+  save_kind: string;
+  save_kind_label: string;
+  editor_role: string;
+  editor_name: string;
+  changes: TranscriptChangeItem[];
+  created_at: string | null;
 };
 
 export type AdminOverviewStats = {
@@ -357,15 +384,49 @@ export async function updateInvoiceStatus(invoiceId: number, status: string): Pr
   }
 }
 
-export async function saveTranscript(jobId: string, transcript: TranscriptJson): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/transcript`, {
+export async function saveTranscript(jobId: string, transcript: TranscriptJson, saveKind = "draft"): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/transcript`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ transcript_json: transcript }),
+    body: JSON.stringify({ transcript_json: transcript, save_kind: saveKind }),
   });
   if (!res.ok) {
     throw await parseApiError(res, "저장 실패");
   }
+}
+
+export async function fetchTranscriptChanges(jobId: string): Promise<TranscriptChangeEntry[]> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/transcript/changes`);
+  if (!res.ok) {
+    throw await parseApiError(res, "변경 이력 조회 실패");
+  }
+  const data = (await res.json()) as { entries?: TranscriptChangeEntry[] };
+  return data.entries ?? [];
+}
+
+export async function runAiDraft(jobId: string): Promise<AiDraftResponse> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/ai-draft`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "AI 초벌 작업 실패");
+  }
+  return res.json();
+}
+
+export async function deliverDraftToClient(
+  jobId: string,
+  transcript: TranscriptJson,
+): Promise<{ job_id: string; status: string; workflow_status?: string; transcript_json: TranscriptJson }> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/deliver-draft`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transcript_json: transcript }),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "의뢰인 검토요청 실패");
+  }
+  return res.json();
 }
 
 function parseFilenameFromDisposition(header: string | null, fallback: string): string {
@@ -396,6 +457,39 @@ export async function downloadTranscriptPdf(jobId: string, transcript: Transcrip
   const filename = parseFilenameFromDisposition(
     res.headers.get("Content-Disposition"),
     "transcript.pdf",
+  );
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function finalizeTranscriptPdf(
+  jobId: string,
+  transcript: TranscriptJson,
+): Promise<{ download_url: string; filename: string; final_pdf_key: string }> {
+  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/transcript.pdf/finalize`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transcript_json: transcript }),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "최종 PDF 저장 실패");
+  }
+  return res.json();
+}
+
+export async function downloadFinalTranscriptPdf(jobId: string): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/transcript.pdf/final`);
+  if (!res.ok) {
+    throw await parseApiError(res, "최종 PDF 다운로드 실패");
+  }
+  const blob = await res.blob();
+  const filename = parseFilenameFromDisposition(
+    res.headers.get("Content-Disposition"),
+    "final_transcript.pdf",
   );
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");

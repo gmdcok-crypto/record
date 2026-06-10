@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 
 import ActionNoticeModal, { type ActionNotice } from "./ActionNoticeModal";
-import JobTranscriptViewer from "./JobTranscriptViewer";
+import AdminTranscriptEditor from "./AdminTranscriptEditor";
 import {
   assignProject,
   createTranscriber,
@@ -34,9 +34,8 @@ type MenuKey =
 type JobStatus =
   | "배정 대기"
   | "속기사 작업 중"
-  | "1차 완료"
-  | "의뢰인 수정 중"
-  | "재검수 대기"
+  | "의뢰인 검토"
+  | "속기사검토"
   | "최종 완료";
 
 type PaymentStatus = "미수" | "부분 입금" | "입금 완료";
@@ -209,7 +208,7 @@ function formatCompactDateTime(value: string | null | undefined): string {
       hour: "2-digit",
       minute: "2-digit",
     });
-  } catch {
+      } catch {
     return value;
   }
 }
@@ -221,7 +220,7 @@ function mapProjectStatusLabel(status: string): string {
     case "working":
       return "작업 중";
     case "client_review":
-      return "의뢰인 확인";
+      return "의뢰인 검토";
     case "completed":
       return "완료";
     case "empty":
@@ -264,7 +263,7 @@ function assignableProjectFiles(project: ProjectItem, reassign: boolean): Projec
   return project.files.filter((file) => {
     if (isFinalFileStatus(file.status)) return false;
     if (reassign) return true;
-    return file.status === "배정 대기" || file.status === "재검수 대기";
+    return file.status === "배정 대기" || file.status === "속기사검토";
   });
 }
 
@@ -292,11 +291,11 @@ function mapJobStatus(status: string): JobStatus {
     case "working":
       return "속기사 작업 중";
     case "first_done":
-      return "1차 완료";
+      return "의뢰인 검토";
     case "client_editing":
-      return "의뢰인 수정 중";
+      return "의뢰인 검토";
     case "review_waiting":
-      return "재검수 대기";
+      return "속기사검토";
     case "final_done":
     case "pdf_sent":
       return "최종 완료";
@@ -355,10 +354,10 @@ function activityTitle(job: JobItem): string {
       return `${job.id} 신규 의뢰 접수`;
     case "속기사 작업 중":
       return `${job.id} 속기사 작업 진행`;
-    case "의뢰인 수정 중":
-      return `${job.id} 의뢰인 수정 진행`;
-    case "재검수 대기":
-      return `${job.id} 재검수 대기`;
+    case "의뢰인 검토":
+      return `${job.id} 의뢰인 검토 진행`;
+    case "속기사검토":
+      return `${job.id} 속기사검토 진행`;
     case "최종 완료":
       return `${job.id} 최종본 완료`;
     default:
@@ -378,12 +377,12 @@ function statusTone(status: JobStatus | SettlementStatus | PaymentStatus | Trans
     case "정산 확정":
       return "bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/20";
     case "배정 대기":
-    case "재검수 대기":
+    case "속기사검토":
     case "정산 대기":
     case "미수":
     case "휴무":
       return "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/20";
-    case "의뢰인 수정 중":
+    case "의뢰인 검토":
     case "부분 입금":
       return "bg-violet-500/15 text-violet-300 ring-1 ring-violet-500/20";
     default:
@@ -492,8 +491,8 @@ function App() {
       return null;
     } finally {
       if (!silent) {
-        setLoading(false);
-      }
+      setLoading(false);
+    }
     }
   };
 
@@ -948,7 +947,7 @@ function App() {
                 className="rounded-2xl border border-white/8 bg-slate-950/60 p-4 transition hover:border-cyan-400/30"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
+          <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full bg-rose-500/15 px-2 py-1 text-[11px] font-semibold text-rose-300">
                         긴급
@@ -956,7 +955,7 @@ function App() {
                       <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${statusTone(job.status)}`}>
                         {job.status}
                       </span>
-                    </div>
+          </div>
                     <h3 className="mt-3 text-base font-semibold text-white">{job.title}</h3>
                     <p className="mt-1 text-sm text-slate-300">{job.client}</p>
                   </div>
@@ -1008,7 +1007,7 @@ function App() {
             type="button"
             onClick={() => {
               const firstWaiting = visibleProjects.find(
-                (project) => project.rawStatus === "waiting_assignment" || project.files.some((f) => f.status === "재검수 대기"),
+                (project) => project.rawStatus === "waiting_assignment" || project.files.some((f) => f.status === "속기사검토"),
               );
               if (firstWaiting) openAssignProjectModal(firstWaiting);
             }}
@@ -1027,7 +1026,7 @@ function App() {
       }
     >
       <div className="mb-4 flex flex-wrap gap-3">
-        <input
+            <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="프로젝트명, 의뢰인, 파일명, 작업번호 검색"
@@ -1041,9 +1040,8 @@ function App() {
           <option value="전체">전체 상태</option>
           <option value="배정 대기">배정 대기</option>
           <option value="속기사 작업 중">속기사 작업 중</option>
-          <option value="1차 완료">1차 완료</option>
-          <option value="의뢰인 수정 중">의뢰인 수정 중</option>
-          <option value="재검수 대기">재검수 대기</option>
+          <option value="의뢰인 검토">의뢰인 검토</option>
+          <option value="속기사검토">속기사검토</option>
           <option value="최종 완료">최종 완료</option>
         </select>
       </div>
@@ -1072,13 +1070,13 @@ function App() {
                   <Fragment key={project.id}>
                     <tr className="border-t border-white/5 bg-slate-950/40 text-slate-200">
                       <td className="px-4 py-3">
-                        <button
-                          type="button"
+            <button
+              type="button"
                           onClick={() => toggleProjectExpanded(project.id)}
                           className="text-slate-400 hover:text-white"
-                        >
+            >
                           {expanded ? "▾" : "▸"}
-                        </button>
+            </button>
                       </td>
                       <td className="max-w-[200px] truncate whitespace-nowrap px-4 py-3 font-semibold text-white" title={project.title}>
                         {project.title}
@@ -1098,20 +1096,20 @@ function App() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <div className="flex gap-2">
-                          <button
-                            type="button"
+            <button
+              type="button"
                             onClick={() => openProjectDetailModal(project)}
                             className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/5"
-                          >
+            >
                             상세
-                          </button>
-                          <button
-                            type="button"
+            </button>
+            <button
+              type="button"
                             onClick={() => openAssignProjectModal(project)}
                             className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-medium text-cyan-300 transition hover:bg-cyan-500/20"
-                          >
+            >
                             {projectAssignButtonLabel(project)}
-                          </button>
+            </button>
                         </div>
                       </td>
                     </tr>
@@ -1123,14 +1121,14 @@ function App() {
                               {file.id}
                             </td>
                             <td colSpan={2} className="max-w-[220px] truncate px-4 py-2">
-                              <button
-                                type="button"
+            <button
+              type="button"
                                 onClick={() => void openDetailModal(file.id)}
                                 className="max-w-full truncate text-left text-cyan-300 transition hover:text-cyan-200"
                                 title={file.filename}
                               >
                                 {file.filename}
-                              </button>
+            </button>
                             </td>
                             <td className="px-4 py-2">{file.assignee}</td>
                             <td className="px-4 py-2 text-slate-400">{file.dueAt}</td>
@@ -1157,7 +1155,7 @@ function App() {
             </tbody>
           </table>
         )}
-      </div>
+          </div>
     </SectionCard>
   );
 
@@ -1165,18 +1163,18 @@ function App() {
     <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
       <SectionCard title="배정 대기 프로젝트">
         <div className="space-y-3">
-          {projects.filter((project) => project.rawStatus === "waiting_assignment" || project.files.some((f) => f.status === "재검수 대기")).length === 0 ? (
+          {projects.filter((project) => project.rawStatus === "waiting_assignment" || project.files.some((f) => f.status === "속기사검토")).length === 0 ? (
             <EmptyState message="배정이 필요한 프로젝트가 없습니다." />
           ) : (
             projects
-              .filter((project) => project.rawStatus === "waiting_assignment" || project.files.some((f) => f.status === "재검수 대기"))
+              .filter((project) => project.rawStatus === "waiting_assignment" || project.files.some((f) => f.status === "속기사검토"))
               .map((project) => (
             <div key={project.id} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold text-white">{project.title}</p>
                   <p className="mt-1 text-sm text-slate-300">{project.client} · {project.fileCount}개 파일</p>
-                </div>
+        </div>
                 <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${projectStatusTone(project.rawStatus)}`}>
                   {project.statusLabel}
                 </span>
@@ -1368,8 +1366,8 @@ function App() {
                   <div>
                     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${authStatusTone(person.authStatus)}`}>
                       {mapAuthStatusLabel(person.authStatus)}
-                    </span>
-                  </div>
+                </span>
+              </div>
                   <div>
                     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(person.status)}`}>
                       {person.status}
@@ -1496,8 +1494,8 @@ function App() {
     <SectionCard
       title="매출 관리"
       action={
-        <button
-          type="button"
+                  <button
+                    type="button"
           onClick={() => setActiveMenu("reports")}
           className="rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950"
         >
@@ -1509,14 +1507,14 @@ function App() {
         {sales.length === 0 ? (
           <div className="xl:col-span-3">
             <EmptyState message="매출 데이터가 없습니다." />
-          </div>
+              </div>
         ) : (
           sales.map((item) => (
           <div key={`${item.month}-${item.client}`} className="rounded-3xl border border-white/10 bg-slate-950/60 p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-lg font-semibold text-white">{item.client}</p>
-              </div>
+            </div>
               <span className="rounded-full bg-cyan-500/15 px-2.5 py-1 text-xs font-semibold text-cyan-300">
                 마진 {item.margin}
               </span>
@@ -1559,7 +1557,7 @@ function App() {
         <StatCard label="작업 중" value={`${dashboardStats.working}건`} change="실시간" />
         <StatCard label="월 매출 합계" value={formatCurrency(dashboardStats.totalSales)} change="DB 연동" />
         <StatCard label="월 정산 합계" value={formatCurrency(dashboardStats.totalSettlements)} change="DB 연동" />
-      </div>
+              </div>
     </SectionCard>
   );
 
@@ -1696,7 +1694,7 @@ function App() {
             {loading ? (
               <section className="rounded-[28px] border border-white/10 bg-slate-950/60 px-5 py-10 text-center text-slate-400 backdrop-blur-xl">
                 관리자 데이터를 불러오는 중입니다.
-              </section>
+          </section>
             ) : null}
 
             {content}
@@ -1709,14 +1707,14 @@ function App() {
           <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] border border-white/10 bg-slate-950 shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-cyan-300">녹취 편집 보기</p>
+                <p className="text-sm font-medium text-cyan-300">녹취 편집</p>
                 <h3 className="mt-1 truncate text-2xl font-semibold text-white">
                   {detailJob?.transcript_json?.filename || detailJob?.title || detailJobId}
                 </h3>
                 <p className="mt-2 text-sm text-slate-400">
                   {detailJob?.client?.name || "-"}
                   {detailJob?.transcriber?.name ? ` · 담당 ${detailJob.transcriber.name}` : ""}
-                  {detailJob?.status ? ` · ${mapJobStatus(detailJob.status)}` : ""}
+                  {detailJob?.status ? ` · ${mapJobStatus(detailJob.workflow_status ?? detailJob.status)}` : ""}
                 </p>
               </div>
               <button
@@ -1732,23 +1730,16 @@ function App() {
               {detailLoading ? (
                 <div className="text-sm text-slate-400">녹취록을 불러오는 중입니다...</div>
               ) : detailJob ? (
-                <div className="space-y-5">
-                  <div className="grid gap-3 rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-sm sm:grid-cols-3">
-                    <div>
-                      <p className="text-xs text-slate-500">작업번호</p>
-                      <p className="mt-1 font-mono text-xs text-white">{detailJob.job_id}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">마감</p>
-                      <p className="mt-1 text-white">{formatDateTime(detailJob.due_at)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500">최종 PDF</p>
-                      <p className="mt-1 text-white">{detailJob.final_pdf_ready ? "준비됨" : "미준비"}</p>
-                    </div>
-                  </div>
-                  <JobTranscriptViewer job={detailJob} />
-                </div>
+                <AdminTranscriptEditor
+                  job={detailJob}
+                  formatDateTime={formatDateTime}
+                  mapJobStatus={mapJobStatus}
+                  onJobChange={setDetailJob}
+                  onReloadOverview={async () => {
+                    await loadOverview({ silent: true });
+                  }}
+                  onNotice={(kind, message, title) => setActionNotice({ kind, message, title })}
+                />
               ) : null}
             </div>
           </div>
@@ -2030,7 +2021,7 @@ function App() {
                       </div>
                       {assignableFiles.length === 0 ? (
                         <p className="mt-3 text-sm text-slate-400">
-                          {reassign ? "재배정 가능한 파일이 없습니다." : "배정 대기 또는 재검수 대기 파일이 없습니다."}
+                          {reassign ? "재배정 가능한 파일이 없습니다." : "배정 대기 또는 속기사검토 파일이 없습니다."}
                         </p>
                       ) : (
                         <div className="mt-3 max-h-56 space-y-2 overflow-y-auto">
