@@ -273,6 +273,7 @@ export default function App() {
   const [editContext, setEditContext] = useState<{ projectTitle: string; filename: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
+  const [loadingWorkspace, setLoadingWorkspace] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [creatingShare, setCreatingShare] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<JobArchiveItem | null>(null);
@@ -332,7 +333,8 @@ export default function App() {
     return selectedFiles.length > 1 ? `${selectedFiles.length}개 파일 업로드` : "업로드";
   }, [uploadProjectReady, selectedFiles.length, uploadPaid, busy]);
 
-  const refreshWorkspace = async () => {
+  const refreshWorkspace = async (showLoading = false) => {
+    if (showLoading) setLoadingWorkspace(true);
     try {
       const projectList = await fetchProjects(true);
       setProjects(projectList);
@@ -346,6 +348,8 @@ export default function App() {
       }
     } catch (err) {
       showNotice("error", err instanceof Error ? err.message : "보관함을 불러오지 못했습니다.");
+    } finally {
+      if (showLoading) setLoadingWorkspace(false);
     }
   };
 
@@ -376,31 +380,39 @@ export default function App() {
     const member = await fetchMemberMe();
     if (member) {
       setMemberName(member.name);
-      bootChannelTalk({
-        memberId: member.id,
-        name: member.name,
-        email: member.email,
-        mobileNumber: member.phone,
-      });
+      setLoadingWorkspace(true);
       setAuthStatus("authenticated");
+      window.setTimeout(() => {
+        bootChannelTalk({
+          memberId: member.id,
+          name: member.name,
+          email: member.email,
+          mobileNumber: member.phone,
+        });
+        void refreshWorkspace(true);
+      }, 0);
       return member;
     }
-    bootChannelTalk();
+    shutdownChannelTalk();
     setMemberName(null);
+    setLoadingWorkspace(false);
     setAuthStatus("unauthenticated");
     return null;
   };
 
   const handleLoginSuccess = (member: MemberProfile) => {
     setMemberName(member.name);
-    bootChannelTalk({
-      memberId: member.id,
-      name: member.name,
-      email: member.email,
-      mobileNumber: member.phone,
-    });
+    setLoadingWorkspace(true);
     setAuthStatus("authenticated");
-    void refreshWorkspace();
+    window.setTimeout(() => {
+      bootChannelTalk({
+        memberId: member.id,
+        name: member.name,
+        email: member.email,
+        mobileNumber: member.phone,
+      });
+      void refreshWorkspace(true);
+    }, 0);
   };
 
   const handleLogout = () => {
@@ -428,9 +440,7 @@ export default function App() {
   useEffect(() => {
     checkHealth()
       .catch(() => undefined);
-    void restoreSession().then((member) => {
-      if (member) void refreshWorkspace();
-    });
+    void restoreSession();
   }, []);
 
   useEffect(() => {
@@ -933,7 +943,9 @@ export default function App() {
                 </button>
               </div>
               {uploadProjectMode === "existing" ? (
-                projects.length ? (
+                loadingWorkspace && !projects.length ? (
+                  <p className="mt-3 text-sm text-slate-400">프로젝트를 불러오는 중입니다.</p>
+                ) : projects.length ? (
                   <select
                     value={selectedUploadProjectId}
                     onChange={(event) => setSelectedUploadProjectId(event.target.value)}
@@ -1105,7 +1117,11 @@ export default function App() {
             </div>
 
             <div className="space-y-3">
-              {projects.length ? (
+              {loadingWorkspace && !projects.length ? (
+                <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-5 py-10 text-center text-sm text-slate-400">
+                  보관함을 불러오는 중입니다.
+                </div>
+              ) : projects.length ? (
                 projects.map((project) => {
                   const expanded = isProjectExpanded(project.project_id);
                   const files = project.files ?? [];

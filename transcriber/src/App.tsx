@@ -227,6 +227,7 @@ export default function App() {
   const [addSegmentAfterIndex, setAddSegmentAfterIndex] = useState<number | null>(null);
   const [changeHistoryRefresh, setChangeHistoryRefresh] = useState(0);
   const [loadingProjects, setLoadingProjects] = useState(false);
+  const [loadingProjectsAfterLogin, setLoadingProjectsAfterLogin] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
   const [saving, setSaving] = useState(false);
   const [aiRunning, setAiRunning] = useState(false);
@@ -308,11 +309,16 @@ export default function App() {
     if (transcriber) {
       setTranscriberName(transcriber.name);
       setTranscriberProfile(transcriber);
+      setLoadingProjectsAfterLogin(true);
       setAuthStatus("authenticated");
+      window.setTimeout(() => {
+        void loadProjects().finally(() => setLoadingProjectsAfterLogin(false));
+      }, 0);
       return transcriber;
     }
     setTranscriberName(null);
     setTranscriberProfile(null);
+    setLoadingProjectsAfterLogin(false);
     setAuthStatus("unauthenticated");
     return null;
   };
@@ -320,8 +326,11 @@ export default function App() {
   const handleLoginSuccess = (transcriber: TranscriberAuthProfile) => {
     setTranscriberName(transcriber.name);
     setTranscriberProfile(transcriber);
+    setLoadingProjectsAfterLogin(true);
     setAuthStatus("authenticated");
-    void loadProjects();
+    window.setTimeout(() => {
+      void loadProjects().finally(() => setLoadingProjectsAfterLogin(false));
+    }, 0);
   };
 
   const handleLogout = () => {
@@ -338,9 +347,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    void restoreSession().then((transcriber) => {
-      if (transcriber) void loadProjects();
-    });
+    void restoreSession();
   }, [loadProjects]);
 
   const refreshVisibleProjects = useCallback(() => {
@@ -622,7 +629,9 @@ export default function App() {
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-300">프로젝트</p>
             <h2 className="mt-2 text-lg font-semibold text-white">배정 사건</h2>
             <div className="mt-4 space-y-2">
-              {loadingProjects ? (
+              {loadingProjectsAfterLogin && !projects.length ? (
+                <p className="text-sm text-slate-400">프로젝트를 불러오는 중입니다.</p>
+              ) : loadingProjects ? (
                 <p className="text-sm text-slate-400">불러오는 중…</p>
               ) : projects.length === 0 ? (
                 <p className="text-sm text-slate-400">배정된 프로젝트가 없습니다.</p>
