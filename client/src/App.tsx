@@ -590,7 +590,6 @@ export default function App() {
       }
       const context = resolveEditContext(data.job_id, projects);
       setEditContext(context);
-      await refreshWorkspace();
     } catch (err) {
       showNotice("error", err instanceof Error ? err.message : "작업을 불러오지 못했습니다.");
     } finally {
