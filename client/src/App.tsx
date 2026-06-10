@@ -602,6 +602,9 @@ export default function App() {
     if (projectTitle) {
       setEditContext({ projectTitle, filename: item.filename });
     }
+    if (isEditableArchiveStatus(item.status)) {
+      setActiveTab("edit");
+    }
     void loadJobById(item.job_id, { switchToEdit: isEditableArchiveStatus(item.status) });
   };
 
