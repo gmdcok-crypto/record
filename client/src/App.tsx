@@ -580,6 +580,9 @@ export default function App() {
       } else if (workflowStatus === "assigned" || workflowStatus === "working") {
         setActiveTab("archive");
         showNotice("info", "속기사가 초벌 작업 중입니다. 초벌 전달 후 편집 화면에서 확인할 수 있습니다.");
+      } else if (workflowStatus === "review_waiting") {
+        setActiveTab("archive");
+        showNotice("info", "속기사검토중입니다.");
       } else {
         showNotice("info", "작업을 불러왔습니다.");
       }
