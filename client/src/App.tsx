@@ -448,11 +448,6 @@ export default function App() {
       console.error("client SSE connection error");
     });
 
-    const intervalId = window.setInterval(() => {
-      if (!alive || document.visibilityState !== "visible") return;
-      void refreshWorkspace();
-    }, 10000);
-
     window.addEventListener("focus", refreshVisibleWorkspace);
     document.addEventListener("visibilitychange", refreshVisibleWorkspace);
 
@@ -460,7 +455,6 @@ export default function App() {
       alive = false;
       eventSource.removeEventListener("admin_update", handleAdminUpdate);
       eventSource.close();
-      window.clearInterval(intervalId);
       window.removeEventListener("focus", refreshVisibleWorkspace);
       document.removeEventListener("visibilitychange", refreshVisibleWorkspace);
     };
@@ -683,7 +677,12 @@ export default function App() {
     try {
       await saveTranscript(job.job_id, currentTranscript, "draft");
       await updateJobStatus(job.job_id, "client_editing", "의뢰인 수정본 저장");
-      setJob({ ...job, transcript_json: currentTranscript, status: "client_editing" });
+      setJob({
+        ...job,
+        transcript_json: currentTranscript,
+        status: "client_editing",
+        workflow_status: "client_editing",
+      });
       setChangeHistoryRefresh((value) => value + 1);
       showNotice("success", "의뢰인 수정본이 DB와 R2에 저장되었습니다.", "임시 저장 완료");
       await refreshWorkspace();
@@ -700,7 +699,12 @@ export default function App() {
     try {
       await saveTranscript(job.job_id, currentTranscript, "review_request");
       await updateJobStatus(job.job_id, "review_waiting", "의뢰인 수정 후 속기사 재검수 요청");
-      setJob({ ...job, transcript_json: currentTranscript, status: "review_waiting" });
+      setJob({
+        ...job,
+        transcript_json: currentTranscript,
+        status: "review_waiting",
+        workflow_status: "review_waiting",
+      });
       setChangeHistoryRefresh((value) => value + 1);
       showNotice("success", "재검수 요청이 DB에 반영되었습니다.");
       await refreshWorkspace();

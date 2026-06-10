@@ -364,11 +364,6 @@ export default function App() {
       console.error("transcriber SSE connection error");
     });
 
-    const intervalId = window.setInterval(() => {
-      if (!alive || document.visibilityState !== "visible") return;
-      void loadProjects();
-    }, 10000);
-
     window.addEventListener("focus", refreshVisibleProjects);
     document.addEventListener("visibilitychange", refreshVisibleProjects);
 
@@ -376,7 +371,6 @@ export default function App() {
       alive = false;
       eventSource.removeEventListener("admin_update", handleAdminUpdate);
       eventSource.close();
-      window.clearInterval(intervalId);
       window.removeEventListener("focus", refreshVisibleProjects);
       document.removeEventListener("visibilitychange", refreshVisibleProjects);
     };
