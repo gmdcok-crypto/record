@@ -274,6 +274,7 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
+  const [submittingReview, setSubmittingReview] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [creatingShare, setCreatingShare] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<JobArchiveItem | null>(null);
@@ -704,6 +705,7 @@ export default function App() {
 
   const onSubmitForReview = async () => {
     if (!job) return;
+    setSubmittingReview(true);
     setSaving(true);
     try {
       await saveTranscript(job.job_id, currentTranscript, "review_request");
@@ -721,6 +723,7 @@ export default function App() {
       showNotice("error", err instanceof Error ? err.message : "검수 요청 실패");
     } finally {
       setSaving(false);
+      setSubmittingReview(false);
     }
   };
 
@@ -1230,6 +1233,13 @@ export default function App() {
               <div className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl bg-slate-950/75 px-6 backdrop-blur-sm">
                 <div className="rounded-2xl border border-slate-800 bg-slate-900/95 px-6 py-5 text-center shadow-2xl shadow-black/30">
                   <p className="text-sm font-semibold text-white">작업을 불러오는 중입니다.</p>
+                </div>
+              </div>
+            ) : null}
+            {submittingReview ? (
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl bg-slate-950/75 px-6 backdrop-blur-sm">
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/95 px-6 py-5 text-center shadow-2xl shadow-black/30">
+                  <p className="text-sm font-semibold text-white">속기사에게 전달중입니다.</p>
                 </div>
               </div>
             ) : null}

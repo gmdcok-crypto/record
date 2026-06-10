@@ -230,6 +230,7 @@ export default function App() {
   const [loadingProjectsAfterLogin, setLoadingProjectsAfterLogin] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sendingToClient, setSendingToClient] = useState(false);
   const [aiRunning, setAiRunning] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
@@ -538,6 +539,7 @@ export default function App() {
       showNotice("error", "전달할 초벌 내용이 없습니다. AI 초벌작업을 실행하거나 직접 작성해 주세요.");
       return;
     }
+    setSendingToClient(true);
     setSaving(true);
     try {
       const result = await deliverDraftToClient(job.job_id, currentTranscript);
@@ -554,6 +556,7 @@ export default function App() {
       showNotice("error", err instanceof Error ? err.message : "전달 실패");
     } finally {
       setSaving(false);
+      setSendingToClient(false);
     }
   };
 
@@ -717,7 +720,14 @@ export default function App() {
                 파일을 불러오는 중입니다...
               </section>
             ) : job ? (
-              <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
+              <section className="relative rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
+                {sendingToClient ? (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl bg-slate-950/75 px-6 backdrop-blur-sm">
+                    <div className="rounded-2xl border border-slate-800 bg-slate-900/95 px-6 py-5 text-center shadow-2xl shadow-black/30">
+                      <p className="text-sm font-semibold text-white">의뢰인에게 전달중입니다.</p>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-violet-300">편집</p>
