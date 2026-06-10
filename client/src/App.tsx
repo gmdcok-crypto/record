@@ -156,11 +156,11 @@ function mapClientJobStatus(status: string): string {
     case "working":
       return "작업 중";
     case "first_done":
-      return "검토요망";
+      return "의뢰인 검토";
     case "client_editing":
       return "수정 중";
     case "review_waiting":
-      return "재검수 요청";
+      return "속기사검토";
     case "final_done":
     case "pdf_sent":
       return "완료";
@@ -204,7 +204,7 @@ function mapProjectStatus(status: string): string {
     case "working":
       return "작업 중";
     case "client_review":
-      return "검토요망";
+      return "의뢰인 검토";
     case "completed":
       return "완료";
     case "empty":
@@ -574,7 +574,7 @@ export default function App() {
         showNotice(
           "info",
           workflowStatus === "first_done"
-            ? "검토요망 문서를 불러왔습니다. 내용을 검토하고 수정하세요."
+            ? "의뢰인 검토 문서를 불러왔습니다. 내용을 검토하고 수정하세요."
             : "편집 문서를 불러왔습니다.",
         );
       } else if (workflowStatus === "assigned" || workflowStatus === "working") {
@@ -701,7 +701,7 @@ export default function App() {
     setSaving(true);
     try {
       await saveTranscript(job.job_id, currentTranscript, "review_request");
-      await updateJobStatus(job.job_id, "review_waiting", "의뢰인 수정 후 속기사 재검수 요청");
+      await updateJobStatus(job.job_id, "review_waiting", "의뢰인 수정 후 속기사검토 요청");
       setJob({
         ...job,
         transcript_json: currentTranscript,
@@ -709,7 +709,7 @@ export default function App() {
         workflow_status: "review_waiting",
       });
       setChangeHistoryRefresh((value) => value + 1);
-      showNotice("success", "재검수 요청이 DB에 반영되었습니다.");
+      showNotice("success", "속기사검토 요청이 DB에 반영되었습니다.");
       await refreshWorkspace();
     } catch (err) {
       showNotice("error", err instanceof Error ? err.message : "검수 요청 실패");
@@ -1086,7 +1086,7 @@ export default function App() {
               <p className="text-sm font-semibold text-emerald-300">보관함</p>
               <h2 className="mt-1 text-xl font-bold text-white">프로젝트 보관함</h2>
               <p className="mt-1 text-sm text-slate-400">
-                프로젝트(사건)별로 묶여 있습니다. 검토요망 파일을 누르면 편집 탭으로 이동합니다.
+                프로젝트(사건)별로 묶여 있습니다. 의뢰인 검토 파일을 누르면 편집 탭으로 이동합니다.
               </p>
             </div>
 
@@ -1240,10 +1240,10 @@ export default function App() {
                   <>
                     속기사가 초벌 작업 중입니다.
                     <br />
-                    초벌 전달 후 검토요망 상태가 되면 이 화면에서 검토·수정할 수 있습니다.
+                    속기사가 의뢰인 검토요청을 보내면 이 화면에서 검토·수정할 수 있습니다.
                   </>
                 ) : (
-                  <>현재 상태에서는 편집할 수 없습니다. 보관함에서 검토요망 파일을 선택해 주세요.</>
+                  <>현재 상태에서는 편집할 수 없습니다. 보관함에서 의뢰인 검토 파일을 선택해 주세요.</>
                 )}
               </div>
             ) : job ? (
@@ -1377,7 +1377,7 @@ export default function App() {
                     disabled={busy}
                     className="rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
                   >
-                    속기사 재검수 요청
+                    속기사검토 요청
                   </button>
                   <button
                     type="button"
@@ -1399,7 +1399,7 @@ export default function App() {
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-6 py-14 text-center text-sm text-slate-400">
-                보관함에서 검토요망 항목을 선택하거나 작업번호로 문서를 불러오세요.
+                보관함에서 의뢰인 검토 항목을 선택하거나 작업번호로 문서를 불러오세요.
               </div>
             )}
           </section>

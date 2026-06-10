@@ -77,7 +77,7 @@ function mapProjectStatus(status: string): string {
     case "working":
       return "작업 중";
     case "client_review":
-      return "의뢰인 검토중";
+      return "의뢰인 검토";
     case "completed":
       return "완료";
     default:
@@ -92,11 +92,11 @@ function mapFileStatusLabel(status: string): string {
     case "working":
       return "초벌 작성 중";
     case "first_done":
-      return "의뢰인 검토중";
+      return "의뢰인 검토";
     case "client_editing":
       return "의뢰인 수정 중";
     case "review_waiting":
-      return "재검수";
+      return "속기사검토";
     case "final_done":
     case "pdf_sent":
       return "PDF 완료";
@@ -491,7 +491,7 @@ export default function App() {
       setSpeakerLabels(aiLabels);
       setExtraSpeakerIds(deriveExtraSpeakerIds(aiSegments, aiLabels));
       setChangeHistoryRefresh((value) => value + 1);
-      showNotice("success", "AI 초벌 작업이 완료되었습니다. 검토 후 ‘의뢰인에게 초벌 전달’을 눌러 주세요.");
+      showNotice("success", "AI 초벌 작업이 완료되었습니다. 검토 후 ‘의뢰인 검토요청’을 눌러 주세요.");
     } catch (err) {
       showNotice("error", err instanceof Error ? err.message : "AI 초벌 작업에 실패했습니다.");
     } finally {
@@ -532,7 +532,7 @@ export default function App() {
       });
       await loadProjects();
       setChangeHistoryRefresh((value) => value + 1);
-      showNotice("success", "의뢰인에게 초벌을 전달했습니다. 의뢰인 화면에서 검토요망 상태로 확인할 수 있습니다.");
+      showNotice("success", "의뢰인 검토요청을 보냈습니다. 의뢰인 화면에서 의뢰인 검토 상태로 확인할 수 있습니다.");
     } catch (err) {
       showNotice("error", err instanceof Error ? err.message : "전달 실패");
     } finally {
@@ -868,7 +868,7 @@ export default function App() {
                       disabled={busy}
                       className="rounded-xl bg-cyan-600 py-3 text-sm font-semibold text-white transition hover:bg-cyan-500 disabled:opacity-50"
                     >
-                      의뢰인에게 초벌 전달
+                      의뢰인 검토요청
                     </button>
                     <button
                       type="button"

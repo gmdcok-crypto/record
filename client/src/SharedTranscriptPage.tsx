@@ -262,9 +262,9 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
           : prev,
       );
       setChangeHistoryRefresh((value) => value + 1);
-      showNotice("success", "속기사 재검수 요청이 접수되었습니다.");
+      showNotice("success", "속기사검토 요청이 접수되었습니다.");
     } catch (err) {
-      showNotice("error", err instanceof Error ? err.message : "재검수 요청 실패", "재검수 요청 실패");
+      showNotice("error", err instanceof Error ? err.message : "속기사검토 요청 실패", "속기사검토 요청 실패");
     } finally {
       setSaving(false);
     }
@@ -426,7 +426,7 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
               disabled={saving}
               className="rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
             >
-              속기사 재검수 요청
+              속기사검토 요청
             </button>
             {data.share.allow_pdf_download && data.share.final_pdf_url ? (
               <a
