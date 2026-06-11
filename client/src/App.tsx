@@ -253,6 +253,7 @@ function fileIdentity(file: File): string {
 export default function App() {
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const inquiryPanelRef = useRef<HTMLDivElement | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
   const [step, setStep] = useState<Step>("idle");
@@ -768,6 +769,10 @@ export default function App() {
     }
   };
 
+  const scrollToInquiryPanel = () => {
+    inquiryPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const updateSegment = (index: number, patch: Partial<TranscriptSegment>) => {
     setSegments((prev) =>
       prev.map((segment, currentIndex) => (currentIndex === index ? { ...segment, ...patch } : segment)),
@@ -1263,9 +1268,18 @@ export default function App() {
                 </p>
               </div>
               {job && (
-                <div className="rounded-2xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-400">
-                  <div>작업 ID</div>
-                  <div className="mt-1 font-mono text-[11px] text-slate-100">{job.job_id}</div>
+                <div className="flex flex-col items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={scrollToInquiryPanel}
+                    className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+                  >
+                    문의하기
+                  </button>
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-400">
+                    <div>작업 ID</div>
+                    <div className="mt-1 font-mono text-[11px] text-slate-100">{job.job_id}</div>
+                  </div>
                 </div>
               )}
             </div>
@@ -1398,13 +1412,15 @@ export default function App() {
                   loadEntries={fetchTranscriptChanges}
                 />
 
-                <ManagerInquiryPanel
-                  jobId={job.job_id}
-                  loadMessages={fetchClientJobInquiries}
-                  sendMessage={createClientJobInquiry}
-                  onError={(message) => showNotice("error", message)}
-                  refreshKey={inquiryRefresh}
-                />
+                <div ref={inquiryPanelRef}>
+                  <ManagerInquiryPanel
+                    jobId={job.job_id}
+                    loadMessages={fetchClientJobInquiries}
+                    sendMessage={createClientJobInquiry}
+                    onError={(message) => showNotice("error", message)}
+                    refreshKey={inquiryRefresh}
+                  />
+                </div>
 
                 {channelTalkEnabled() ? (
                   <div className="flex flex-col gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
