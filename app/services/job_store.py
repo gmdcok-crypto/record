@@ -1,7 +1,7 @@
 import re
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.admin_models import (
