@@ -34,6 +34,7 @@ export type JobResponse = {
     name: string | null;
   };
   final_pdf_ready?: boolean;
+  has_inquiry?: boolean;
 };
 
 export type AiDraftResponse = {
@@ -99,6 +100,7 @@ export type AdminOverviewJob = {
   settlement_amount: number;
   payment_status: string;
   settlement_status: string;
+  has_inquiry?: boolean;
 };
 
 export type AdminOverviewTranscriber = {
@@ -150,6 +152,7 @@ export type AdminOverviewProjectFile = {
   assignee: string | null;
   assignee_code?: string | null;
   pdf_ready: boolean;
+  has_inquiry?: boolean;
 };
 
 export type AdminOverviewProject = {

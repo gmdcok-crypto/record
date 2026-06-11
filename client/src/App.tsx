@@ -239,6 +239,7 @@ function projectFileToArchiveItem(file: ProjectFile, clientName: string): JobArc
     updated_at: file.uploaded_at,
     client_name: clientName,
     pdf_ready: file.pdf_ready,
+    has_inquiry: file.has_inquiry,
   };
 }
 
@@ -1189,11 +1190,18 @@ export default function App() {
                                     <p className="truncate text-sm font-semibold text-slate-100">{file.filename}</p>
                                     <p className="mt-1 truncate text-xs text-slate-500">{file.title}</p>
                                   </button>
-                                  <span
-                                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${archiveStatusStyle(fileStatus)}`}
-                                  >
-                                    {mapClientJobStatus(fileStatus)}
-                                  </span>
+                                  <div className="flex shrink-0 items-center gap-2">
+                                    {file.has_inquiry ? (
+                                      <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-200">
+                                        문의
+                                      </span>
+                                    ) : null}
+                                    <span
+                                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${archiveStatusStyle(fileStatus)}`}
+                                    >
+                                      {mapClientJobStatus(fileStatus)}
+                                    </span>
+                                  </div>
                                 </div>
                                 <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
                                   <span className="font-mono">{file.job_id}</span>

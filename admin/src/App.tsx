@@ -77,6 +77,7 @@ type ProjectFileItem = {
   dueAt: string;
   salesAmount: number;
   paymentStatus: PaymentStatus;
+  has_inquiry?: boolean;
 };
 
 type ProjectItem = {
@@ -531,17 +532,12 @@ function App() {
       console.error("admin SSE connection error");
     });
 
-    const intervalId = window.setInterval(() => {
-      if (!alive || document.visibilityState !== "visible") return;
-      void loadOverview({ silent: true });
-    }, 10000);
     window.addEventListener("focus", refreshVisibleData);
     document.addEventListener("visibilitychange", refreshVisibleData);
 
     return () => {
       alive = false;
       eventSource.close();
-      window.clearInterval(intervalId);
       window.removeEventListener("focus", refreshVisibleData);
       document.removeEventListener("visibilitychange", refreshVisibleData);
     };
@@ -608,6 +604,7 @@ function App() {
           dueAt: formatDateTime(file.due_at),
           salesAmount: job?.salesAmount ?? 0,
           paymentStatus: job?.paymentStatus ?? "미수",
+          has_inquiry: file.has_inquiry ?? false,
         };
       }),
     }));
@@ -1133,9 +1130,16 @@ function App() {
                             <td className="px-4 py-2">{file.assignee}</td>
                             <td className="px-4 py-2 text-slate-400">{file.dueAt}</td>
                             <td className="px-4 py-2">
-                              <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(file.status)}`}>
-                                {file.status}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                {file.has_inquiry ? (
+                                  <span className="inline-flex rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-xs font-semibold text-cyan-200">
+                                    문의
+                                  </span>
+                                ) : null}
+                                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(file.status)}`}>
+                                  {file.status}
+                                </span>
+                              </div>
                             </td>
                             <td className="px-4 py-2">
                               <button

@@ -58,6 +58,7 @@ export type JobResponse = {
   };
   final_pdf_ready?: boolean;
   final_pdf_filename?: string | null;
+  has_inquiry?: boolean;
 };
 
 export type JobArchiveItem = {
@@ -70,6 +71,7 @@ export type JobArchiveItem = {
   client_name: string;
   pdf_ready: boolean;
   final_pdf_filename?: string | null;
+  has_inquiry?: boolean;
 };
 
 export type HealthResponse = {
@@ -146,6 +148,7 @@ export type ProjectFile = {
   due_at: string | null;
   assignee: string | null;
   pdf_ready: boolean;
+  has_inquiry?: boolean;
 };
 
 export type ProjectSummary = {

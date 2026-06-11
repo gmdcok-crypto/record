@@ -46,6 +46,7 @@ export type JobResponse = {
   };
   final_pdf_ready?: boolean;
   final_pdf_filename?: string | null;
+  has_inquiry?: boolean;
 };
 
 export type AssignedWork = {
@@ -56,6 +57,7 @@ export type AssignedWork = {
   due_at: string | null;
   status: string;
   priority: string;
+  has_inquiry?: boolean;
 };
 
 export type TranscriberProjectFile = {
@@ -68,6 +70,7 @@ export type TranscriberProjectFile = {
   due_at: string | null;
   assignee: string | null;
   pdf_ready: boolean;
+  has_inquiry?: boolean;
 };
 
 export type TranscriberProject = {

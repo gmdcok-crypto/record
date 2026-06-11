@@ -9,6 +9,7 @@ from app.models.admin_models import (
     Client,
     Invoice,
     Job,
+    JobInquiryMessage,
     JobAssignment,
     JobStatusLog,
     Member,
@@ -311,6 +312,11 @@ def mark_final_pdf_saved(db: Session, job: Job, pdf_key: str, filename: str) -> 
 def serialize_job(db: Session, job: Job, *, transcript_json: dict, audio_url: str) -> dict:
     visible_transcriber = _visible_transcriber_for_job(db, job)
     visible_status = _display_status_for_job(db, job)
+    has_inquiry = db.scalar(
+        select(func.count())
+        .select_from(JobInquiryMessage)
+        .where(JobInquiryMessage.job_id == job.job_id)
+    ) or 0
     return {
         "job_id": job.job_id,
         "voice_key": job.r2_voice_key,
@@ -333,6 +339,7 @@ def serialize_job(db: Session, job: Job, *, transcript_json: dict, audio_url: st
         },
         "final_pdf_ready": job.status == "pdf_sent",
         "final_pdf_filename": job.final_pdf_filename,
+        "has_inquiry": bool(has_inquiry),
     }
 
 
@@ -344,6 +351,11 @@ def list_client_jobs(db: Session, member: Member | None = None) -> list[dict]:
     rows = db.scalars(stmt).all()
     result: list[dict] = []
     for job in rows:
+        has_inquiry = db.scalar(
+            select(func.count())
+            .select_from(JobInquiryMessage)
+            .where(JobInquiryMessage.job_id == job.job_id)
+        ) or 0
         result.append(
             {
                 "job_id": job.job_id,
@@ -355,6 +367,7 @@ def list_client_jobs(db: Session, member: Member | None = None) -> list[dict]:
                 "client_name": job.client.name if job.client else DEFAULT_CLIENT_NAME,
                 "pdf_ready": job.status == "pdf_sent",
                 "final_pdf_filename": job.final_pdf_filename,
+                "has_inquiry": bool(has_inquiry),
             }
         )
     return result
@@ -369,19 +382,28 @@ def list_transcriber_jobs(db: Session, transcriber_code: str = DEFAULT_TRANSCRIB
         .where(Job.assigned_transcriber_id == transcriber.id, Job.status.in_(ACTIVE_JOB_STATUSES))
         .order_by(Job.updated_at.desc())
     ).all()
-    return [
-        {
-            "job_id": job.job_id,
-            "client": job.client.name if job.client else DEFAULT_CLIENT_NAME,
-            "title": job.title,
-            "filename": job.original_filename,
-            "due_at": job.due_at.isoformat() if job.due_at else None,
-            "status": _display_status_for_job(db, job),
-            "priority": job.priority,
-        }
-        for job in rows
-        if _has_manual_assignment(db, job.job_id)
-    ]
+    result: list[dict] = []
+    for job in rows:
+        if not _has_manual_assignment(db, job.job_id):
+            continue
+        has_inquiry = db.scalar(
+            select(func.count())
+            .select_from(JobInquiryMessage)
+            .where(JobInquiryMessage.job_id == job.job_id)
+        ) or 0
+        result.append(
+            {
+                "job_id": job.job_id,
+                "client": job.client.name if job.client else DEFAULT_CLIENT_NAME,
+                "title": job.title,
+                "filename": job.original_filename,
+                "due_at": job.due_at.isoformat() if job.due_at else None,
+                "status": _display_status_for_job(db, job),
+                "priority": job.priority,
+                "has_inquiry": bool(has_inquiry),
+            }
+        )
+    return result
 
 
 def generate_transcriber_code(db: Session) -> str:
@@ -633,6 +655,14 @@ def dashboard_overview(db: Session) -> dict:
                 "settlement_amount": float(job.settlement_amount or 0),
                 "payment_status": job.payment_status,
                 "settlement_status": job.settlement_status,
+                "has_inquiry": bool(
+                    db.scalar(
+                        select(func.count())
+                        .select_from(JobInquiryMessage)
+                        .where(JobInquiryMessage.job_id == job.job_id)
+                    )
+                    or 0
+                ),
             }
             for job in jobs
         ],
