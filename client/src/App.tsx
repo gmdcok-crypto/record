@@ -4,10 +4,12 @@ import {
   checkHealth,
   createAdminEventsSource,
   createProject,
+  createClientJobInquiry,
   createTranscriptShare,
   downloadTranscriptPdf,
   downloadFinalTranscriptPdf,
   fetchJob,
+  fetchClientJobInquiries,
   fetchMemberMe,
   fetchProjects,
   fetchTranscriptChanges,
@@ -29,6 +31,7 @@ import {
 import ActionNoticeModal, { type ActionNotice, type ActionNoticeKind } from "./ActionNoticeModal";
 import MemberLogin from "./MemberLogin";
 import AddSegmentModal, { type AddSegmentDraft } from "./AddSegmentModal";
+import ManagerInquiryPanel from "./ManagerInquiryPanel";
 import SpeakerSettingsModal from "./SpeakerSettingsModal";
 import TranscriptChangeHistory from "./TranscriptChangeHistory";
 import {
@@ -263,6 +266,7 @@ export default function App() {
   const [extraSpeakerIds, setExtraSpeakerIds] = useState<string[]>([]);
   const [addSegmentAfterIndex, setAddSegmentAfterIndex] = useState<number | null>(null);
   const [changeHistoryRefresh, setChangeHistoryRefresh] = useState(0);
+  const [inquiryRefresh, setInquiryRefresh] = useState(0);
   const [jobIdInput, setJobIdInput] = useState("");
   const [archive, setArchive] = useState<JobArchiveItem[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -453,6 +457,7 @@ export default function App() {
     const eventSource = createAdminEventsSource();
     const handleAdminUpdate = () => {
       if (!alive) return;
+      setInquiryRefresh((value) => value + 1);
       void refreshWorkspace(false, true);
     };
 
@@ -1391,6 +1396,14 @@ export default function App() {
                   jobId={job.job_id}
                   refreshKey={changeHistoryRefresh}
                   loadEntries={fetchTranscriptChanges}
+                />
+
+                <ManagerInquiryPanel
+                  jobId={job.job_id}
+                  loadMessages={fetchClientJobInquiries}
+                  sendMessage={createClientJobInquiry}
+                  onError={(message) => showNotice("error", message)}
+                  refreshKey={inquiryRefresh}
                 />
 
                 <div className="grid gap-3 sm:grid-cols-5">

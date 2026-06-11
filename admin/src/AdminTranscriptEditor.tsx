@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import AddSegmentModal, { type AddSegmentDraft } from "./AddSegmentModal";
+import JobInquiryPanel from "./JobInquiryPanel";
 import SegmentPlaybackText from "./SegmentPlaybackText";
 import SpeakerSettingsModal from "./SpeakerSettingsModal";
 import TranscriptChangeHistory from "./TranscriptChangeHistory";
 import {
+  createAdminJobInquiry,
   deliverDraftToClient,
   downloadFinalTranscriptPdf,
+  fetchAdminJobInquiries,
   fetchTranscriptChanges,
   finalizeTranscriptPdf,
   resolveUrl,
@@ -164,6 +167,7 @@ export default function AdminTranscriptEditor({
   const [extraSpeakerIds, setExtraSpeakerIds] = useState<string[]>([]);
   const [addSegmentAfterIndex, setAddSegmentAfterIndex] = useState<number | null>(null);
   const [changeHistoryRefresh, setChangeHistoryRefresh] = useState(0);
+  const [inquiryRefresh, setInquiryRefresh] = useState(0);
   const [saving, setSaving] = useState(false);
   const [aiRunning, setAiRunning] = useState(false);
   const [sendingToClient, setSendingToClient] = useState(false);
@@ -276,6 +280,7 @@ export default function AdminTranscriptEditor({
       };
       onJobChange(nextJob);
       setChangeHistoryRefresh((value) => value + 1);
+      setInquiryRefresh((value) => value + 1);
       await onReloadOverview?.();
       onNotice("success", "AI 초벌 작업이 완료되었습니다. 검토 후 ‘의뢰인 검토요청’을 눌러 주세요.");
     } catch (err) {
@@ -318,6 +323,7 @@ export default function AdminTranscriptEditor({
       });
       await onReloadOverview?.();
       setChangeHistoryRefresh((value) => value + 1);
+      setInquiryRefresh((value) => value + 1);
       onNotice("success", "의뢰인 검토요청을 보냈습니다. 의뢰인 화면에서 의뢰인 검토 상태로 확인할 수 있습니다.");
     } catch (err) {
       onNotice("error", err instanceof Error ? err.message : "전달 실패");
@@ -524,6 +530,29 @@ export default function AdminTranscriptEditor({
             refreshKey={changeHistoryRefresh}
             loadEntries={fetchTranscriptChanges}
           />
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <JobInquiryPanel
+              title="의뢰인 - 관리자 대화"
+              accent="cyan"
+              jobId={job.job_id}
+              threadType="client_admin"
+              loadMessages={fetchAdminJobInquiries}
+              sendMessage={createAdminJobInquiry}
+              onError={(message) => onNotice("error", message)}
+              refreshKey={inquiryRefresh}
+            />
+            <JobInquiryPanel
+              title="속기사 - 관리자 대화"
+              accent="violet"
+              jobId={job.job_id}
+              threadType="transcriber_admin"
+              loadMessages={fetchAdminJobInquiries}
+              sendMessage={createAdminJobInquiry}
+              onError={(message) => onNotice("error", message)}
+              refreshKey={inquiryRefresh}
+            />
+          </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <button

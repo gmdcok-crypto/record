@@ -62,6 +62,16 @@ export type TranscriptChangeEntry = {
   created_at: string | null;
 };
 
+export type JobInquiryMessage = {
+  id: number;
+  job_id: string;
+  thread_type: string;
+  sender_role: string;
+  sender_name: string;
+  message: string;
+  created_at: string | null;
+};
+
 export type AdminOverviewStats = {
   total_jobs: number;
   waiting_assignment: number;
@@ -427,6 +437,32 @@ export async function deliverDraftToClient(
     throw await parseApiError(res, "의뢰인 검토요청 실패");
   }
   return res.json();
+}
+
+export async function fetchAdminJobInquiries(jobId: string, threadType: "client_admin" | "transcriber_admin"): Promise<JobInquiryMessage[]> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/inquiries/${threadType}`);
+  if (!res.ok) {
+    throw await parseApiError(res, "문의 내역 조회 실패");
+  }
+  const data = (await res.json()) as { messages?: JobInquiryMessage[] };
+  return data.messages ?? [];
+}
+
+export async function createAdminJobInquiry(
+  jobId: string,
+  threadType: "client_admin" | "transcriber_admin",
+  message: string,
+): Promise<JobInquiryMessage> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/inquiries/${threadType}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "문의 전송 실패");
+  }
+  const data = (await res.json()) as { message: JobInquiryMessage };
+  return data.message;
 }
 
 function parseFilenameFromDisposition(header: string | null, fallback: string): string {

@@ -3,11 +3,13 @@ import {
   bootstrapTranscriberTokenFromUrl,
   clearTranscriberSession,
   createAdminEventsSource,
+  createTranscriberJobInquiry,
   downloadFinalTranscriptPdf,
   fetchAssignedProjects,
   fetchJob,
   fetchTranscriberMe,
   fetchTranscriberLicenseObjectUrl,
+  fetchTranscriberJobInquiries,
   fetchTranscriptChanges,
   finalizeTranscriptPdf,
   resolveUrl,
@@ -29,6 +31,7 @@ import TranscriberLogin from "./TranscriberLogin";
 import TranscriberProfileSettingsModal from "./TranscriberProfileSettingsModal";
 import TranscriberSignup from "./TranscriberSignup";
 import AddSegmentModal, { type AddSegmentDraft } from "./AddSegmentModal";
+import ManagerInquiryPanel from "./ManagerInquiryPanel";
 import SpeakerSettingsModal from "./SpeakerSettingsModal";
 import TranscriptChangeHistory from "./TranscriptChangeHistory";
 import {
@@ -226,6 +229,7 @@ export default function App() {
   const [extraSpeakerIds, setExtraSpeakerIds] = useState<string[]>([]);
   const [addSegmentAfterIndex, setAddSegmentAfterIndex] = useState<number | null>(null);
   const [changeHistoryRefresh, setChangeHistoryRefresh] = useState(0);
+  const [inquiryRefresh, setInquiryRefresh] = useState(0);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [loadingProjectsAfterLogin, setLoadingProjectsAfterLogin] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
@@ -374,6 +378,7 @@ export default function App() {
     const eventSource = createAdminEventsSource();
     const handleAdminUpdate = () => {
       if (!alive) return;
+      setInquiryRefresh((value) => value + 1);
       void loadProjects(true);
     };
 
@@ -874,6 +879,14 @@ export default function App() {
                     jobId={job.job_id}
                     refreshKey={changeHistoryRefresh}
                     loadEntries={fetchTranscriptChanges}
+                  />
+
+                  <ManagerInquiryPanel
+                    jobId={job.job_id}
+                    loadMessages={fetchTranscriberJobInquiries}
+                    sendMessage={createTranscriberJobInquiry}
+                    onError={(message) => showNotice("error", message)}
+                    refreshKey={inquiryRefresh}
                   />
 
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

@@ -64,6 +64,13 @@ from app.services.transcript_change_log import (
     persist_job_transcript,
     record_transcript_change_log,
 )
+from app.services.job_inquiries import (
+    THREAD_CLIENT_ADMIN,
+    THREAD_TRANSCRIBER_ADMIN,
+    can_access_inquiry_thread,
+    create_job_inquiry_message,
+    list_job_inquiry_messages,
+)
 from app.services.r2 import (
     create_download_url,
     delete_object,
@@ -95,6 +102,10 @@ class ExportTranscriptPdfRequest(BaseModel):
 class JobAssignRequest(BaseModel):
     transcriber_code: str
     note: str | None = None
+
+
+class JobInquiryMessageRequest(BaseModel):
+    message: str
 
 
 class MemberActiveUpdateRequest(BaseModel):
@@ -420,6 +431,109 @@ def admin_get_job(
 
     transcript = get_transcript_json(job_id) or empty_transcript_json(job.original_filename)
     return serialize_job(db, job, transcript_json=transcript, audio_url=f"/api/jobs/{job_id}/audio")
+
+
+@router.get("/{job_id}/inquiries/client")
+def list_client_job_inquiries(
+    job_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    member: Annotated[Member, Depends(get_current_member)],
+) -> dict:
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not can_access_inquiry_thread(db, job, THREAD_CLIENT_ADMIN, member=member):
+        raise HTTPException(status_code=403, detail="이 문의 내역을 볼 수 없습니다.")
+    return {"job_id": job_id, "thread_type": THREAD_CLIENT_ADMIN, "messages": list_job_inquiry_messages(db, job_id, THREAD_CLIENT_ADMIN)}
+
+
+@router.post("/{job_id}/inquiries/client")
+def create_client_job_inquiry(
+    job_id: str,
+    body: JobInquiryMessageRequest,
+    db: Annotated[Session, Depends(get_db)],
+    member: Annotated[Member, Depends(get_current_member)],
+) -> dict:
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not can_access_inquiry_thread(db, job, THREAD_CLIENT_ADMIN, member=member):
+        raise HTTPException(status_code=403, detail="이 문의를 작성할 수 없습니다.")
+    try:
+        message = create_job_inquiry_message(db, job, THREAD_CLIENT_ADMIN, body.message, member=member)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    publish_admin_event("job_inquiry_created", {"job_id": job_id, "thread_type": THREAD_CLIENT_ADMIN, "sender_role": "client"})
+    return {"message": message}
+
+
+@router.get("/transcriber/{job_id}/inquiries")
+def list_transcriber_job_inquiries(
+    job_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current: Annotated[Transcriber, Depends(get_current_transcriber)],
+) -> dict:
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not can_access_inquiry_thread(db, job, THREAD_TRANSCRIBER_ADMIN, transcriber=current):
+        raise HTTPException(status_code=403, detail="이 문의 내역을 볼 수 없습니다.")
+    return {"job_id": job_id, "thread_type": THREAD_TRANSCRIBER_ADMIN, "messages": list_job_inquiry_messages(db, job_id, THREAD_TRANSCRIBER_ADMIN)}
+
+
+@router.post("/transcriber/{job_id}/inquiries")
+def create_transcriber_job_inquiry(
+    job_id: str,
+    body: JobInquiryMessageRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current: Annotated[Transcriber, Depends(get_current_transcriber)],
+) -> dict:
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not can_access_inquiry_thread(db, job, THREAD_TRANSCRIBER_ADMIN, transcriber=current):
+        raise HTTPException(status_code=403, detail="이 문의를 작성할 수 없습니다.")
+    try:
+        message = create_job_inquiry_message(db, job, THREAD_TRANSCRIBER_ADMIN, body.message, transcriber=current)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    publish_admin_event("job_inquiry_created", {"job_id": job_id, "thread_type": THREAD_TRANSCRIBER_ADMIN, "sender_role": "transcriber"})
+    return {"message": message}
+
+
+@router.get("/admin/jobs/{job_id}/inquiries/{thread_type}")
+def list_admin_job_inquiries(
+    job_id: str,
+    thread_type: str,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    if thread_type not in {THREAD_CLIENT_ADMIN, THREAD_TRANSCRIBER_ADMIN}:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"job_id": job_id, "thread_type": thread_type, "messages": list_job_inquiry_messages(db, job_id, thread_type)}
+
+
+@router.post("/admin/jobs/{job_id}/inquiries/{thread_type}")
+def create_admin_job_inquiry(
+    job_id: str,
+    thread_type: str,
+    body: JobInquiryMessageRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    if thread_type not in {THREAD_CLIENT_ADMIN, THREAD_TRANSCRIBER_ADMIN}:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
+    try:
+        message = create_job_inquiry_message(db, job, thread_type, body.message, admin=admin)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    publish_admin_event("job_inquiry_created", {"job_id": job_id, "thread_type": thread_type, "sender_role": "admin"})
+    return {"message": message}
 
 
 @router.put("/admin/jobs/{job_id}/transcript")

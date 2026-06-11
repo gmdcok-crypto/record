@@ -195,6 +195,21 @@ class TranscriptShare(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
 
 
+class JobInquiryMessage(Base):
+    __tablename__ = "job_inquiry_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    job_id: Mapped[str] = mapped_column(ForeignKey("jobs.job_id"), nullable=False, index=True)
+    thread_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    sender_role: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    sender_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    sender_member_id: Mapped[int | None] = mapped_column(ForeignKey("members.id"), nullable=True, index=True)
+    sender_transcriber_id: Mapped[int | None] = mapped_column(ForeignKey("transcribers.id"), nullable=True, index=True)
+    sender_admin_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id"), nullable=True, index=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+
 class Invoice(Base):
     __tablename__ = "invoices"
 

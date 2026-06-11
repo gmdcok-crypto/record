@@ -399,6 +399,16 @@ export type TranscriptChangeEntry = {
   created_at: string | null;
 };
 
+export type JobInquiryMessage = {
+  id: number;
+  job_id: string;
+  thread_type: string;
+  sender_role: string;
+  sender_name: string;
+  message: string;
+  created_at: string | null;
+};
+
 export async function saveTranscript(
   jobId: string,
   transcript: TranscriptJson,
@@ -440,6 +450,30 @@ export async function updateJobStatus(jobId: string, status: string, note?: stri
     const err = await res.json().catch(() => ({}));
     throw new Error(parseErrorDetail(err));
   }
+}
+
+export async function fetchTranscriberJobInquiries(jobId: string): Promise<JobInquiryMessage[]> {
+  const res = await fetch(`${apiBase()}/api/jobs/transcriber/${jobId}/inquiries`, {
+    headers: transcriberAuthHeaders(),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data));
+  }
+  return (data.messages ?? []) as JobInquiryMessage[];
+}
+
+export async function createTranscriberJobInquiry(jobId: string, message: string): Promise<JobInquiryMessage> {
+  const res = await fetch(`${apiBase()}/api/jobs/transcriber/${jobId}/inquiries`, {
+    method: "POST",
+    headers: { ...transcriberAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data));
+  }
+  return data.message as JobInquiryMessage;
 }
 
 export async function downloadTranscriptPdf(jobId: string, transcript: TranscriptJson): Promise<void> {
