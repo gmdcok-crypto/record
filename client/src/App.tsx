@@ -1406,6 +1406,21 @@ export default function App() {
                   refreshKey={inquiryRefresh}
                 />
 
+                {channelTalkEnabled() ? (
+                  <div className="flex flex-col gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm leading-6 text-amber-100/90">
+                      작업 수정 관련 내용은 관리자 문의를 이용해 주세요. 로그인, 결제, 일반 상담은 채널톡으로 연결됩니다.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={showChannelTalkMessenger}
+                      className="shrink-0 rounded-xl border border-amber-400/30 bg-slate-950/60 px-4 py-2 text-sm font-semibold text-amber-200 transition hover:bg-slate-900"
+                    >
+                      채널톡 상담
+                    </button>
+                  </div>
+                ) : null}
+
                 <div className="grid gap-3 sm:grid-cols-5">
                   <button
                     type="button"
