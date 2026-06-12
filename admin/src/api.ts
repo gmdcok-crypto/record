@@ -35,6 +35,7 @@ export type JobResponse = {
   };
   final_pdf_ready?: boolean;
   has_inquiry?: boolean;
+  admin_inquiry_badges?: string[];
 };
 
 export type AiDraftResponse = {
@@ -101,6 +102,7 @@ export type AdminOverviewJob = {
   payment_status: string;
   settlement_status: string;
   has_inquiry?: boolean;
+  admin_inquiry_badges?: string[];
 };
 
 export type AdminOverviewTranscriber = {
@@ -153,6 +155,7 @@ export type AdminOverviewProjectFile = {
   assignee_code?: string | null;
   pdf_ready: boolean;
   has_inquiry?: boolean;
+  admin_inquiry_badges?: string[];
 };
 
 export type AdminOverviewProject = {

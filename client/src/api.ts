@@ -59,6 +59,7 @@ export type JobResponse = {
   final_pdf_ready?: boolean;
   final_pdf_filename?: string | null;
   has_inquiry?: boolean;
+  client_inquiry_status?: "reply_pending" | "reply_arrived" | null;
 };
 
 export type JobArchiveItem = {
@@ -72,6 +73,7 @@ export type JobArchiveItem = {
   pdf_ready: boolean;
   final_pdf_filename?: string | null;
   has_inquiry?: boolean;
+  client_inquiry_status?: "reply_pending" | "reply_arrived" | null;
 };
 
 export type HealthResponse = {
@@ -149,6 +151,7 @@ export type ProjectFile = {
   assignee: string | null;
   pdf_ready: boolean;
   has_inquiry?: boolean;
+  client_inquiry_status?: "reply_pending" | "reply_arrived" | null;
 };
 
 export type ProjectSummary = {

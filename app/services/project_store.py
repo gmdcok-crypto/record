@@ -1,10 +1,10 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.admin_models import Client, Job, JobInquiryMessage, Member, Project, Transcriber
+from app.models.admin_models import Client, Job, Member, Project, Transcriber
 from app.services.job_store import (
     DEFAULT_CLIENT_NAME,
     _display_status_for_job,
@@ -12,6 +12,7 @@ from app.services.job_store import (
     assign_job,
     get_or_create_client_for_member,
     infer_title,
+    inquiry_summary_for_job,
 )
 
 FINAL_JOB_STATUSES = frozenset({"final_done", "pdf_sent"})
@@ -113,11 +114,7 @@ def list_project_jobs(db: Session, project_id: str) -> list[Job]:
 def serialize_project_file(db: Session, job: Job) -> dict:
     visible_transcriber = _visible_transcriber_for_job(db, job)
     display_status = _display_status_for_job(db, job)
-    has_inquiry = db.scalar(
-        select(func.count())
-        .select_from(JobInquiryMessage)
-        .where(JobInquiryMessage.job_id == job.job_id)
-    ) or 0
+    inquiry = inquiry_summary_for_job(db, job.job_id)
     return {
         "job_id": job.job_id,
         "title": job.title,
@@ -129,7 +126,10 @@ def serialize_project_file(db: Session, job: Job) -> dict:
         "assignee": visible_transcriber.name if visible_transcriber else None,
         "assignee_code": visible_transcriber.transcriber_code if visible_transcriber else None,
         "pdf_ready": job.status == "pdf_sent",
-        "has_inquiry": bool(has_inquiry),
+        "has_inquiry": inquiry["has_inquiry"],
+        "client_inquiry_status": inquiry["client_inquiry_status"],
+        "transcriber_inquiry_status": inquiry["transcriber_inquiry_status"],
+        "admin_inquiry_badges": inquiry["admin_inquiry_badges"],
     }
 
 

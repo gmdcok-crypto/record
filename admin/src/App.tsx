@@ -78,6 +78,7 @@ type ProjectFileItem = {
   salesAmount: number;
   paymentStatus: PaymentStatus;
   has_inquiry?: boolean;
+  admin_inquiry_badges?: string[];
 };
 
 type ProjectItem = {
@@ -605,6 +606,7 @@ function App() {
           salesAmount: job?.salesAmount ?? 0,
           paymentStatus: job?.paymentStatus ?? "미수",
           has_inquiry: file.has_inquiry ?? false,
+          admin_inquiry_badges: file.admin_inquiry_badges ?? [],
         };
       }),
     }));
@@ -1131,11 +1133,14 @@ function App() {
                             <td className="px-4 py-2 text-slate-400">{file.dueAt}</td>
                             <td className="px-4 py-2">
                               <div className="flex items-center gap-2">
-                                {file.has_inquiry ? (
-                                  <span className="inline-flex rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-xs font-semibold text-cyan-200">
-                                    문의
+                                {file.admin_inquiry_badges?.map((badge) => (
+                                  <span
+                                    key={`${file.id}-${badge}`}
+                                    className="inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-200"
+                                  >
+                                    {badge}
                                   </span>
-                                ) : null}
+                                ))}
                                 <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(file.status)}`}>
                                   {file.status}
                                 </span>

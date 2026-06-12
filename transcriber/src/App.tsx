@@ -116,6 +116,24 @@ function fileWorkflowStatus(file: { status: string; workflow_status?: string }):
   return file.workflow_status ?? file.status;
 }
 
+function renderTranscriberInquiryBadge(status?: "reply_pending" | "reply_arrived" | null) {
+  if (status === "reply_pending") {
+    return (
+      <span className="inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+        답변 필요
+      </span>
+    );
+  }
+  if (status === "reply_arrived") {
+    return (
+      <span className="inline-flex rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
+        답변 도착
+      </span>
+    );
+  }
+  return null;
+}
+
 function fileStatusStyle(status: string): string {
   switch (status) {
     case "final_done":
@@ -709,11 +727,7 @@ export default function App() {
                       <p className="truncate text-sm font-medium text-white">{file.filename}</p>
                       <p className="mt-1 text-[10px] text-slate-500">{formatDateTime(file.due_at)}</p>
                       <div className="mt-2 flex items-center gap-2">
-                        {file.has_inquiry ? (
-                          <span className="inline-flex rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
-                            문의
-                          </span>
-                        ) : null}
+                        {renderTranscriberInquiryBadge(file.transcriber_inquiry_status)}
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${fileStatusStyle(fileWorkflowStatus(file))}`}>
                           {mapFileStatusLabel(fileWorkflowStatus(file))}
                         </span>

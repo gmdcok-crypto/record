@@ -28,6 +28,8 @@ CLIENT_VISIBLE_TRANSCRIPT_STATUSES = frozenset(
     {"first_done", "client_editing", "review_waiting", "final_done", "pdf_sent"}
 )
 TRANSCRIBER_DRAFT_STATUSES = frozenset({"assigned", "working"})
+THREAD_CLIENT_ADMIN = "client_admin"
+THREAD_TRANSCRIBER_ADMIN = "transcriber_admin"
 
 
 def empty_transcript_json(filename: str) -> dict:
@@ -38,6 +40,48 @@ def empty_transcript_json(filename: str) -> dict:
         "segments": [],
         "tokens": [],
         "speaker_labels": {},
+    }
+
+
+def inquiry_summary_for_job(db: Session, job_id: str) -> dict:
+    rows = db.scalars(
+        select(JobInquiryMessage)
+        .where(
+            JobInquiryMessage.job_id == job_id,
+            JobInquiryMessage.thread_type.in_([THREAD_CLIENT_ADMIN, THREAD_TRANSCRIBER_ADMIN]),
+        )
+        .order_by(JobInquiryMessage.id.desc())
+    ).all()
+
+    latest_by_thread: dict[str, JobInquiryMessage] = {}
+    for row in rows:
+        if row.thread_type not in latest_by_thread:
+            latest_by_thread[row.thread_type] = row
+        if len(latest_by_thread) == 2:
+            break
+
+    client_row = latest_by_thread.get(THREAD_CLIENT_ADMIN)
+    transcriber_row = latest_by_thread.get(THREAD_TRANSCRIBER_ADMIN)
+
+    admin_inquiry_badges: list[str] = []
+    if client_row is not None and client_row.sender_role == "client":
+        admin_inquiry_badges.append("의뢰인 답변 필요")
+    if transcriber_row is not None and transcriber_row.sender_role == "transcriber":
+        admin_inquiry_badges.append("속기사 답변 필요")
+
+    return {
+        "has_inquiry": client_row is not None or transcriber_row is not None,
+        "client_inquiry_status": (
+            None
+            if client_row is None
+            else ("reply_arrived" if client_row.sender_role == "admin" else "reply_pending")
+        ),
+        "transcriber_inquiry_status": (
+            None
+            if transcriber_row is None
+            else ("reply_arrived" if transcriber_row.sender_role == "admin" else "reply_pending")
+        ),
+        "admin_inquiry_badges": admin_inquiry_badges,
     }
 
 
@@ -312,11 +356,7 @@ def mark_final_pdf_saved(db: Session, job: Job, pdf_key: str, filename: str) -> 
 def serialize_job(db: Session, job: Job, *, transcript_json: dict, audio_url: str) -> dict:
     visible_transcriber = _visible_transcriber_for_job(db, job)
     visible_status = _display_status_for_job(db, job)
-    has_inquiry = db.scalar(
-        select(func.count())
-        .select_from(JobInquiryMessage)
-        .where(JobInquiryMessage.job_id == job.job_id)
-    ) or 0
+    inquiry = inquiry_summary_for_job(db, job.job_id)
     return {
         "job_id": job.job_id,
         "voice_key": job.r2_voice_key,
@@ -339,7 +379,10 @@ def serialize_job(db: Session, job: Job, *, transcript_json: dict, audio_url: st
         },
         "final_pdf_ready": job.status == "pdf_sent",
         "final_pdf_filename": job.final_pdf_filename,
-        "has_inquiry": bool(has_inquiry),
+        "has_inquiry": inquiry["has_inquiry"],
+        "client_inquiry_status": inquiry["client_inquiry_status"],
+        "transcriber_inquiry_status": inquiry["transcriber_inquiry_status"],
+        "admin_inquiry_badges": inquiry["admin_inquiry_badges"],
     }
 
 
@@ -351,11 +394,7 @@ def list_client_jobs(db: Session, member: Member | None = None) -> list[dict]:
     rows = db.scalars(stmt).all()
     result: list[dict] = []
     for job in rows:
-        has_inquiry = db.scalar(
-            select(func.count())
-            .select_from(JobInquiryMessage)
-            .where(JobInquiryMessage.job_id == job.job_id)
-        ) or 0
+        inquiry = inquiry_summary_for_job(db, job.job_id)
         result.append(
             {
                 "job_id": job.job_id,
@@ -367,7 +406,9 @@ def list_client_jobs(db: Session, member: Member | None = None) -> list[dict]:
                 "client_name": job.client.name if job.client else DEFAULT_CLIENT_NAME,
                 "pdf_ready": job.status == "pdf_sent",
                 "final_pdf_filename": job.final_pdf_filename,
-                "has_inquiry": bool(has_inquiry),
+                "has_inquiry": inquiry["has_inquiry"],
+                "client_inquiry_status": inquiry["client_inquiry_status"],
+                "admin_inquiry_badges": inquiry["admin_inquiry_badges"],
             }
         )
     return result
@@ -386,11 +427,7 @@ def list_transcriber_jobs(db: Session, transcriber_code: str = DEFAULT_TRANSCRIB
     for job in rows:
         if not _has_manual_assignment(db, job.job_id):
             continue
-        has_inquiry = db.scalar(
-            select(func.count())
-            .select_from(JobInquiryMessage)
-            .where(JobInquiryMessage.job_id == job.job_id)
-        ) or 0
+        inquiry = inquiry_summary_for_job(db, job.job_id)
         result.append(
             {
                 "job_id": job.job_id,
@@ -400,7 +437,9 @@ def list_transcriber_jobs(db: Session, transcriber_code: str = DEFAULT_TRANSCRIB
                 "due_at": job.due_at.isoformat() if job.due_at else None,
                 "status": _display_status_for_job(db, job),
                 "priority": job.priority,
-                "has_inquiry": bool(has_inquiry),
+                "has_inquiry": inquiry["has_inquiry"],
+                "transcriber_inquiry_status": inquiry["transcriber_inquiry_status"],
+                "admin_inquiry_badges": inquiry["admin_inquiry_badges"],
             }
         )
     return result
@@ -655,14 +694,8 @@ def dashboard_overview(db: Session) -> dict:
                 "settlement_amount": float(job.settlement_amount or 0),
                 "payment_status": job.payment_status,
                 "settlement_status": job.settlement_status,
-                "has_inquiry": bool(
-                    db.scalar(
-                        select(func.count())
-                        .select_from(JobInquiryMessage)
-                        .where(JobInquiryMessage.job_id == job.job_id)
-                    )
-                    or 0
-                ),
+                "has_inquiry": inquiry_summary_for_job(db, job.job_id)["has_inquiry"],
+                "admin_inquiry_badges": inquiry_summary_for_job(db, job.job_id)["admin_inquiry_badges"],
             }
             for job in jobs
         ],

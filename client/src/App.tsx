@@ -240,7 +240,26 @@ function projectFileToArchiveItem(file: ProjectFile, clientName: string): JobArc
     client_name: clientName,
     pdf_ready: file.pdf_ready,
     has_inquiry: file.has_inquiry,
+    client_inquiry_status: file.client_inquiry_status,
   };
+}
+
+function renderClientInquiryBadge(status?: "reply_pending" | "reply_arrived" | null) {
+  if (status === "reply_pending") {
+    return (
+      <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-200">
+        답변 필요
+      </span>
+    );
+  }
+  if (status === "reply_arrived") {
+    return (
+      <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-200">
+        답변 도착
+      </span>
+    );
+  }
+  return null;
 }
 
 function normalizeUploadFilename(filename: string): string {
@@ -1191,11 +1210,7 @@ export default function App() {
                                     <p className="mt-1 truncate text-xs text-slate-500">{file.title}</p>
                                   </button>
                                   <div className="flex shrink-0 items-center gap-2">
-                                    {file.has_inquiry ? (
-                                      <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-200">
-                                        문의
-                                      </span>
-                                    ) : null}
+                                    {renderClientInquiryBadge(file.client_inquiry_status)}
                                     <span
                                       className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${archiveStatusStyle(fileStatus)}`}
                                     >
