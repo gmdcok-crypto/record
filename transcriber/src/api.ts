@@ -156,19 +156,40 @@ export function clearTranscriberSession(): void {
   localStorage.removeItem(TRANSCRIBER_TOKEN_KEY);
 }
 
+export async function fetchTranscriberFrontendVersion(): Promise<string | null> {
+  try {
+    const res = await fetch(`${apiBase()}/api/transcriber/version`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { version?: string | null };
+    return data.version ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchTranscriberMe(): Promise<TranscriberAuthProfile | null> {
   const token = localStorage.getItem(TRANSCRIBER_TOKEN_KEY);
   if (!token) return null;
 
-  const res = await fetch(`${apiBase()}/api/transcriber/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) {
-    if (res.status === 401) clearTranscriberSession();
+  try {
+    const res = await fetch(`${apiBase()}/api/transcriber/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      if (res.status === 401) clearTranscriberSession();
+      return null;
+    }
+    const data = await res.json();
+    return data.transcriber as TranscriberAuthProfile;
+  } catch {
+    // If the auth probe itself fails, fall back to signed-out state
+    // instead of leaving the PWA stuck on the loading screen.
+    clearTranscriberSession();
     return null;
   }
-  const data = await res.json();
-  return data.transcriber as TranscriberAuthProfile;
 }
 
 export async function updateTranscriberProfile(input: TranscriberProfileUpdateInput): Promise<TranscriberAuthProfile> {

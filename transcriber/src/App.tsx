@@ -6,6 +6,7 @@ import {
   createTranscriberJobInquiry,
   downloadFinalTranscriptPdf,
   fetchAssignedProjects,
+  fetchTranscriberFrontendVersion,
   fetchJob,
   fetchTranscriberMe,
   fetchTranscriberLicenseObjectUrl,
@@ -53,6 +54,7 @@ import {
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 type AuthScreen = "signup" | "login";
 type EditableSegment = TranscriptSegment & { id: string };
+const FRONTEND_VERSION_POLL_MS = 60_000;
 
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return "-";
@@ -230,6 +232,8 @@ function autoResizeTextarea(element: HTMLTextAreaElement) {
 export default function App() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const segmentEndRef = useRef<number | null>(null);
+  const frontendVersionRef = useRef<string | null>(null);
+  const frontendReloadingRef = useRef(false);
   const [playbackMs, setPlaybackMs] = useState(0);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
@@ -381,6 +385,47 @@ export default function App() {
     void restoreSession();
     // restoreSession is intentionally run once on mount; it schedules the initial project load itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkFrontendVersion = async () => {
+      if (frontendReloadingRef.current) return;
+      const nextVersion = await fetchTranscriberFrontendVersion();
+      if (cancelled || !nextVersion) return;
+
+      if (!frontendVersionRef.current) {
+        frontendVersionRef.current = nextVersion;
+        return;
+      }
+
+      if (frontendVersionRef.current !== nextVersion) {
+        frontendReloadingRef.current = true;
+        window.location.reload();
+      }
+    };
+
+    void checkFrontendVersion();
+    const intervalId = window.setInterval(() => {
+      void checkFrontendVersion();
+    }, FRONTEND_VERSION_POLL_MS);
+
+    const handleVisible = () => {
+      if (document.visibilityState === "visible") {
+        void checkFrontendVersion();
+      }
+    };
+
+    window.addEventListener("focus", handleVisible);
+    document.addEventListener("visibilitychange", handleVisible);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleVisible);
+      document.removeEventListener("visibilitychange", handleVisible);
+    };
   }, []);
 
   const refreshVisibleProjects = useCallback(() => {

@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import logging
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -24,6 +25,17 @@ INTRO_DIR = Path(__file__).resolve().parent.parent / "intro"
 logger = logging.getLogger(__name__)
 
 
+class NoCacheHtmlStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        content_type = response.headers.get("content-type", "")
+        if "text/html" in content_type:
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
+
 class EarlyHealthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if request.url.path == "/health":
@@ -44,6 +56,17 @@ def _bootstrap_database() -> None:
             run_startup_migrations(db_engine)
     except Exception:
         logger.exception("Database startup tasks failed")
+
+
+def _frontend_version(directory: Path) -> str | None:
+    index_path = directory / "index.html"
+    if not index_path.is_file():
+        return None
+    try:
+        return hashlib.sha256(index_path.read_bytes()).hexdigest()[:16]
+    except OSError:
+        logger.exception("Failed to compute frontend version for %s", directory)
+        return None
 
 
 @asynccontextmanager
@@ -103,14 +126,19 @@ def transcriber_root_redirect() -> RedirectResponse:
     return RedirectResponse(url="/transcriber/")
 
 
+@app.get("/api/transcriber/version")
+def transcriber_frontend_version() -> dict[str, str | None]:
+    return {"version": _frontend_version(TRANSCRIBER_DIR)}
+
+
 if ADMIN_DIR.is_dir():
-    app.mount("/admin", StaticFiles(directory=ADMIN_DIR, html=True), name="admin")
+    app.mount("/admin", NoCacheHtmlStaticFiles(directory=ADMIN_DIR, html=True), name="admin")
 
 if TRANSCRIBER_DIR.is_dir():
-    app.mount("/transcriber", StaticFiles(directory=TRANSCRIBER_DIR, html=True), name="transcriber")
+    app.mount("/transcriber", NoCacheHtmlStaticFiles(directory=TRANSCRIBER_DIR, html=True), name="transcriber")
 
 if INTRO_DIR.is_dir():
-    app.mount("/intro", StaticFiles(directory=INTRO_DIR, html=True), name="intro")
+    app.mount("/intro", NoCacheHtmlStaticFiles(directory=INTRO_DIR, html=True), name="intro")
 
 if STATIC_DIR.is_dir():
-    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="frontend")
+    app.mount("/", NoCacheHtmlStaticFiles(directory=STATIC_DIR, html=True), name="frontend")

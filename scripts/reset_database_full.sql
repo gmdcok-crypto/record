@@ -5,15 +5,19 @@ DROP TABLE IF EXISTS settlement_items;
 DROP TABLE IF EXISTS settlements;
 DROP TABLE IF EXISTS invoice_payments;
 DROP TABLE IF EXISTS invoices;
+DROP TABLE IF EXISTS job_inquiry_messages;
 DROP TABLE IF EXISTS job_notes;
 DROP TABLE IF EXISTS job_status_logs;
 DROP TABLE IF EXISTS job_assignments;
 DROP TABLE IF EXISTS jobs;
 DROP TABLE IF EXISTS projects;
+DROP TABLE IF EXISTS transcript_shares;
+DROP TABLE IF EXISTS members;
 DROP TABLE IF EXISTS transcribers;
 DROP TABLE IF EXISTS admin_users;
 DROP TABLE IF EXISTS clients;
 DROP TABLE IF EXISTS transcript_history;
+DROP TABLE IF EXISTS transcript_change_logs;
 SET FOREIGN_KEY_CHECKS = 1;
 
 
@@ -53,9 +57,26 @@ CREATE TABLE IF NOT EXISTS admin_users (
   KEY idx_admin_users_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS members (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(150) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  phone VARCHAR(30) NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_members_email (email),
+  KEY idx_members_phone (phone),
+  KEY idx_members_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS transcribers (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   transcriber_code VARCHAR(50) NOT NULL,
+  login_id VARCHAR(8) NULL,
+  password_hash VARCHAR(255) NULL,
+  auth_status VARCHAR(20) NOT NULL DEFAULT 'pending_signup',
   name VARCHAR(100) NOT NULL,
   phone VARCHAR(30) NULL COMMENT '휴대폰 번호',
   email VARCHAR(150) NULL,
@@ -70,12 +91,16 @@ CREATE TABLE IF NOT EXISTS transcribers (
   account_holder VARCHAR(100) NULL COMMENT '예금주',
   account_number VARCHAR(100) NULL COMMENT '계좌번호',
   resident_id_masked VARCHAR(30) NULL COMMENT '주민등록번호',
+  license_r2_key VARCHAR(255) NULL COMMENT '속기사 자격증 R2 key',
+  license_filename VARCHAR(255) NULL COMMENT '속기사 자격증 원본 파일명',
   notes TEXT NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_transcribers_code (transcriber_code),
   UNIQUE KEY uk_transcribers_email (email),
+  UNIQUE KEY uk_transcribers_login_id (login_id),
+  KEY idx_transcribers_auth_status (auth_status),
   KEY idx_transcribers_status (status),
   KEY idx_transcribers_active (is_active),
   KEY idx_transcribers_name (name)
@@ -120,6 +145,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     'client_editing',
     'review_waiting',
     'final_done',
+    'pdf_sent',
     'cancelled'
   ) NOT NULL DEFAULT 'uploaded',
   assigned_transcriber_id BIGINT NULL,
@@ -237,6 +263,78 @@ CREATE TABLE IF NOT EXISTS job_notes (
   KEY idx_job_notes_job_id (job_id),
   KEY idx_job_notes_type (note_type),
   KEY idx_job_notes_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS transcript_change_logs (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  job_id VARCHAR(12) NOT NULL,
+  version INT NOT NULL,
+  editor_role VARCHAR(20) NOT NULL,
+  editor_id INT NULL,
+  editor_name VARCHAR(100) NOT NULL,
+  save_kind VARCHAR(40) NOT NULL DEFAULT 'draft',
+  changes_json JSON NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_job_version (job_id, version),
+  INDEX idx_job_id (job_id),
+  INDEX idx_created_at (created_at),
+  CONSTRAINT fk_transcript_change_logs_job
+    FOREIGN KEY (job_id) REFERENCES jobs(job_id)
+    ON UPDATE CASCADE ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS transcript_shares (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  job_id VARCHAR(12) NOT NULL,
+  token VARCHAR(96) NOT NULL,
+  created_by_member_id BIGINT NULL,
+  expires_at DATETIME NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  allow_audio TINYINT(1) NOT NULL DEFAULT 1,
+  allow_pdf_download TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_transcript_shares_token (token),
+  KEY idx_transcript_shares_job_id (job_id),
+  KEY idx_transcript_shares_member_id (created_by_member_id),
+  KEY idx_transcript_shares_expires_at (expires_at),
+  CONSTRAINT fk_transcript_shares_job
+    FOREIGN KEY (job_id) REFERENCES jobs(job_id)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT fk_transcript_shares_member
+    FOREIGN KEY (created_by_member_id) REFERENCES members(id)
+    ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS job_inquiry_messages (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  job_id VARCHAR(12) NOT NULL,
+  thread_type VARCHAR(30) NOT NULL,
+  sender_role VARCHAR(20) NOT NULL,
+  sender_name VARCHAR(100) NOT NULL,
+  sender_member_id BIGINT NULL,
+  sender_transcriber_id BIGINT NULL,
+  sender_admin_id BIGINT NULL,
+  message TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_job_inquiry_messages_job_id (job_id),
+  KEY idx_job_inquiry_messages_thread_type (thread_type),
+  KEY idx_job_inquiry_messages_sender_role (sender_role),
+  KEY idx_job_inquiry_messages_sender_member_id (sender_member_id),
+  KEY idx_job_inquiry_messages_sender_transcriber_id (sender_transcriber_id),
+  KEY idx_job_inquiry_messages_sender_admin_id (sender_admin_id),
+  KEY idx_job_inquiry_messages_created_at (created_at),
+  CONSTRAINT fk_job_inquiry_messages_job
+    FOREIGN KEY (job_id) REFERENCES jobs(job_id)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT fk_job_inquiry_messages_member
+    FOREIGN KEY (sender_member_id) REFERENCES members(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT fk_job_inquiry_messages_transcriber
+    FOREIGN KEY (sender_transcriber_id) REFERENCES transcribers(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT fk_job_inquiry_messages_admin
+    FOREIGN KEY (sender_admin_id) REFERENCES admin_users(id)
+    ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS invoices (
