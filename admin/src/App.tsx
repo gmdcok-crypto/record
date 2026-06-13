@@ -998,20 +998,6 @@ function App() {
   const renderJobs = () => (
     <SectionCard
       title="의뢰 / 프로젝트 관리"
-      action={
-        <button
-          type="button"
-          onClick={() => {
-            const firstWaiting = visibleProjects.find(
-              (project) => project.rawStatus === "waiting_assignment" || project.files.some((f) => f.status === "속기사검토"),
-            );
-            if (firstWaiting) openAssignProjectModal(firstWaiting);
-          }}
-          className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10"
-        >
-          프로젝트 일괄 배정
-        </button>
-      }
     >
       <div className="mb-4 flex flex-wrap gap-3">
             <input
