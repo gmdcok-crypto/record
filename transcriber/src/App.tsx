@@ -734,6 +734,9 @@ export default function App() {
                     >
                       <p className="truncate text-sm font-semibold text-white">{project.title}</p>
                       <p className="mt-1 truncate text-xs text-slate-400">{project.client.name}</p>
+                      <p className="mt-1 truncate text-[10px] text-slate-500">
+                        배정 {formatDateTime(project.files.find((file) => file.assigned_at)?.assigned_at)}
+                      </p>
                       <div className="mt-2 flex items-center justify-between gap-2">
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${projectStatusStyle(project.status)}`}>
                           {mapProjectStatus(project.status)}
@@ -771,6 +774,7 @@ export default function App() {
                     >
                       <p className="truncate text-sm font-medium text-white">{file.filename}</p>
                       <p className="mt-1 text-[10px] text-slate-500">{formatDateTime(file.due_at)}</p>
+                      <p className="mt-1 text-[10px] text-slate-500">배정 {formatDateTime(file.assigned_at)}</p>
                       <div className="mt-2 flex items-center gap-2">
                         {renderTranscriberInquiryBadge(file.transcriber_inquiry_status)}
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${fileStatusStyle(fileWorkflowStatus(file))}`}>

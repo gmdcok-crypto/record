@@ -113,6 +113,7 @@ def unassign_transcriber_jobs(db: Session, transcriber_id: int) -> None:
     assigned_jobs = db.scalars(select(Job).where(Job.assigned_transcriber_id == transcriber_id)).all()
     for job in assigned_jobs:
         job.assigned_transcriber_id = None
+        job.assigned_at = None
         if job.status in ACTIVE_JOB_STATUSES or job.status == "assigned":
             job.status = "waiting_assignment"
     _sync_transcriber_load(db, transcriber_id)

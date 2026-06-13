@@ -54,6 +54,7 @@ type JobItem = {
   title: string;
   filename: string;
   uploadedAt: string;
+  assignedAt: string;
   dueAt: string;
   priority: "일반" | "긴급";
   status: JobStatus;
@@ -73,6 +74,7 @@ type ProjectFileItem = {
   status: JobStatus;
   assignee: string;
   assigneeCode: string | null;
+  assignedAt: string;
   dueAt: string;
   salesAmount: number;
   paymentStatus: PaymentStatus;
@@ -578,6 +580,7 @@ function App() {
       title: job.title,
       filename: job.filename,
       uploadedAt: job.uploaded_at ? formatDateTime(job.uploaded_at) : "-",
+      assignedAt: job.assigned_at ? formatDateTime(job.assigned_at) : "-",
       dueAt: job.due_at ? formatDateTime(job.due_at) : "-",
       priority: job.priority === "urgent" ? "긴급" : "일반",
       status: mapJobStatus(job.status),
@@ -628,6 +631,7 @@ function App() {
           status: mapJobStatus(file.status),
           assignee: file.assignee || job?.assignee || "-",
           assigneeCode: file.assignee_code ?? null,
+          assignedAt: file.assigned_at ? formatDateTime(file.assigned_at) : job?.assignedAt || "-",
           dueAt: formatDateTime(file.due_at),
           salesAmount: job?.salesAmount ?? 0,
           paymentStatus: job?.paymentStatus ?? "미수",
@@ -1133,6 +1137,7 @@ function App() {
                 <th className="whitespace-nowrap px-3 py-2">파일</th>
                 <th className="whitespace-nowrap px-3 py-2">진행</th>
                 <th className="whitespace-nowrap px-3 py-2">담당</th>
+                <th className="whitespace-nowrap px-3 py-2">배정일시</th>
                 <th className="whitespace-nowrap px-3 py-2">마감</th>
                 <th className="whitespace-nowrap px-3 py-2">상태</th>
                 <th className="whitespace-nowrap px-3 py-2">동작</th>
@@ -1167,6 +1172,9 @@ function App() {
                         {project.completedCount}/{project.fileCount}
                       </td>
                       <td className="max-w-[120px] truncate whitespace-nowrap px-3 py-2">{project.assignee}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-slate-400">
+                        {project.files.find((file) => file.assignedAt !== "-")?.assignedAt ?? "-"}
+                      </td>
                       <td className="whitespace-nowrap px-3 py-2 text-slate-400">{project.dueAt}</td>
                       <td className="whitespace-nowrap px-3 py-2">
                         <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ${projectStatusTone(project.rawStatus)}`}>
@@ -1215,6 +1223,7 @@ function App() {
                             </td>
                             <td className="px-3 py-1.5 text-slate-400">파일 단위</td>
                             <td className="px-3 py-1.5">{file.assignee}</td>
+                            <td className="px-3 py-1.5 text-slate-400">{file.assignedAt}</td>
                             <td className="px-3 py-1.5 text-slate-400">{file.dueAt}</td>
                             <td className="px-3 py-1.5">
                               <div className="flex items-center gap-2">
@@ -1988,6 +1997,7 @@ function App() {
                         <tr className="border-b border-slate-800 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                           <th className="px-3 py-2">파일명</th>
                           <th className="px-3 py-2">담당</th>
+                          <th className="px-3 py-2">배정일시</th>
                           <th className="px-3 py-2">마감</th>
                           <th className="px-3 py-2">상태</th>
                           <th className="px-3 py-2">동작</th>
@@ -2007,6 +2017,7 @@ function App() {
                               </button>
                             </td>
                             <td className="px-3 py-2">{file.assignee}</td>
+                            <td className="px-3 py-2 text-slate-400">{file.assignedAt}</td>
                             <td className="px-3 py-2 text-slate-400">{file.dueAt}</td>
                             <td className="px-3 py-2">
                               <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ${statusTone(file.status)}`}>

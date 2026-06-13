@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     'cancelled'
   ) NOT NULL DEFAULT 'uploaded',
   assigned_transcriber_id BIGINT NULL,
+  assigned_at DATETIME NULL,
   assigned_admin_id BIGINT NULL,
   r2_voice_key VARCHAR(255) NOT NULL,
   r2_transcript_key VARCHAR(255) NULL,
@@ -187,6 +188,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   KEY idx_jobs_client_id (client_id),
   KEY idx_jobs_project_id (project_id),
   KEY idx_jobs_assigned_transcriber_id (assigned_transcriber_id),
+  KEY idx_jobs_assigned_at (assigned_at),
   KEY idx_jobs_priority_status (priority, status),
   KEY idx_jobs_payment_status (payment_status),
   KEY idx_jobs_settlement_status (settlement_status)

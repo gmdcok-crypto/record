@@ -115,6 +115,7 @@ class Job(Base):
     priority: Mapped[str] = mapped_column(String(20), nullable=False, default="normal")
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="uploaded", index=True)
     assigned_transcriber_id: Mapped[int | None] = mapped_column(ForeignKey("transcribers.id"), nullable=True, index=True)
+    assigned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     assigned_admin_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id"), nullable=True)
     r2_voice_key: Mapped[str] = mapped_column(String(255), nullable=False)
     r2_transcript_key: Mapped[str | None] = mapped_column(String(255), nullable=True)

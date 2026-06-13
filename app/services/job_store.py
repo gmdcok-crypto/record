@@ -267,8 +267,10 @@ def assign_job(
     admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
     previous_transcriber_id = job.assigned_transcriber_id
     previous_status = job.status
+    assigned_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
     job.assigned_transcriber_id = transcriber.id
+    job.assigned_at = assigned_at
     if job.status in {"uploaded", "waiting_assignment", "review_waiting"}:
         job.status = "assigned"
 
@@ -280,6 +282,7 @@ def assign_job(
             assigned_by_admin_id=admin.id if admin else None,
             assignment_type="manual",
             reason=note or "관리자 배정",
+            assigned_at=assigned_at,
         )
     )
 
@@ -368,6 +371,7 @@ def serialize_job(db: Session, job: Job, *, transcript_json: dict, audio_url: st
         "workflow_status": job.status,
         "priority": job.priority,
         "uploaded_at": job.uploaded_at.isoformat() if job.uploaded_at else None,
+        "assigned_at": job.assigned_at.isoformat() if job.assigned_at else None,
         "due_at": job.due_at.isoformat() if job.due_at else None,
         "client": {
             "id": job.client.id if job.client else None,
@@ -403,6 +407,7 @@ def list_client_jobs(db: Session, member: Member | None = None) -> list[dict]:
                 "status": _display_status_for_job(db, job),
                 "workflow_status": job.status,
                 "updated_at": job.updated_at.isoformat() if job.updated_at else None,
+                "assigned_at": job.assigned_at.isoformat() if job.assigned_at else None,
                 "client_name": job.client.name if job.client else DEFAULT_CLIENT_NAME,
                 "pdf_ready": job.status == "pdf_sent",
                 "final_pdf_filename": job.final_pdf_filename,
@@ -434,6 +439,7 @@ def list_transcriber_jobs(db: Session, transcriber_code: str = DEFAULT_TRANSCRIB
                 "client": job.client.name if job.client else DEFAULT_CLIENT_NAME,
                 "title": job.title,
                 "filename": job.original_filename,
+                "assigned_at": job.assigned_at.isoformat() if job.assigned_at else None,
                 "due_at": job.due_at.isoformat() if job.due_at else None,
                 "status": _display_status_for_job(db, job),
                 "priority": job.priority,
@@ -592,6 +598,7 @@ def delete_transcriber(db: Session, transcriber: Transcriber) -> None:
     assigned_jobs = db.scalars(select(Job).where(Job.assigned_transcriber_id == transcriber_id)).all()
     for job in assigned_jobs:
         job.assigned_transcriber_id = None
+        job.assigned_at = None
         if job.status in ACTIVE_JOB_STATUSES or job.status == "assigned":
             job.status = "waiting_assignment"
 
@@ -684,6 +691,7 @@ def dashboard_overview(db: Session) -> dict:
                 "title": job.title,
                 "filename": job.original_filename,
                 "uploaded_at": job.uploaded_at.isoformat() if job.uploaded_at else None,
+                "assigned_at": job.assigned_at.isoformat() if job.assigned_at else None,
                 "due_at": job.due_at.isoformat() if job.due_at else None,
                 "priority": job.priority,
                 "status": display_statuses[job.job_id],

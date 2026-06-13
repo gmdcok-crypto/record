@@ -35,6 +35,7 @@ export type JobResponse = {
   workflow_status?: string;
   priority?: string;
   uploaded_at?: string | null;
+  assigned_at?: string | null;
   due_at?: string | null;
   client?: {
     id: number | null;
@@ -55,6 +56,7 @@ export type AssignedWork = {
   client: string;
   title: string;
   filename: string;
+  assigned_at?: string | null;
   due_at: string | null;
   status: string;
   priority: string;
@@ -69,6 +71,7 @@ export type TranscriberProjectFile = {
   status: string;
   workflow_status?: string;
   uploaded_at: string | null;
+  assigned_at?: string | null;
   due_at: string | null;
   assignee: string | null;
   pdf_ready: boolean;

@@ -661,6 +661,7 @@ export default function App() {
   const onUpload = async () => {
     if (!selectedFiles.length) return;
     const filesToUpload = [...selectedFiles];
+    let uploadStarted = false;
 
     const duplicateFile = filesToUpload.find((file) => archivedFilenames.has(normalizeUploadFilename(file.name)));
     if (duplicateFile) {
@@ -693,6 +694,7 @@ export default function App() {
       }
 
       for (let index = 0; index < filesToUpload.length; index += 1) {
+        uploadStarted = true;
         const file = filesToUpload[index];
         setUploadStatus(`"${uploadedProjectTitle}" 업로드 중 ${index + 1}/${filesToUpload.length}: ${file.name}`);
         await performUpload(file, targetProjectId);
@@ -701,8 +703,13 @@ export default function App() {
         `"${uploadedProjectTitle}" 프로젝트에 ${filesToUpload.length}개 파일이 추가되었습니다. 관리자 배정 후 속기사가 녹취록을 작성합니다.`,
       );
       setActiveTab("archive");
-    } catch {
-      // Error state is already handled in performUpload.
+    } catch (err) {
+      if (!uploadStarted) {
+        const failureMessage = err instanceof Error ? err.message : "업로드 준비 중 오류가 발생했습니다.";
+        showNotice("error", failureMessage);
+        setStep("error");
+        setUploadStatus("");
+      }
     }
   };
 

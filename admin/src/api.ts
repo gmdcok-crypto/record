@@ -91,6 +91,7 @@ export type AdminOverviewJob = {
   title: string;
   filename: string;
   uploaded_at: string | null;
+  assigned_at?: string | null;
   due_at: string | null;
   priority: string;
   status: string;
@@ -150,6 +151,7 @@ export type AdminOverviewProjectFile = {
   filename: string;
   status: string;
   uploaded_at: string | null;
+  assigned_at?: string | null;
   due_at: string | null;
   assignee: string | null;
   assignee_code?: string | null;

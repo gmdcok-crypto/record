@@ -487,15 +487,20 @@ export async function fetchMemberMe(): Promise<MemberProfile | null> {
   const token = localStorage.getItem(MEMBER_TOKEN_KEY);
   if (!token) return null;
 
-  const res = await fetch(`${apiBase()}/api/member/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) {
-    if (res.status === 401) clearMemberSession();
+  try {
+    const res = await fetch(`${apiBase()}/api/member/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      if (res.status === 401) clearMemberSession();
+      return null;
+    }
+    const data = await res.json();
+    return data.member as MemberProfile;
+  } catch {
+    clearMemberSession();
     return null;
   }
-  const data = await res.json();
-  return data.member as MemberProfile;
 }
 
 export async function createTranscriptShare(

@@ -122,6 +122,7 @@ def serialize_project_file(db: Session, job: Job) -> dict:
         "status": display_status,
         "workflow_status": job.status,
         "uploaded_at": job.uploaded_at.isoformat() if job.uploaded_at else None,
+        "assigned_at": job.assigned_at.isoformat() if job.assigned_at else None,
         "due_at": job.due_at.isoformat() if job.due_at else None,
         "assignee": visible_transcriber.name if visible_transcriber else None,
         "assignee_code": visible_transcriber.transcriber_code if visible_transcriber else None,
