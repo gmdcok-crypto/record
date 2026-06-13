@@ -22,7 +22,6 @@ import {
 type MenuKey =
   | "dashboard"
   | "jobs"
-  | "assignments"
   | "transcribers"
   | "members"
   | "progress"
@@ -172,7 +171,6 @@ type ActivityItem = {
 const MENU_BASE: Array<Omit<MenuItem, "count">> = [
   { key: "dashboard", label: "대시보드" },
   { key: "jobs", label: "의뢰 / 파일 관리" },
-  { key: "assignments", label: "배정 관리" },
   { key: "transcribers", label: "속기사 관리" },
   { key: "members", label: "회원 관리" },
   { key: "progress", label: "진행 현황" },
@@ -1001,27 +999,18 @@ function App() {
     <SectionCard
       title="의뢰 / 프로젝트 관리"
       action={
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              const firstWaiting = visibleProjects.find(
-                (project) => project.rawStatus === "waiting_assignment" || project.files.some((f) => f.status === "속기사검토"),
-              );
-              if (firstWaiting) openAssignProjectModal(firstWaiting);
-            }}
-            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10"
-          >
-            프로젝트 일괄 배정
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveMenu("assignments")}
-            className="rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
-          >
-            배정 화면 이동
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => {
+            const firstWaiting = visibleProjects.find(
+              (project) => project.rawStatus === "waiting_assignment" || project.files.some((f) => f.status === "속기사검토"),
+            );
+            if (firstWaiting) openAssignProjectModal(firstWaiting);
+          }}
+          className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10"
+        >
+          프로젝트 일괄 배정
+        </button>
       }
     >
       <div className="mb-4 flex flex-wrap gap-3">
@@ -1166,85 +1155,6 @@ function App() {
         )}
           </div>
     </SectionCard>
-  );
-
-  const renderAssignments = () => (
-    <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-      <SectionCard title="배정 대기 프로젝트">
-        <div className="space-y-3">
-          {projects.filter((project) => project.rawStatus === "waiting_assignment" || project.files.some((f) => f.status === "속기사검토")).length === 0 ? (
-            <EmptyState message="배정이 필요한 프로젝트가 없습니다." />
-          ) : (
-            projects
-              .filter((project) => project.rawStatus === "waiting_assignment" || project.files.some((f) => f.status === "속기사검토"))
-              .map((project) => (
-            <div key={project.id} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-base font-semibold text-white">{project.title}</p>
-                  <p className="mt-1 text-sm text-slate-300">{project.client} · {project.fileCount}개 파일</p>
-        </div>
-                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${projectStatusTone(project.rawStatus)}`}>
-                  {project.statusLabel}
-                </span>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => openProjectDetailModal(project)}
-                  className="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-200"
-                >
-                  상세
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openAssignProjectModal(project)}
-                  className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950"
-                >
-                  {projectAssignButtonLabel(project)}
-                </button>
-              </div>
-            </div>
-              ))
-          )}
-        </div>
-      </SectionCard>
-
-      <SectionCard title="속기사 가용 현황">
-        <div className="space-y-3">
-          {transcribers.length === 0 ? (
-            <EmptyState message="등록된 속기사 데이터가 없습니다." />
-          ) : (
-            transcribers.map((person) => (
-            <div key={person.id} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-base font-semibold text-white">{person.name}</p>
-                </div>
-                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusTone(person.status)}`}>
-                  {person.status}
-                </span>
-              </div>
-              <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
-                <div>
-                  <p className="text-slate-500">진행 중</p>
-                  <p className="mt-1 font-medium text-white">{person.activeJobs}건</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">월 용량</p>
-                  <p className="mt-1 font-medium text-white">{person.monthlyCapacity}건</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">품질 점수</p>
-                  <p className="mt-1 font-medium text-white">{person.qualityScore}</p>
-                </div>
-              </div>
-            </div>
-            ))
-          )}
-        </div>
-      </SectionCard>
-    </div>
   );
 
   const toggleMemberActive = async (member: MemberItem) => {
@@ -1618,8 +1528,6 @@ function App() {
         return renderDashboard();
       case "jobs":
         return renderJobs();
-      case "assignments":
-        return renderAssignments();
       case "transcribers":
         return renderTranscribers();
       case "members":
@@ -1679,27 +1587,6 @@ function App() {
           </aside>
 
           <main className="space-y-6">
-            <header className="rounded-[28px] border border-white/10 bg-slate-950/60 px-5 py-5 backdrop-blur-xl">
-              <div className="flex flex-wrap gap-2">
-                <button className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-white/10">
-                  전체 의뢰 {dashboardStats.totalJobs}건
-                </button>
-                <button className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-white/10">
-                  jobs 응답 {jobs.length}건
-                </button>
-                <button className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 transition hover:bg-white/10">
-                  미수 {formatCurrency(dashboardStats.outstanding)}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveMenu("assignments")}
-                  className="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
-                >
-                  새 배정 시작
-                </button>
-              </div>
-            </header>
-
             {loading ? (
               <section className="rounded-[28px] border border-white/10 bg-slate-950/60 px-5 py-10 text-center text-slate-400 backdrop-blur-xl">
                 관리자 데이터를 불러오는 중입니다.
