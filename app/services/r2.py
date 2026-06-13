@@ -1,12 +1,12 @@
 import json
 import re
-import uuid
 from pathlib import Path
 
 import boto3
 from botocore.config import Config
 
 from app.config import settings
+from app.services.id_factory import generate_job_id
 
 CONTENT_TYPE_TO_EXT = {
     "audio/wav": ".wav",
@@ -111,7 +111,7 @@ def create_voice_upload_url(filename: str, content_type: str) -> dict:
     if not settings.r2_configured:
         raise ValueError("R2 is not configured")
 
-    job_id = str(uuid.uuid4())
+    job_id = generate_job_id()
     safe_name = ensure_filename_with_extension(filename, content_type)
     object_key = build_voice_object_key(job_id, safe_name)
 
@@ -139,7 +139,7 @@ def upload_voice_bytes(data: bytes, filename: str, content_type: str) -> dict:
     if not settings.r2_configured:
         raise ValueError("R2 is not configured")
 
-    job_id = str(uuid.uuid4())
+    job_id = generate_job_id()
     safe_name = ensure_filename_with_extension(filename, content_type)
     object_key = build_voice_object_key(job_id, safe_name)
 

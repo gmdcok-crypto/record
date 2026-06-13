@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS transcript_change_logs (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  job_id VARCHAR(36) NOT NULL,
+  job_id VARCHAR(12) NOT NULL,
   version INT NOT NULL,
   editor_role VARCHAR(20) NOT NULL,
   editor_id INT NULL,

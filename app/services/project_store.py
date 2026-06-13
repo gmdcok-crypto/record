@@ -1,10 +1,10 @@
-import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.admin_models import Client, Job, Member, Project, Transcriber
+from app.services.id_factory import generate_project_id
 from app.services.job_store import (
     DEFAULT_CLIENT_NAME,
     _display_status_for_job,
@@ -52,7 +52,7 @@ def create_project(
     priority: str = "normal",
 ) -> Project:
     project = Project(
-        project_id=str(uuid.uuid4()),
+        project_id=generate_project_id(),
         client_id=client.id,
         title=title.strip() or "새 녹취 프로젝트",
         due_at=due_at or _project_due_default(),

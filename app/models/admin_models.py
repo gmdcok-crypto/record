@@ -84,7 +84,7 @@ class Transcriber(Base):
 class Project(Base):
     __tablename__ = "projects"
 
-    project_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(12), primary_key=True)
     client_id: Mapped[int] = mapped_column(ForeignKey("clients.id"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
@@ -100,7 +100,7 @@ class Project(Base):
 class Job(Base):
     __tablename__ = "jobs"
 
-    job_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    job_id: Mapped[str] = mapped_column(String(12), primary_key=True)
     project_id: Mapped[str | None] = mapped_column(ForeignKey("projects.project_id"), nullable=True, index=True)
     client_id: Mapped[int | None] = mapped_column(ForeignKey("clients.id"), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)

@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS transcript_history (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  job_id VARCHAR(36) NOT NULL,
-  revision_id VARCHAR(36) NOT NULL,
+  job_id VARCHAR(12) NOT NULL,
+  revision_id VARCHAR(20) NOT NULL,
   version INT NOT NULL,
   editor VARCHAR(100) NULL,
   change_summary TEXT NULL,

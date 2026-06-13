@@ -1,7 +1,7 @@
 -- Bluecom AI Record admin schema draft
 -- Target: MySQL 8.x / Railway MySQL
 -- Notes:
--- 1) Keep jobs.job_id as VARCHAR(36) to stay compatible with the current R2-based app flow.
+-- 1) jobs.job_id and projects.project_id use short IDs to keep ops-facing references compact.
 -- 2) This draft focuses on admin operations: client/job management, assignment, progress tracking,
 --    sales, settlement, and reporting data.
 
@@ -69,8 +69,25 @@ CREATE TABLE IF NOT EXISTS transcribers (
   KEY idx_transcribers_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS projects (
+  project_id VARCHAR(12) NOT NULL PRIMARY KEY,
+  client_id BIGINT NOT NULL,
+  title VARCHAR(200) NOT NULL,
+  due_at DATETIME NULL,
+  memo TEXT NULL,
+  priority VARCHAR(20) NOT NULL DEFAULT 'normal',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_projects_client
+    FOREIGN KEY (client_id) REFERENCES clients(id)
+    ON UPDATE CASCADE ON DELETE RESTRICT,
+  KEY idx_projects_client (client_id),
+  KEY idx_projects_due (due_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS jobs (
-  job_id VARCHAR(36) PRIMARY KEY,
+  job_id VARCHAR(12) PRIMARY KEY,
+  project_id VARCHAR(12) NULL,
   client_id BIGINT NULL,
   title VARCHAR(200) NOT NULL,
   original_filename VARCHAR(255) NOT NULL,
@@ -117,6 +134,9 @@ CREATE TABLE IF NOT EXISTS jobs (
   CONSTRAINT fk_jobs_client
     FOREIGN KEY (client_id) REFERENCES clients(id)
     ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT fk_jobs_project
+    FOREIGN KEY (project_id) REFERENCES projects(project_id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
   CONSTRAINT fk_jobs_transcriber
     FOREIGN KEY (assigned_transcriber_id) REFERENCES transcribers(id)
     ON UPDATE CASCADE ON DELETE SET NULL,
@@ -127,6 +147,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   KEY idx_jobs_due_at (due_at),
   KEY idx_jobs_uploaded_at (uploaded_at),
   KEY idx_jobs_client_id (client_id),
+  KEY idx_jobs_project_id (project_id),
   KEY idx_jobs_assigned_transcriber_id (assigned_transcriber_id),
   KEY idx_jobs_priority_status (priority, status),
   KEY idx_jobs_payment_status (payment_status),
@@ -135,7 +156,7 @@ CREATE TABLE IF NOT EXISTS jobs (
 
 CREATE TABLE IF NOT EXISTS job_assignments (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  job_id VARCHAR(36) NOT NULL,
+  job_id VARCHAR(12) NOT NULL,
   from_transcriber_id BIGINT NULL,
   to_transcriber_id BIGINT NULL,
   assigned_by_admin_id BIGINT NULL,
@@ -161,7 +182,7 @@ CREATE TABLE IF NOT EXISTS job_assignments (
 
 CREATE TABLE IF NOT EXISTS job_status_logs (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  job_id VARCHAR(36) NOT NULL,
+  job_id VARCHAR(12) NOT NULL,
   from_status VARCHAR(40) NULL,
   to_status VARCHAR(40) NOT NULL,
   changed_by_admin_id BIGINT NULL,
@@ -184,7 +205,7 @@ CREATE TABLE IF NOT EXISTS job_status_logs (
 
 CREATE TABLE IF NOT EXISTS job_notes (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  job_id VARCHAR(36) NOT NULL,
+  job_id VARCHAR(12) NOT NULL,
   author_admin_id BIGINT NULL,
   author_transcriber_id BIGINT NULL,
   note_type ENUM('internal', 'client_request', 'assignment', 'billing', 'quality') NOT NULL DEFAULT 'internal',
@@ -209,7 +230,7 @@ CREATE TABLE IF NOT EXISTS job_notes (
 CREATE TABLE IF NOT EXISTS invoices (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   invoice_no VARCHAR(50) NOT NULL,
-  job_id VARCHAR(36) NOT NULL,
+  job_id VARCHAR(12) NOT NULL,
   client_id BIGINT NOT NULL,
   issue_date DATE NOT NULL,
   due_date DATE NULL,
@@ -285,7 +306,7 @@ CREATE TABLE IF NOT EXISTS settlements (
 CREATE TABLE IF NOT EXISTS settlement_items (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   settlement_id BIGINT NOT NULL,
-  job_id VARCHAR(36) NOT NULL,
+  job_id VARCHAR(12) NOT NULL,
   transcriber_id BIGINT NOT NULL,
   unit_price DECIMAL(12,2) NOT NULL DEFAULT 0,
   quantity_minutes INT NOT NULL DEFAULT 0,

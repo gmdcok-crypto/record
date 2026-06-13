@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS projects (
-    project_id VARCHAR(36) NOT NULL PRIMARY KEY,
+    project_id VARCHAR(12) NOT NULL PRIMARY KEY,
     client_id BIGINT NOT NULL,
     title VARCHAR(200) NOT NULL,
     due_at DATETIME NULL,
@@ -12,6 +12,6 @@ CREATE TABLE IF NOT EXISTS projects (
     CONSTRAINT fk_projects_client FOREIGN KEY (client_id) REFERENCES clients (id)
 );
 
-ALTER TABLE jobs ADD COLUMN project_id VARCHAR(36) NULL;
+ALTER TABLE jobs ADD COLUMN project_id VARCHAR(12) NULL;
 ALTER TABLE jobs ADD KEY idx_jobs_project (project_id);
 ALTER TABLE jobs ADD CONSTRAINT fk_jobs_project FOREIGN KEY (project_id) REFERENCES projects (project_id);
