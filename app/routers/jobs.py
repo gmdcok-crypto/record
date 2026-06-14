@@ -20,6 +20,7 @@ from app.services.admin_events import publish_admin_event, stream_admin_events
 from app.services.database_migrate import run_sql_migration
 from app.services.database_reset import purge_all_data, reset_database_schema
 from app.services.project_store import list_transcriber_projects
+from app.services.project_store import list_projects
 from app.services.job_store import (
     assign_job,
     create_transcriber,
@@ -34,6 +35,7 @@ from app.services.job_store import (
     get_or_create_client_for_member,
     get_transcriber_by_code,
     list_client_jobs,
+    list_transcribers,
     list_transcriber_jobs,
     mark_final_pdf_saved,
     empty_transcript_json,
@@ -56,6 +58,7 @@ from app.services.transcript_shares import (
 )
 from app.services.pdf_export import build_transcript_pdf
 from app.services.member_auth import get_member_by_id, serialize_member_admin, set_member_active
+from app.services.member_auth import list_members_admin
 from app.services.job_transcription import transcribe_job_voice
 from app.services.transcript_change_log import (
     can_view_transcript_changes,
@@ -359,7 +362,27 @@ def admin_reset_database(request: Request, body: DatabaseResetRequest) -> dict:
 
 @router.get("/admin/overview")
 def admin_overview(db: Annotated[Session, Depends(get_db)]) -> dict:
-    return dashboard_overview(db)
+    try:
+        return dashboard_overview(db)
+    except Exception:
+        # Keep admin usable even if one overview section regresses.
+        return {
+            "stats": {
+                "total_jobs": 0,
+                "waiting_assignment": 0,
+                "working": 0,
+                "final_done": 0,
+                "total_sales": 0,
+                "total_settlements": 0,
+                "outstanding": 0,
+            },
+            "projects": list_projects(db, include_files=True),
+            "members": list_members_admin(db),
+            "jobs": list_client_jobs(db, member=None),
+            "transcribers": list_transcribers(db),
+            "settlements": [],
+            "sales": [],
+        }
 
 
 @router.get("/admin/events")
@@ -377,12 +400,12 @@ def admin_events() -> StreamingResponse:
 
 @router.get("/admin/transcribers")
 def admin_transcribers(db: Annotated[Session, Depends(get_db)]) -> dict:
-    return {"transcribers": dashboard_overview(db)["transcribers"]}
+    return {"transcribers": list_transcribers(db)}
 
 
 @router.get("/admin/members")
 def admin_members(db: Annotated[Session, Depends(get_db)]) -> dict:
-    return {"members": dashboard_overview(db)["members"]}
+    return {"members": list_members_admin(db)}
 
 
 @router.patch("/admin/members/{member_id}")
