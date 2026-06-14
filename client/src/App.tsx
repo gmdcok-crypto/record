@@ -656,10 +656,8 @@ export default function App() {
         pdfDeliveryMode: project?.pdf_delivery_mode,
       });
     }
-    if (isEditableArchiveStatus(item.status)) {
-      setActiveTab("edit");
-    }
-    void loadJobById(item.job_id, { switchToEdit: isEditableArchiveStatus(item.status) });
+    setActiveTab("edit");
+    void loadJobById(item.job_id, { switchToEdit: true });
   };
 
   const performUpload = async (fileToUpload: File, projectId?: string) => {
@@ -1241,6 +1239,7 @@ export default function App() {
                                   <button
                                     type="button"
                                     onClick={() => openArchiveJob(item, project.title)}
+                                    onDoubleClick={() => openArchiveJob(item, project.title)}
                                     disabled={loadingJob}
                                     className="min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-60"
                                   >
