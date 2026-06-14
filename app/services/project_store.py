@@ -216,7 +216,40 @@ def list_projects(
     if member is not None:
         client = get_or_create_client_for_member(db, member)
         stmt = stmt.where(Project.client_id == client.id)
-    projects = db.scalars(stmt).all()
+    try:
+        projects = db.scalars(stmt).all()
+    except (OperationalError, ProgrammingError) as exc:
+        message = str(exc).lower()
+        if "pdf_delivery_mode" not in message:
+            raise
+        fallback_stmt = select(
+            Project.project_id,
+            Project.client_id,
+            Project.title,
+            Project.due_at,
+            Project.memo,
+            Project.priority,
+            Project.created_at,
+            Project.updated_at,
+        ).order_by(Project.updated_at.desc())
+        if member is not None:
+            client = get_or_create_client_for_member(db, member)
+            fallback_stmt = fallback_stmt.where(Project.client_id == client.id)
+        rows = db.execute(fallback_stmt).mappings().all()
+        projects = []
+        for row in rows:
+            project = Project(
+                project_id=row["project_id"],
+                client_id=row["client_id"],
+                title=row["title"],
+                due_at=row["due_at"],
+                memo=row["memo"],
+                priority=row["priority"],
+            )
+            project.created_at = row["created_at"]
+            project.updated_at = row["updated_at"]
+            project.pdf_delivery_mode = "individual"
+            projects.append(project)
     return [serialize_project_summary(db, project, include_files=include_files) for project in projects]
 
 
