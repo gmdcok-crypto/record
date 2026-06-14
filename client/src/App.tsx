@@ -305,7 +305,7 @@ export default function App() {
   const [cancelTarget, setCancelTarget] = useState<JobArchiveItem | null>(null);
   const [duplicateDialogMessage, setDuplicateDialogMessage] = useState("");
   const [uploadPaid, setUploadPaid] = useState(false);
-  const [activeTab, setActiveTab] = useState<ClientTab>("archive");
+  const [activeTab, setActiveTab] = useState<ClientTab>("upload");
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
   const [memberName, setMemberName] = useState<string | null>(null);
   const segmentEndRef = useRef<number | null>(null);
@@ -410,6 +410,7 @@ export default function App() {
       setMemberName(member.name);
       setLoadingWorkspace(true);
       setAuthStatus("authenticated");
+      setActiveTab("upload");
       window.setTimeout(() => {
         bootChannelTalk({
           memberId: member.id,
@@ -432,6 +433,7 @@ export default function App() {
     setMemberName(member.name);
     setLoadingWorkspace(true);
     setAuthStatus("authenticated");
+    setActiveTab("upload");
     window.setTimeout(() => {
       bootChannelTalk({
         memberId: member.id,
@@ -461,7 +463,7 @@ export default function App() {
     setStep("idle");
     setUploadStatus("");
     setActionNotice(null);
-    setActiveTab("archive");
+    setActiveTab("upload");
     resetUploadUi();
   };
 

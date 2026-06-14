@@ -1186,11 +1186,12 @@ def download_final_transcript_pdf(
 
     filename = job.final_pdf_filename or "final_transcript.pdf"
     encoded = quote(filename)
+    fallback_name = "final_transcript.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{encoded}",
+            "Content-Disposition": f"attachment; filename=\"{fallback_name}\"; filename*=UTF-8''{encoded}",
             "Cache-Control": "no-cache",
         },
     )
