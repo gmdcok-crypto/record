@@ -67,6 +67,16 @@ class TranscriptPDF(FPDF):
             )
 
 
+def _create_pdf() -> tuple[TranscriptPDF, str, bool]:
+    pdf = TranscriptPDF(FONT_FAMILY)
+    pdf.set_margins(20, 20, 20)
+    pdf.set_auto_page_break(auto=True, margin=20 + FOOTER_HEIGHT)
+    font, bold_available = _register_fonts(pdf)
+    pdf._font_family = font
+    pdf._bold_available = bold_available
+    return pdf, font, bold_available
+
+
 def _speaker_label(speaker: str, labels: dict) -> str:
     custom = (labels.get(speaker) or "").strip()
     if custom:
@@ -140,23 +150,22 @@ def _merge_with_covers(body_bytes: bytes) -> bytes:
     return output.getvalue()
 
 
-def _build_transcript_body_pdf(transcript: dict) -> bytes:
-    pdf = TranscriptPDF(FONT_FAMILY)
-    pdf.set_margins(20, 20, 20)
-    pdf.set_auto_page_break(auto=True, margin=20 + FOOTER_HEIGHT)
-    pdf.add_page()
-
-    font, bold_available = _register_fonts(pdf)
-    pdf._font_family = font
-    pdf._bold_available = bold_available
-
+def _render_transcript_body(
+    pdf: TranscriptPDF,
+    transcript: dict,
+    font: str,
+    bold_available: bool,
+    *,
+    include_title: bool,
+) -> None:
     title = transcript.get("filename") or "녹취록"
     segments = transcript.get("segments") or []
     labels = transcript.get("speaker_labels") or {}
 
-    pdf.set_font(font, size=16)
-    pdf.multi_cell(0, 10, title, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    pdf.ln(6)
+    if include_title:
+        pdf.set_font(font, size=16)
+        pdf.multi_cell(0, 10, title, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.ln(6)
 
     if segments:
         for segment in segments:
@@ -177,6 +186,67 @@ def _build_transcript_body_pdf(transcript: dict) -> bytes:
 
     _append_document_end(pdf, font, bold_available)
 
+
+def _build_transcript_body_pdf(transcript: dict) -> bytes:
+    pdf, font, bold_available = _create_pdf()
+    pdf.add_page()
+    _render_transcript_body(pdf, transcript, font, bold_available, include_title=True)
+    return bytes(pdf.output())
+
+
+def _bundle_cover_page(
+    pdf: TranscriptPDF,
+    *,
+    project_title: str,
+    document_count: int,
+    font: str,
+    bold_available: bool,
+) -> None:
+    pdf.add_page()
+    pdf.set_y(48)
+    pdf.set_font(font, style="B" if bold_available else "", size=24)
+    pdf.multi_cell(0, 14, "프로젝트 통합 녹취록", align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(10)
+    pdf.set_font(font, style="B" if bold_available else "", size=20)
+    pdf.multi_cell(0, 12, project_title or "프로젝트", align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(16)
+    pdf.set_font(font, size=13)
+    pdf.multi_cell(
+        0,
+        9,
+        f"총 {document_count}건 문서를 통합했습니다.",
+        align="C",
+        new_x=XPos.LMARGIN,
+        new_y=YPos.NEXT,
+    )
+
+
+def _bundle_divider_page(
+    pdf: TranscriptPDF,
+    *,
+    index: int,
+    title: str,
+    font: str,
+    bold_available: bool,
+) -> None:
+    pdf.add_page()
+    pdf.set_y(62)
+    pdf.set_font(font, size=16)
+    pdf.multi_cell(0, 10, f"문서 {index}", align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(12)
+    pdf.set_font(font, style="B" if bold_available else "", size=22)
+    pdf.multi_cell(0, 14, title or "녹취록", align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(18)
+    pdf.set_font(font, size=12)
+    pdf.multi_cell(
+        0,
+        8,
+        "다음 페이지부터 해당 문서의 녹취 본문이 이어집니다.",
+        align="C",
+        new_x=XPos.LMARGIN,
+        new_y=YPos.NEXT,
+    )
+
     return bytes(pdf.output())
 
 
@@ -188,14 +258,24 @@ def build_transcript_pdf(transcript: dict) -> tuple[bytes, str]:
     return pdf_bytes, download_name
 
 
-def merge_pdf_documents(documents: list[tuple[bytes, str]], *, bundle_title: str = "project_bundle") -> tuple[bytes, str]:
-    writer = PdfWriter()
-    for pdf_bytes, _name in documents:
-        reader = PdfReader(BytesIO(pdf_bytes))
-        for page in reader.pages:
-            writer.add_page(page)
+def build_project_bundle_pdf(project_title: str, transcripts: list[dict]) -> tuple[bytes, str]:
+    if not transcripts:
+        raise ValueError("등록된 문서 없습니다.")
 
-    output = BytesIO()
-    writer.write(output)
-    merged_name = f"{_safe_filename(bundle_title)}_통합녹취록.pdf"
-    return output.getvalue(), merged_name
+    pdf, font, bold_available = _create_pdf()
+    _bundle_cover_page(
+        pdf,
+        project_title=project_title or "프로젝트",
+        document_count=len(transcripts),
+        font=font,
+        bold_available=bold_available,
+    )
+
+    for index, transcript in enumerate(transcripts, start=1):
+        title = transcript.get("filename") or f"문서 {index}"
+        _bundle_divider_page(pdf, index=index, title=title, font=font, bold_available=bold_available)
+        pdf.add_page()
+        _render_transcript_body(pdf, transcript, font, bold_available, include_title=False)
+
+    bundle_name = f"{_safe_filename(project_title)}_통합녹취록.pdf"
+    return bytes(pdf.output()), bundle_name

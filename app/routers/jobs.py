@@ -55,7 +55,7 @@ from app.services.transcript_shares import (
     get_transcript_share_by_token,
     transcript_share_is_valid,
 )
-from app.services.pdf_export import build_transcript_pdf, merge_pdf_documents
+from app.services.pdf_export import build_project_bundle_pdf, build_transcript_pdf
 from app.services.member_auth import get_member_by_id, serialize_member_admin, set_member_active
 from app.services.member_auth import list_members_admin
 from app.services.job_transcription import transcribe_job_voice
@@ -1209,30 +1209,36 @@ def download_transcriber_project_final_pdf_bundle(
     jobs = [
         job
         for job in list_project_jobs(db, project_id)
-        if job.assigned_transcriber_id == current.id and job.final_pdf_r2_key
+        if job.assigned_transcriber_id == current.id
     ]
     if not jobs:
         raise HTTPException(status_code=404, detail="등록된 문서 없습니다.")
 
-    documents: list[tuple[bytes, str]] = []
+    transcripts: list[dict] = []
     for job in jobs:
-        try:
-            documents.append((get_object_bytes(job.final_pdf_r2_key), job.final_pdf_filename or f"{job.job_id}.pdf"))
-        except ValueError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
-        except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"Final PDF load failed: {exc}") from exc
+        transcript = get_transcript_json(job.job_id)
+        if transcript:
+            title = job.original_filename or job.title or transcript.get("filename") or f"문서 {len(transcripts) + 1}"
+            transcript = {**transcript, "filename": title}
+            transcripts.append(transcript)
+    if not transcripts:
+        raise HTTPException(status_code=404, detail="등록된 문서 없습니다.")
 
-    bundle_bytes, bundle_name = merge_pdf_documents(documents, bundle_title=project.title or project.project_id)
-    encoded = quote(bundle_name)
-    return Response(
-        content=bundle_bytes,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f"attachment; filename=\"project_bundle.pdf\"; filename*=UTF-8''{encoded}",
-            "Cache-Control": "no-cache",
-        },
-    )
+    try:
+        bundle_bytes, bundle_name = build_project_bundle_pdf(project.title or project.project_id, transcripts)
+        encoded = quote(bundle_name)
+        return Response(
+            content=bundle_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename=\"project_bundle.pdf\"; filename*=UTF-8''{encoded}",
+                "Cache-Control": "no-cache",
+            },
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Project PDF bundle failed: {exc}") from exc
 
 
 @router.get("/share/{token}/transcript.pdf/final")
