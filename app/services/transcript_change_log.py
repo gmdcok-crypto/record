@@ -18,6 +18,8 @@ SAVE_KIND_LABELS: dict[str, str] = {
     "pdf_finalize": "PDF 확정",
 }
 
+HIDDEN_HISTORY_SAVE_KINDS = {"ai_draft"}
+
 
 def save_kind_label(save_kind: str) -> str:
     return SAVE_KIND_LABELS.get(save_kind, save_kind)
@@ -25,6 +27,35 @@ def save_kind_label(save_kind: str) -> str:
 
 def _norm(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _has_transcript_content(transcript: dict | None) -> bool:
+    transcript = transcript or {}
+    if _norm(transcript.get("text")) or _norm(transcript.get("plain_text")):
+        return True
+
+    labels = transcript.get("speaker_labels") or {}
+    if any(_norm(value) for value in labels.values()):
+        return True
+
+    segments = transcript.get("segments") or []
+    for segment in segments:
+        if _norm(segment.get("speaker")) or _norm(segment.get("text")):
+            return True
+    return False
+
+
+def should_record_transcript_change_log(
+    previous: dict | None,
+    new: dict | None,
+    *,
+    save_kind: str,
+) -> bool:
+    if save_kind in HIDDEN_HISTORY_SAVE_KINDS:
+        return False
+    if not _has_transcript_content(previous) and _has_transcript_content(new):
+        return False
+    return True
 
 
 def compute_transcript_changes(old: dict | None, new: dict | None) -> list[dict]:
@@ -188,7 +219,7 @@ def persist_job_transcript(
     transcript_key = save_transcript_json(job_id, transcript_json)
     mark_transcript_saved(db, job, transcript_key, transcript_json)
 
-    if changes:
+    if changes and should_record_transcript_change_log(previous, transcript_json, save_kind=save_kind):
         record_transcript_change_log(
             db,
             job,
@@ -227,6 +258,8 @@ def list_transcript_change_logs(db: Session, job_id: str) -> list[dict]:
 
     result: list[dict] = []
     for row in rows:
+        if row.save_kind in HIDDEN_HISTORY_SAVE_KINDS:
+            continue
         changes = row.changes_json
         if isinstance(changes, str):
             changes = json.loads(changes)

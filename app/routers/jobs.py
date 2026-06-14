@@ -61,10 +61,8 @@ from app.services.member_auth import list_members_admin
 from app.services.job_transcription import transcribe_job_voice
 from app.services.transcript_change_log import (
     can_view_transcript_changes,
-    compute_transcript_changes,
     list_transcript_change_logs,
     persist_job_transcript,
-    record_transcript_change_log,
 )
 from app.services.job_inquiries import (
     THREAD_CLIENT_ADMIN,
@@ -800,7 +798,6 @@ def transcriber_ai_draft(
         raise HTTPException(status_code=403, detail="배정된 작업만 AI 초벌을 실행할 수 있습니다.")
 
     try:
-        previous = get_transcript_json(job_id) or {}
         transcript_json, transcript_key, voice_key = transcribe_job_voice(job_id)
     except ValueError as exc:
         message = str(exc)
@@ -811,16 +808,6 @@ def transcriber_ai_draft(
         raise HTTPException(status_code=502, detail=f"Transcription failed: {exc}") from exc
 
     mark_transcript_saved(db, job, transcript_key, transcript_json)
-    changes = compute_transcript_changes(previous, transcript_json)
-    if changes:
-        record_transcript_change_log(
-            db,
-            job,
-            changes=changes,
-            transcriber=current,
-            member=None,
-            save_kind="ai_draft",
-        )
     if job.status == "assigned":
         job = set_job_status(db, job, "working", "AI 초벌 생성")
     publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
@@ -889,10 +876,7 @@ def admin_ai_draft(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
-
     try:
-        previous = get_transcript_json(job_id) or {}
         transcript_json, transcript_key, voice_key = transcribe_job_voice(job_id)
     except ValueError as exc:
         message = str(exc)
@@ -903,17 +887,6 @@ def admin_ai_draft(
         raise HTTPException(status_code=502, detail=f"Transcription failed: {exc}") from exc
 
     mark_transcript_saved(db, job, transcript_key, transcript_json)
-    changes = compute_transcript_changes(previous, transcript_json)
-    if changes:
-        record_transcript_change_log(
-            db,
-            job,
-            changes=changes,
-            transcriber=None,
-            member=None,
-            admin=admin,
-            save_kind="ai_draft",
-        )
     if job.status == "assigned":
         job = set_job_status(db, job, "working", "관리자 AI 초벌 생성")
     publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
