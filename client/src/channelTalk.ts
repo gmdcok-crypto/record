@@ -104,7 +104,20 @@ export async function bootChannelTalk(profile?: ChannelBootProfile) {
 
   ensureChannelStub();
   ensureChannelScript();
-  window.ChannelIO?.("boot", { pluginKey });
+  const memberId =
+    profile?.memberId != null && String(profile.memberId).trim()
+      ? `member-${String(profile.memberId).trim()}`
+      : undefined;
+
+  window.ChannelIO?.("boot", {
+    pluginKey,
+    memberId,
+    profile: {
+      name: profile?.name?.trim() || undefined,
+      email: profile?.email?.trim() || undefined,
+      mobileNumber: profile?.mobileNumber?.trim() || undefined,
+    },
+  });
 }
 
 export function showChannelTalkMessenger() {

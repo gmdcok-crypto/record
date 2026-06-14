@@ -72,7 +72,11 @@ from app.services.job_inquiries import (
     create_job_inquiry_message,
     list_job_inquiry_messages,
 )
-from app.services.inquiry_notifications import send_inquiry_notification
+from app.services.inquiry_notifications import (
+    send_client_pdf_delivery_notification,
+    send_client_status_notification,
+    send_inquiry_notification,
+)
 from app.services.r2 import (
     create_download_url,
     delete_object,
@@ -262,6 +266,32 @@ def _ensure_member_owns_job(db: Session, member: Member, job: Job) -> None:
     client = get_or_create_client_for_member(db, member)
     if job.client_id is None or job.client_id != client.id:
         raise HTTPException(status_code=403, detail="이 작업은 공유할 수 없습니다.")
+
+
+def _job_member(db: Session, job: Job) -> Member | None:
+    if job.client is None or not job.client.contact_email:
+        return None
+    return db.scalar(select(Member).where(Member.email == job.client.contact_email.strip().lower()))
+
+
+def _notify_client_status_change(db: Session, job: Job, *, note: str | None = None) -> None:
+    member = _job_member(db, job)
+    if member is None:
+        return
+    try:
+        send_client_status_notification(job=job, member=member, status=job.status, note=note)
+    except Exception:
+        logger.exception("Failed to send client status notification for job %s", job.job_id)
+
+
+def _notify_client_pdf_delivery(db: Session, job: Job, *, delivery_mode: str) -> None:
+    member = _job_member(db, job)
+    if member is None:
+        return
+    try:
+        send_client_pdf_delivery_notification(job=job, member=member, delivery_mode=delivery_mode)
+    except Exception:
+        logger.exception("Failed to send client PDF delivery notification for job %s", job.job_id)
 
 
 @router.get("")
@@ -623,6 +653,7 @@ def create_admin_job_inquiry(
             sender_role="admin",
             sender_name=message["sender_name"],
             message=message["message"],
+            member=_job_member(db, job) if thread_type == THREAD_CLIENT_ADMIN else None,
         )
     except Exception:
         logger.exception("Failed to send admin inquiry notification for job %s", job_id)
@@ -930,6 +961,7 @@ def transcriber_deliver_draft(
         raise HTTPException(status_code=502, detail=f"Save failed: {exc}") from exc
 
     job = set_job_status(db, job, "first_done", "속기사 초벌 전달")
+    _notify_client_status_change(db, job, note="초벌본이 도착했습니다.")
     publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
 
     return {
@@ -1008,6 +1040,7 @@ def admin_deliver_draft(
         raise HTTPException(status_code=502, detail=f"Save failed: {exc}") from exc
 
     job = set_job_status(db, job, "first_done", "관리자 초벌 전달")
+    _notify_client_status_change(db, job, note="초벌본이 도착했습니다.")
     publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
 
     return {
@@ -1303,6 +1336,8 @@ def transcriber_deliver_pdf(
             db.commit()
 
     mark_final_pdf_delivered(db, job)
+    _notify_client_pdf_delivery(db, job, delivery_mode="bundle" if body.bundle_project_pdf else "individual")
+    _notify_client_status_change(db, job, note="PDF가 전달되었습니다.")
     publish_admin_event("job_updated", {"job_id": job_id, "status": "pdf_sent"})
     return {
         "job_id": job_id,
@@ -1392,6 +1427,7 @@ def save_shared_transcript(
         )
         if job.status != "client_editing":
             job = set_job_status(db, job, "client_editing", "공유 링크 수정본 저장")
+            _notify_client_status_change(db, job, note="의뢰인 수정본이 저장되었습니다.")
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
@@ -1422,6 +1458,7 @@ def submit_shared_review_request(
             shared_editor=True,
         )
         job = set_job_status(db, job, "review_waiting", "공유 링크에서 속기사 재검수 요청")
+        _notify_client_status_change(db, job, note="속기사 재검토 요청이 접수되었습니다.")
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
@@ -1441,5 +1478,6 @@ def update_job_status(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     job = set_job_status(db, job, body.status, body.note)
+    _notify_client_status_change(db, job, note=body.note)
     publish_admin_event("job_updated", {"job_id": job.job_id, "status": job.status})
     return {"job_id": job.job_id, "status": job.status}
