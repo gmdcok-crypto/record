@@ -16,6 +16,7 @@ type ChannelBootProfile = {
 };
 
 let lastProfile: ChannelBootProfile | undefined;
+let channelScriptPromise: Promise<void> | null = null;
 
 function ensureChannelStub() {
   if (window.ChannelIO) return;
@@ -27,26 +28,35 @@ function ensureChannelStub() {
 }
 
 function ensureChannelScript() {
-  if (window.ChannelIOInitialized) return;
-  window.ChannelIOInitialized = true;
+  if (channelScriptPromise) return channelScriptPromise;
+  channelScriptPromise = new Promise<void>((resolve, reject) => {
+    if (window.ChannelIOInitialized) {
+      resolve();
+      return;
+    }
+    window.ChannelIOInitialized = true;
 
-  const script = document.createElement("script");
-  script.async = true;
-  script.src = CHANNEL_SCRIPT_SRC;
-  script.charset = "utf-8";
-  document.head.appendChild(script);
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = CHANNEL_SCRIPT_SRC;
+    script.charset = "utf-8";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Channel Talk script load failed"));
+    document.head.appendChild(script);
+  });
+  return channelScriptPromise;
 }
 
 export function channelTalkEnabled(): boolean {
   return Boolean(CHANNEL_PLUGIN_KEY);
 }
 
-export function bootChannelTalk(profile?: ChannelBootProfile) {
+export async function bootChannelTalk(profile?: ChannelBootProfile) {
   if (!CHANNEL_PLUGIN_KEY) return;
   lastProfile = profile;
 
   ensureChannelStub();
-  ensureChannelScript();
+  await ensureChannelScript();
 
   const memberId =
     profile?.memberId != null && String(profile.memberId).trim()
@@ -66,10 +76,15 @@ export function bootChannelTalk(profile?: ChannelBootProfile) {
 
 export function showChannelTalkMessenger() {
   if (!CHANNEL_PLUGIN_KEY) return;
-  bootChannelTalk(lastProfile);
-  window.setTimeout(() => {
-    window.ChannelIO?.("showMessenger");
-  }, 250);
+  void bootChannelTalk(lastProfile)
+    .then(() => {
+      window.setTimeout(() => {
+        window.ChannelIO?.("showMessenger");
+      }, 250);
+    })
+    .catch((error) => {
+      console.error(error);
+    });
 }
 
 export function shutdownChannelTalk() {

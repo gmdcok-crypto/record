@@ -430,7 +430,7 @@ export default function App() {
       setAuthStatus("authenticated");
       setActiveTab("upload");
       window.setTimeout(() => {
-        bootChannelTalk({
+        void bootChannelTalk({
           memberId: member.id,
           name: member.name,
           email: member.email,
@@ -453,7 +453,7 @@ export default function App() {
     setAuthStatus("authenticated");
     setActiveTab("upload");
     window.setTimeout(() => {
-      bootChannelTalk({
+      void bootChannelTalk({
         memberId: member.id,
         name: member.name,
         email: member.email,
