@@ -131,6 +131,13 @@ def transcriber_frontend_version() -> dict[str, str | None]:
     return {"version": _frontend_version(TRANSCRIBER_DIR)}
 
 
+@app.get("/api/public-config")
+def public_config() -> dict[str, str]:
+    return {
+        "channelTalkPluginKey": settings.channel_talk_plugin_key.strip(),
+    }
+
+
 if ADMIN_DIR.is_dir():
     app.mount("/admin", NoCacheHtmlStaticFiles(directory=ADMIN_DIR, html=True), name="admin")
 

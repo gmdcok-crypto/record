@@ -72,6 +72,7 @@ from app.services.job_inquiries import (
     create_job_inquiry_message,
     list_job_inquiry_messages,
 )
+from app.services.inquiry_notifications import send_inquiry_notification
 from app.services.r2 import (
     create_download_url,
     delete_object,
@@ -524,6 +525,17 @@ def create_client_job_inquiry(
         message = create_job_inquiry_message(db, job, THREAD_CLIENT_ADMIN, body.message, member=member)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        send_inquiry_notification(
+            job=job,
+            thread_type=THREAD_CLIENT_ADMIN,
+            sender_role="client",
+            sender_name=member.name,
+            message=message["message"],
+            member=member,
+        )
+    except Exception:
+        logger.exception("Failed to send client inquiry notification for job %s", job_id)
     publish_admin_event("job_inquiry_created", {"job_id": job_id, "thread_type": THREAD_CLIENT_ADMIN, "sender_role": "client"})
     return {"message": message}
 
@@ -558,6 +570,17 @@ def create_transcriber_job_inquiry(
         message = create_job_inquiry_message(db, job, THREAD_TRANSCRIBER_ADMIN, body.message, transcriber=current)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        send_inquiry_notification(
+            job=job,
+            thread_type=THREAD_TRANSCRIBER_ADMIN,
+            sender_role="transcriber",
+            sender_name=current.name,
+            message=message["message"],
+            transcriber=current,
+        )
+    except Exception:
+        logger.exception("Failed to send transcriber inquiry notification for job %s", job_id)
     publish_admin_event("job_inquiry_created", {"job_id": job_id, "thread_type": THREAD_TRANSCRIBER_ADMIN, "sender_role": "transcriber"})
     return {"message": message}
 
@@ -593,6 +616,16 @@ def create_admin_job_inquiry(
         message = create_job_inquiry_message(db, job, thread_type, body.message, admin=admin)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        send_inquiry_notification(
+            job=job,
+            thread_type=thread_type,
+            sender_role="admin",
+            sender_name=message["sender_name"],
+            message=message["message"],
+        )
+    except Exception:
+        logger.exception("Failed to send admin inquiry notification for job %s", job_id)
     publish_admin_event("job_inquiry_created", {"job_id": job_id, "thread_type": thread_type, "sender_role": "admin"})
     return {"message": message}
 

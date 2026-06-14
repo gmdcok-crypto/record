@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +24,18 @@ class Settings(BaseSettings):
     purge_db_on_startup: str = ""
     jwt_secret: str = ""
     public_client_url: str = "https://record-user.netlify.app"
+    public_admin_url: str = ""
+    public_transcriber_url: str = ""
+    channel_talk_plugin_key: str = Field(default="", validation_alias="VITE_CHANNEL_TALK_PLUGIN_KEY")
+    channel_talk_notifications_enabled: bool = False
+    channel_talk_access_token: str = ""
+    channel_talk_api_key: str = ""
+    channel_talk_api_secret: str = ""
+    channel_talk_admin_inbox_id: str = ""
+    channel_talk_admin_user_id: str = ""
+    channel_talk_admin_tag: str = "inquiry-alert"
+    channel_talk_message_preview_limit: int = 120
+    channel_talk_debounce_seconds: int = 60
     # 0 = never expire (no exp claim). Set e.g. 10080 for 7 days.
     jwt_expire_minutes: int = 0
 

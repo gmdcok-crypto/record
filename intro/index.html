@@ -466,50 +466,64 @@
     <script src="./signup-modal.js?v=5"></script>
     <script>
       (function () {
-        var pluginKey = "e1f207ad-90e5-485b-8e33-30fabefc9436";
-        if (!pluginKey) return;
-
-        (function () {
-          var w = window;
-          if (w.ChannelIO) {
-            return;
-          }
-          var ch = function () {
-            ch.c(arguments);
-          };
-          ch.q = [];
-          ch.c = function (args) {
-            ch.q.push(args);
-          };
-          w.ChannelIO = ch;
-          function l() {
-            if (w.ChannelIOInitialized) {
+        function ensureChannelBoot(pluginKey) {
+          if (!pluginKey) return;
+          (function () {
+            var w = window;
+            if (w.ChannelIO) {
               return;
             }
-            w.ChannelIOInitialized = true;
-            var s = document.createElement("script");
-            s.type = "text/javascript";
-            s.async = true;
-            s.src = "https://cdn.channel.io/plugin/ch-plugin-web.js";
-            var x = document.getElementsByTagName("script")[0];
-            x.parentNode.insertBefore(s, x);
-          }
-          if (document.readyState === "complete") {
-            l();
-          } else {
-            w.addEventListener("DOMContentLoaded", l);
-            w.addEventListener("load", l);
-          }
-        })();
+            var ch = function () {
+              ch.c(arguments);
+            };
+            ch.q = [];
+            ch.c = function (args) {
+              ch.q.push(args);
+            };
+            w.ChannelIO = ch;
+            function l() {
+              if (w.ChannelIOInitialized) {
+                return;
+              }
+              w.ChannelIOInitialized = true;
+              var s = document.createElement("script");
+              s.type = "text/javascript";
+              s.async = true;
+              s.src = "https://cdn.channel.io/plugin/ch-plugin-web.js";
+              var x = document.getElementsByTagName("script")[0];
+              x.parentNode.insertBefore(s, x);
+            }
+            if (document.readyState === "complete") {
+              l();
+            } else {
+              w.addEventListener("DOMContentLoaded", l);
+              w.addEventListener("load", l);
+            }
+          })();
 
-        window.ChannelIO("boot", {
-          pluginKey: pluginKey,
-        });
+          window.ChannelIO("boot", {
+            pluginKey: pluginKey,
+          });
+        }
+
+        fetch("/api/public-config")
+          .then(function (response) {
+            if (!response.ok) throw new Error("public-config fetch failed");
+            return response.json();
+          })
+          .then(function (config) {
+            ensureChannelBoot((config && config.channelTalkPluginKey) || "");
+          })
+          .catch(function () {
+            return undefined;
+          });
 
         var channelTalkButton = document.getElementById("channel-talk-btn");
         if (channelTalkButton) {
           channelTalkButton.addEventListener("click", function () {
-            window.ChannelIO("showMessenger");
+            if (window.ChannelIO) {
+              window.ChannelIO("showMessenger");
+            }
           });
         }
       })();
