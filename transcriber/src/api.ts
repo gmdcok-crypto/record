@@ -565,6 +565,31 @@ export async function downloadFinalTranscriptPdf(jobId: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
+export async function downloadProjectFinalTranscriptPdf(projectId: string): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/transcriber/projects/${projectId}/transcript.pdf/final`, {
+    headers: transcriberAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err));
+  }
+  const blob = await res.blob();
+  const filename = parseFilenameFromDisposition(
+    res.headers.get("Content-Disposition"),
+    "project_bundle.pdf",
+  );
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+export function finalTranscriptPdfUrl(jobId: string): string {
+  return `${apiBase()}/api/jobs/${jobId}/transcript.pdf/final`;
+}
+
 export function speakerLabel(speaker: string, labels?: Record<string, string>): string {
   const custom = labels?.[speaker]?.trim();
   if (custom) return custom;

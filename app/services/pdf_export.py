@@ -186,3 +186,16 @@ def build_transcript_pdf(transcript: dict) -> tuple[bytes, str]:
     pdf_bytes = _merge_with_covers(body_bytes)
     download_name = f"{_safe_filename(title)}_녹취록.pdf"
     return pdf_bytes, download_name
+
+
+def merge_pdf_documents(documents: list[tuple[bytes, str]], *, bundle_title: str = "project_bundle") -> tuple[bytes, str]:
+    writer = PdfWriter()
+    for pdf_bytes, _name in documents:
+        reader = PdfReader(BytesIO(pdf_bytes))
+        for page in reader.pages:
+            writer.add_page(page)
+
+    output = BytesIO()
+    writer.write(output)
+    merged_name = f"{_safe_filename(bundle_title)}_통합녹취록.pdf"
+    return output.getvalue(), merged_name

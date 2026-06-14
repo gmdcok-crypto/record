@@ -19,8 +19,7 @@ from app.services.audio import remux_faststart, should_faststart
 from app.services.admin_events import publish_admin_event, stream_admin_events
 from app.services.database_migrate import run_sql_migration
 from app.services.database_reset import purge_all_data, reset_database_schema
-from app.services.project_store import list_transcriber_projects
-from app.services.project_store import list_projects
+from app.services.project_store import get_project_record, list_project_jobs, list_projects, list_transcriber_projects
 from app.services.job_store import (
     assign_job,
     create_transcriber,
@@ -56,7 +55,7 @@ from app.services.transcript_shares import (
     get_transcript_share_by_token,
     transcript_share_is_valid,
 )
-from app.services.pdf_export import build_transcript_pdf
+from app.services.pdf_export import build_transcript_pdf, merge_pdf_documents
 from app.services.member_auth import get_member_by_id, serialize_member_admin, set_member_active
 from app.services.member_auth import list_members_admin
 from app.services.job_transcription import transcribe_job_voice
@@ -1192,6 +1191,45 @@ def download_final_transcript_pdf(
         media_type="application/pdf",
         headers={
             "Content-Disposition": f"attachment; filename=\"{fallback_name}\"; filename*=UTF-8''{encoded}",
+            "Cache-Control": "no-cache",
+        },
+    )
+
+
+@router.get("/transcriber/projects/{project_id}/transcript.pdf/final")
+def download_transcriber_project_final_pdf_bundle(
+    project_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current: Annotated[Transcriber, Depends(get_current_transcriber)],
+) -> Response:
+    project = get_project_record(db, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    jobs = [
+        job
+        for job in list_project_jobs(db, project_id)
+        if job.assigned_transcriber_id == current.id and job.final_pdf_r2_key
+    ]
+    if not jobs:
+        raise HTTPException(status_code=404, detail="등록된 문서 없습니다.")
+
+    documents: list[tuple[bytes, str]] = []
+    for job in jobs:
+        try:
+            documents.append((get_object_bytes(job.final_pdf_r2_key), job.final_pdf_filename or f"{job.job_id}.pdf"))
+        except ValueError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Final PDF load failed: {exc}") from exc
+
+    bundle_bytes, bundle_name = merge_pdf_documents(documents, bundle_title=project.title or project.project_id)
+    encoded = quote(bundle_name)
+    return Response(
+        content=bundle_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"project_bundle.pdf\"; filename*=UTF-8''{encoded}",
             "Cache-Control": "no-cache",
         },
     )

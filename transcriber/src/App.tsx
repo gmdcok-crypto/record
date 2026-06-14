@@ -4,6 +4,7 @@ import {
   clearTranscriberSession,
   createAdminEventsSource,
   createTranscriberJobInquiry,
+  downloadProjectFinalTranscriptPdf,
   downloadFinalTranscriptPdf,
   fetchAssignedProjects,
   fetchTranscriberFrontendVersion,
@@ -12,6 +13,7 @@ import {
   fetchTranscriberLicenseObjectUrl,
   fetchTranscriberJobInquiries,
   fetchTranscriptChanges,
+  finalTranscriptPdfUrl,
   finalizeTranscriptPdf,
   resolveUrl,
   deliverDraftToClient,
@@ -259,6 +261,7 @@ export default function App() {
   const [sendingToClient, setSendingToClient] = useState(false);
   const [aiRunning, setAiRunning] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [bundleProjectPdf, setBundleProjectPdf] = useState(false);
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
 
   const showNotice = useCallback((kind: ActionNoticeKind, message: string, title?: string) => {
@@ -650,7 +653,11 @@ export default function App() {
     try {
       await saveTranscript(job.job_id, currentTranscript, "pdf_finalize");
       await finalizeTranscriptPdf(job.job_id, currentTranscript);
-      await downloadFinalTranscriptPdf(job.job_id);
+      if (bundleProjectPdf && currentProject?.project_id) {
+        await downloadProjectFinalTranscriptPdf(currentProject.project_id);
+      } else {
+        await downloadFinalTranscriptPdf(job.job_id);
+      }
       setJob({ ...job, transcript_json: currentTranscript, final_pdf_ready: true, status: "pdf_sent" });
       setChangeHistoryRefresh((value) => value + 1);
       showNotice("success", "최종 PDF를 R2에 저장하고 다운로드했습니다.");
@@ -999,6 +1006,24 @@ export default function App() {
                       className="rounded-xl bg-slate-200 py-3 text-sm font-semibold text-slate-950 transition hover:bg-white disabled:opacity-50"
                     >
                       {downloadingPdf ? "PDF 생성 중..." : "도장 날인 PDF"}
+                    </button>
+                    <label className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={bundleProjectPdf}
+                        onChange={(event) => setBundleProjectPdf(event.target.checked)}
+                        disabled={busy || !currentProject?.project_id}
+                        className="h-4 w-4 rounded border-slate-600 bg-slate-900"
+                      />
+                      <span>프로젝트 전체를 하나의 PDF로 묶기</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => window.open(finalTranscriptPdfUrl(job.job_id), "_blank", "noopener,noreferrer")}
+                      disabled={!job.final_pdf_ready}
+                      className="rounded-xl border border-slate-700 bg-slate-950 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      완성된 PDF 보기
                     </button>
                   </div>
                 </div>
