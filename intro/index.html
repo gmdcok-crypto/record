@@ -467,6 +467,10 @@
     <script>
       (function () {
         var channelPluginKey = "";
+        var PUBLIC_CONFIG_ENDPOINTS = [
+          window.location.origin.replace(/\/$/, "") + "/api/public-config",
+          "https://record-production.up.railway.app/api/public-config",
+        ];
 
         function ensureChannelBoot(pluginKey) {
           if (!pluginKey) return;
@@ -509,17 +513,28 @@
           });
         }
 
-        var configPromise = fetch("/api/public-config")
-          .then(function (response) {
-            if (!response.ok) throw new Error("public-config fetch failed");
-            return response.json();
-          })
-          .then(function (config) {
-            ensureChannelBoot((config && config.channelTalkPluginKey) || "");
-          })
-          .catch(function () {
+        function fetchPublicConfig() {
+          var lastError = null;
+          return PUBLIC_CONFIG_ENDPOINTS.reduce(function (promise, endpoint) {
+            return promise.catch(function () {
+              return fetch(endpoint).then(function (response) {
+                if (!response.ok) {
+                  throw new Error("public-config fetch failed: " + endpoint);
+                }
+                return response.json();
+              });
+            });
+          }, Promise.reject(new Error("public-config not attempted"))).catch(function (error) {
+            lastError = error;
+            console.warn(lastError);
             return undefined;
           });
+        }
+
+        var configPromise = fetchPublicConfig().then(function (config) {
+          ensureChannelBoot((config && config.channelTalkPluginKey) || "");
+          return config;
+        });
 
         var channelTalkButton = document.getElementById("channel-talk-btn");
         if (channelTalkButton) {
