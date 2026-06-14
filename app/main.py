@@ -29,7 +29,12 @@ class NoCacheHtmlStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope):
         response = await super().get_response(path, scope)
         content_type = response.headers.get("content-type", "")
-        if "text/html" in content_type:
+        should_disable_cache = "text/html" in content_type or path in {
+            "sw.js",
+            "registerSW.js",
+            "manifest.webmanifest",
+        }
+        if should_disable_cache:
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
             response.headers["Pragma"] = "no-cache"
             response.headers["Expires"] = "0"
