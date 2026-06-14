@@ -15,6 +15,8 @@ type ChannelBootProfile = {
   mobileNumber?: string | null;
 };
 
+let lastProfile: ChannelBootProfile | undefined;
+
 function ensureChannelStub() {
   if (window.ChannelIO) return;
 
@@ -41,6 +43,7 @@ export function channelTalkEnabled(): boolean {
 
 export function bootChannelTalk(profile?: ChannelBootProfile) {
   if (!CHANNEL_PLUGIN_KEY) return;
+  lastProfile = profile;
 
   ensureChannelStub();
   ensureChannelScript();
@@ -63,7 +66,10 @@ export function bootChannelTalk(profile?: ChannelBootProfile) {
 
 export function showChannelTalkMessenger() {
   if (!CHANNEL_PLUGIN_KEY) return;
-  window.ChannelIO?.("showMessenger");
+  bootChannelTalk(lastProfile);
+  window.setTimeout(() => {
+    window.ChannelIO?.("showMessenger");
+  }, 250);
 }
 
 export function shutdownChannelTalk() {
