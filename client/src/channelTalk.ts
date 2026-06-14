@@ -21,7 +21,6 @@ type ChannelBootProfile = {
 };
 
 let lastProfile: ChannelBootProfile | undefined;
-let channelScriptPromise: Promise<void> | null = null;
 let resolvedPluginKey = "";
 let publicConfigPromise: Promise<string> | null = null;
 
@@ -35,23 +34,28 @@ function ensureChannelStub() {
 }
 
 function ensureChannelScript() {
-  if (channelScriptPromise) return channelScriptPromise;
-  channelScriptPromise = new Promise<void>((resolve, reject) => {
-    if (window.ChannelIOInitialized) {
-      resolve();
-      return;
-    }
-    window.ChannelIOInitialized = true;
+  if (window.ChannelIOInitialized) return;
+  window.ChannelIOInitialized = true;
 
+  const injectScript = () => {
     const script = document.createElement("script");
     script.async = true;
     script.src = CHANNEL_SCRIPT_SRC;
     script.charset = "utf-8";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Channel Talk script load failed"));
+    const firstScript = document.getElementsByTagName("script")[0];
+    if (firstScript?.parentNode) {
+      firstScript.parentNode.insertBefore(script, firstScript);
+      return;
+    }
     document.head.appendChild(script);
-  });
-  return channelScriptPromise;
+  };
+
+  if (document.readyState === "complete") {
+    injectScript();
+  } else {
+    window.addEventListener("DOMContentLoaded", injectScript, { once: true });
+    window.addEventListener("load", injectScript, { once: true });
+  }
 }
 
 function fetchPublicConfigPluginKey(): Promise<string> {
@@ -99,22 +103,8 @@ export async function bootChannelTalk(profile?: ChannelBootProfile) {
   if (!pluginKey) return;
 
   ensureChannelStub();
-  await ensureChannelScript();
-
-  const memberId =
-    profile?.memberId != null && String(profile.memberId).trim()
-      ? String(profile.memberId).trim()
-      : undefined;
-
-  window.ChannelIO?.("boot", {
-    pluginKey,
-    memberId,
-    profile: {
-      name: profile?.name?.trim() || undefined,
-      email: profile?.email?.trim() || undefined,
-      mobileNumber: profile?.mobileNumber?.trim() || undefined,
-    },
-  });
+  ensureChannelScript();
+  window.ChannelIO?.("boot", { pluginKey });
 }
 
 export function showChannelTalkMessenger() {
@@ -122,7 +112,7 @@ export function showChannelTalkMessenger() {
     .then(() => {
       window.setTimeout(() => {
         window.ChannelIO?.("showMessenger");
-      }, 250);
+      }, 200);
     })
     .catch((error) => {
       console.error(error);
