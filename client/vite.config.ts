@@ -9,6 +9,7 @@ export default defineConfig({
       registerType: "autoUpdate",
       workbox: {
         navigateFallbackDenylist: [/^\/admin/, /^\/api/, /^\/health/],
+        importScripts: ["/push-sw.js"],
       },
       includeAssets: ["favicon.svg"],
       manifest: {

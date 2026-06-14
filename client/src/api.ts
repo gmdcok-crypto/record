@@ -490,6 +490,15 @@ export type MemberProfile = {
   phone: string | null;
 };
 
+export type PushSubscriptionInput = {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+  user_agent?: string;
+};
+
 export type TranscriptShareInfo = {
   token: string;
   expires_at: string;
@@ -524,6 +533,30 @@ export async function fetchMemberMe(): Promise<MemberProfile | null> {
   } catch {
     clearMemberSession();
     return null;
+  }
+}
+
+export async function registerPushSubscription(input: PushSubscriptionInput): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/member/auth/push-subscriptions`, {
+    method: "POST",
+    headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data));
+  }
+}
+
+export async function unregisterPushSubscription(input: PushSubscriptionInput): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/member/auth/push-subscriptions`, {
+    method: "DELETE",
+    headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data));
   }
 }
 

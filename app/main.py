@@ -137,9 +137,15 @@ def transcriber_frontend_version() -> dict[str, str | None]:
 
 
 @app.get("/api/public-config")
-def public_config() -> dict[str, str]:
+def public_config() -> dict[str, str | bool]:
     return {
         "channelTalkPluginKey": settings.channel_talk_plugin_key.strip(),
+        "webPushEnabled": bool(
+            settings.web_push_enabled
+            and settings.web_push_vapid_public_key.strip()
+            and settings.web_push_vapid_private_key.strip()
+        ),
+        "webPushVapidPublicKey": settings.web_push_vapid_public_key.strip(),
     }
 
 

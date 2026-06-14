@@ -18,6 +18,7 @@ from app.services.member_auth import (
     serialize_member,
     validate_email,
 )
+from app.services.web_push import deactivate_member_push_subscription, upsert_member_push_subscription
 
 router = APIRouter(prefix="/api/member/auth", tags=["member-auth"])
 logger = logging.getLogger(__name__)
@@ -39,6 +40,17 @@ class MemberAuthTokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     member: dict
+
+
+class PushSubscriptionKeys(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class PushSubscriptionRequest(BaseModel):
+    endpoint: str
+    keys: PushSubscriptionKeys
+    user_agent: str | None = None
 
 
 def _auth_error_to_http(exc: MemberAuthError) -> HTTPException:
@@ -99,6 +111,35 @@ def member_signup(body: MemberSignupRequest, db: Annotated[Session, Depends(get_
 @router.get("/me")
 def member_me(current: Annotated[Member, Depends(get_current_member)]) -> dict:
     return {"member": serialize_member(current)}
+
+
+@router.post("/push-subscriptions")
+def register_push_subscription(
+    body: PushSubscriptionRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current: Annotated[Member, Depends(get_current_member)],
+) -> dict:
+    if not body.endpoint.strip() or not body.keys.p256dh.strip() or not body.keys.auth.strip():
+        raise HTTPException(status_code=400, detail="유효한 푸시 구독 정보가 필요합니다.")
+    subscription = upsert_member_push_subscription(
+        db,
+        member=current,
+        endpoint=body.endpoint,
+        p256dh_key=body.keys.p256dh,
+        auth_key=body.keys.auth,
+        user_agent=body.user_agent,
+    )
+    return {"subscription_id": subscription.id, "registered": True}
+
+
+@router.delete("/push-subscriptions")
+def unregister_push_subscription(
+    body: PushSubscriptionRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current: Annotated[Member, Depends(get_current_member)],
+) -> dict:
+    deactivate_member_push_subscription(db, endpoint=body.endpoint, member=current)
+    return {"unregistered": True}
 
 
 @router.post("/login", response_model=MemberAuthTokenResponse)

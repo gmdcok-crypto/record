@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     channel_talk_admin_tag: str = "inquiry-alert"
     channel_talk_message_preview_limit: int = 120
     channel_talk_debounce_seconds: int = 60
+    web_push_enabled: bool = False
+    web_push_vapid_public_key: str = ""
+    web_push_vapid_private_key: str = ""
+    web_push_subject: str = "mailto:ops@example.com"
     # 0 = never expire (no exp claim). Set e.g. 10080 for 7 days.
     jwt_expire_minutes: int = 0
 

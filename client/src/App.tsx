@@ -44,8 +44,8 @@ import {
 } from "./transcriptEditor";
 import UploadBillingPanel from "./UploadBillingPanel";
 import SegmentPlaybackText from "./SegmentPlaybackText";
-import { bootChannelTalk, showChannelTalkMessenger, shutdownChannelTalk, channelTalkEnabled } from "./channelTalk";
 import { buildSegmentTimedWords, segmentContainsActiveWord } from "./playbackHighlight";
+import { enableWebPush, getNotificationPermissionState, postActiveMemberToServiceWorker } from "./webPush";
 import {
   attachPlaybackTimeListener,
   attachSegmentStopListener,
@@ -58,6 +58,7 @@ type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 type ClientTab = "upload" | "archive" | "edit";
 type UploadProjectMode = "existing" | "new";
 type EditableSegment = TranscriptSegment & { id: string };
+type PushPermissionState = NotificationPermission | "unsupported";
 
 const EDITABLE_JOB_STATUSES = new Set(["first_done", "client_editing"]);
 
@@ -319,6 +320,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ClientTab>("upload");
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
   const [memberName, setMemberName] = useState<string | null>(null);
+  const [memberProfile, setMemberProfile] = useState<MemberProfile | null>(null);
+  const [pushPermission, setPushPermission] = useState<PushPermissionState>("default");
+  const [enablingPush, setEnablingPush] = useState(false);
   const segmentEndRef = useRef<number | null>(null);
   const [playbackMs, setPlaybackMs] = useState(0);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
@@ -426,22 +430,17 @@ export default function App() {
     const member = await fetchMemberMe();
     if (member) {
       setMemberName(member.name);
+      setMemberProfile(member);
       setLoadingWorkspace(true);
       setAuthStatus("authenticated");
       setActiveTab("upload");
       window.setTimeout(() => {
-        void bootChannelTalk({
-          memberId: member.id,
-          name: member.name,
-          email: member.email,
-          mobileNumber: member.phone,
-        });
         void refreshWorkspace(true);
       }, 0);
       return member;
     }
-    shutdownChannelTalk();
     setMemberName(null);
+    setMemberProfile(null);
     setLoadingWorkspace(false);
     setAuthStatus("unauthenticated");
     return null;
@@ -449,24 +448,19 @@ export default function App() {
 
   const handleLoginSuccess = (member: MemberProfile) => {
     setMemberName(member.name);
+    setMemberProfile(member);
     setLoadingWorkspace(true);
     setAuthStatus("authenticated");
     setActiveTab("upload");
     window.setTimeout(() => {
-      void bootChannelTalk({
-        memberId: member.id,
-        name: member.name,
-        email: member.email,
-        mobileNumber: member.phone,
-      });
       void refreshWorkspace(true);
     }, 0);
   };
 
   const handleLogout = () => {
-    shutdownChannelTalk();
     clearMemberSession();
     setMemberName(null);
+    setMemberProfile(null);
     setAuthStatus("unauthenticated");
     setProjects([]);
     setArchive([]);
@@ -485,11 +479,62 @@ export default function App() {
     resetUploadUi();
   };
 
+  const refreshPushPermission = useCallback(async () => {
+    const permission = await getNotificationPermissionState();
+    setPushPermission(permission);
+  }, []);
+
+  const handleEnablePush = useCallback(async () => {
+    if (!memberProfile) return;
+    setEnablingPush(true);
+    try {
+      const result = await enableWebPush(memberProfile);
+      const permission = await getNotificationPermissionState();
+      setPushPermission(permission);
+      if (result === "enabled") {
+        showNotice("success", "웹푸시 알림이 활성화되었습니다.");
+      } else if (result === "denied") {
+        showNotice("error", "브라우저 알림 권한이 차단되어 있습니다.");
+      } else if (result === "disabled") {
+        showNotice("error", "서버 웹푸시 설정이 아직 준비되지 않았습니다.");
+      } else {
+        showNotice("error", "이 브라우저에서는 웹푸시를 지원하지 않습니다.");
+      }
+    } catch (err) {
+      showNotice("error", err instanceof Error ? err.message : "웹푸시 활성화 실패");
+    } finally {
+      setEnablingPush(false);
+    }
+  }, [memberProfile, showNotice]);
+
   useEffect(() => {
     checkHealth()
       .catch(() => undefined);
     void restoreSession();
+    void refreshPushPermission();
   }, []);
+
+  useEffect(() => {
+    if (!memberProfile) return;
+    void postActiveMemberToServiceWorker(memberProfile);
+  }, [memberProfile]);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return undefined;
+
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type !== "WEB_PUSH_NOTIFICATION_CLICK") return;
+      const jobId = event.data?.payload?.jobId;
+      if (typeof jobId === "string" && jobId.trim()) {
+        void loadJobById(jobId, { switchToEdit: true });
+      }
+    };
+
+    navigator.serviceWorker.addEventListener("message", handler);
+    return () => {
+      navigator.serviceWorker.removeEventListener("message", handler);
+    };
+  }, [projects]);
 
   useEffect(() => {
     if (authStatus !== "authenticated") return;
@@ -937,13 +982,14 @@ export default function App() {
             </h1>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {channelTalkEnabled() ? (
+            {pushPermission !== "granted" ? (
               <button
                 type="button"
-                onClick={showChannelTalkMessenger}
-                className="rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-sm font-medium text-cyan-200 transition hover:bg-cyan-500/20"
+                onClick={() => void handleEnablePush()}
+                disabled={enablingPush}
+                className="rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-sm font-medium text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
               >
-                상담톡
+                {enablingPush ? "알림 설정 중..." : "알림 받기"}
               </button>
             ) : null}
             <button
@@ -1489,18 +1535,9 @@ export default function App() {
                   />
                 </div>
 
-                {channelTalkEnabled() ? (
-                  <div className="flex flex-col gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm leading-6 text-amber-100/90">
-                      작업 수정 관련 내용은 관리자 문의를 이용해 주세요. 로그인, 결제, 일반 상담은 채널톡으로 연결됩니다.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={showChannelTalkMessenger}
-                      className="shrink-0 rounded-xl border border-amber-400/30 bg-slate-950/60 px-4 py-2 text-sm font-semibold text-amber-200 transition hover:bg-slate-900"
-                    >
-                      채널톡 상담
-                    </button>
+                {pushPermission !== "granted" ? (
+                  <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
+                    관리자 답변, PDF 전달, 상태 변경 알림을 받으려면 브라우저 알림을 허용해 주세요.
                   </div>
                 ) : null}
 

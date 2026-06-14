@@ -20,6 +20,7 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_job_assignment_timestamp.sql",
     SCRIPTS_DIR / "migrate_transcript_change_logs.sql",
     SCRIPTS_DIR / "migrate_transcriber_license.sql",
+    SCRIPTS_DIR / "migrate_member_push_subscriptions.sql",
 ]
 
 

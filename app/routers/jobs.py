@@ -72,11 +72,7 @@ from app.services.job_inquiries import (
     create_job_inquiry_message,
     list_job_inquiry_messages,
 )
-from app.services.inquiry_notifications import (
-    send_client_pdf_delivery_notification,
-    send_client_status_notification,
-    send_inquiry_notification,
-)
+from app.services.inquiry_notifications import send_inquiry_notification
 from app.services.r2 import (
     create_download_url,
     delete_object,
@@ -87,6 +83,7 @@ from app.services.r2 import (
     save_final_pdf,
     save_transcript_json,
 )
+from app.services.web_push import send_client_pdf_web_push, send_client_status_web_push
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -279,7 +276,7 @@ def _notify_client_status_change(db: Session, job: Job, *, note: str | None = No
     if member is None:
         return
     try:
-        send_client_status_notification(job=job, member=member, status=job.status, note=note)
+        send_client_status_web_push(db, member=member, job=job, note=note)
     except Exception:
         logger.exception("Failed to send client status notification for job %s", job.job_id)
 
@@ -289,7 +286,7 @@ def _notify_client_pdf_delivery(db: Session, job: Job, *, delivery_mode: str) ->
     if member is None:
         return
     try:
-        send_client_pdf_delivery_notification(job=job, member=member, delivery_mode=delivery_mode)
+        send_client_pdf_web_push(db, member=member, job=job, delivery_mode=delivery_mode)
     except Exception:
         logger.exception("Failed to send client PDF delivery notification for job %s", job.job_id)
 
@@ -557,6 +554,7 @@ def create_client_job_inquiry(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
         send_inquiry_notification(
+            db,
             job=job,
             thread_type=THREAD_CLIENT_ADMIN,
             sender_role="client",
@@ -602,6 +600,7 @@ def create_transcriber_job_inquiry(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
         send_inquiry_notification(
+            db,
             job=job,
             thread_type=THREAD_TRANSCRIBER_ADMIN,
             sender_role="transcriber",
@@ -648,6 +647,7 @@ def create_admin_job_inquiry(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
         send_inquiry_notification(
+            db,
             job=job,
             thread_type=thread_type,
             sender_role="admin",
@@ -938,7 +938,7 @@ def transcriber_deliver_draft(
         raise HTTPException(status_code=404, detail="Job not found")
     if job.assigned_transcriber_id != current.id:
         raise HTTPException(status_code=403, detail="배정된 작업만 초벌을 전달할 수 있습니다.")
-    if job.status not in TRANSCRIBER_DRAFT_STATUSES | {"review_waiting"}:
+    if job.status not in TRANSCRIBER_DRAFT_STATUSES | {"review_waiting", "first_done", "client_editing"}:
         raise HTTPException(status_code=409, detail="현재 상태에서는 초벌을 전달할 수 없습니다.")
 
     voice_key = get_voice_object_key(job_id)
@@ -1016,7 +1016,7 @@ def admin_deliver_draft(
     job = get_job_record(db, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.status not in TRANSCRIBER_DRAFT_STATUSES | {"review_waiting"}:
+    if job.status not in TRANSCRIBER_DRAFT_STATUSES | {"review_waiting", "first_done", "client_editing"}:
         raise HTTPException(status_code=409, detail="현재 상태에서는 초벌을 전달할 수 없습니다.")
 
     voice_key = get_voice_object_key(job_id)
