@@ -159,6 +159,7 @@ def serialize_project_summary(db: Session, project: Project, *, include_files: b
         "due_at": project.due_at.isoformat() if project.due_at else None,
         "memo": project.memo,
         "priority": project.priority,
+        "pdf_delivery_mode": project.pdf_delivery_mode,
         "status": compute_project_status(display_statuses),
         "file_count": len(jobs),
         "completed_count": completed_count,

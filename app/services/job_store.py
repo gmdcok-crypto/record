@@ -336,19 +336,28 @@ def mark_transcript_saved(db: Session, job: Job, transcript_key: str, transcript
     return job
 
 
-def mark_final_pdf_saved(db: Session, job: Job, pdf_key: str, filename: str) -> Job:
+def store_final_pdf(db: Session, job: Job, pdf_key: str, filename: str) -> Job:
     job.final_pdf_r2_key = pdf_key
     job.final_pdf_filename = filename
     job.final_pdf_generated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     if job.finalized_at is None:
         job.finalized_at = job.final_pdf_generated_at
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def mark_final_pdf_delivered(db: Session, job: Job) -> Job:
+    previous = job.status
+    if previous == "pdf_sent":
+        return job
     job.status = "pdf_sent"
     db.add(
         JobStatusLog(
             job_id=job.job_id,
-            from_status="final_done",
+            from_status=previous,
             to_status="pdf_sent",
-            change_note="최종 PDF 저장 및 다운로드 가능 상태 전환",
+            change_note="최종 PDF 의뢰인 전달",
             changed_by_transcriber_id=job.assigned_transcriber_id,
         )
     )
@@ -382,7 +391,8 @@ def serialize_job(db: Session, job: Job, *, transcript_json: dict, audio_url: st
             "id": visible_transcriber.id if visible_transcriber else None,
             "name": visible_transcriber.name if visible_transcriber else None,
         },
-        "final_pdf_ready": job.status == "pdf_sent",
+        "project_id": job.project_id,
+        "final_pdf_ready": bool(job.final_pdf_r2_key),
         "final_pdf_filename": job.final_pdf_filename,
         "has_inquiry": inquiry["has_inquiry"],
         "client_inquiry_status": inquiry["client_inquiry_status"],

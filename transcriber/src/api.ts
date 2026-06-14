@@ -26,6 +26,7 @@ export type TranscriptJson = {
 
 export type JobResponse = {
   job_id: string;
+  project_id?: string | null;
   voice_key: string;
   transcript_key: string;
   audio_url: string;
@@ -84,6 +85,7 @@ export type TranscriberProject = {
   title: string;
   client: { id: number | null; name: string };
   due_at: string | null;
+  pdf_delivery_mode?: string;
   status: string;
   file_count: number;
   completed_count: number;
@@ -538,6 +540,22 @@ export async function finalizeTranscriptPdf(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ transcript_json: transcript }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err));
+  }
+  return res.json();
+}
+
+export async function deliverTranscriptPdf(
+  jobId: string,
+  bundleProjectPdf: boolean,
+): Promise<{ status: string; project_id?: string | null; pdf_delivery_mode: string }> {
+  const res = await fetch(`${apiBase()}/api/jobs/transcriber/${jobId}/deliver-pdf`, {
+    method: "POST",
+    headers: { ...transcriberAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ bundle_project_pdf: bundleProjectPdf }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

@@ -6,6 +6,7 @@ import {
   createProject,
   createClientJobInquiry,
   createTranscriptShare,
+  downloadProjectFinalTranscriptPdf,
   downloadTranscriptPdf,
   downloadFinalTranscriptPdf,
   fetchJob,
@@ -295,7 +296,12 @@ export default function App() {
   const [selectedUploadProjectId, setSelectedUploadProjectId] = useState("");
   const [newProjectTitle, setNewProjectTitle] = useState("");
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
-  const [editContext, setEditContext] = useState<{ projectTitle: string; filename: string } | null>(null);
+  const [editContext, setEditContext] = useState<{
+    projectId?: string;
+    projectTitle: string;
+    filename: string;
+    pdfDeliveryMode?: string;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
@@ -397,7 +403,12 @@ export default function App() {
     for (const project of projectList) {
       const file = project.files?.find((item) => item.job_id === jobId);
       if (file) {
-        return { projectTitle: project.title, filename: file.filename };
+        return {
+          projectId: project.project_id,
+          projectTitle: project.title,
+          filename: file.filename,
+          pdfDeliveryMode: project.pdf_delivery_mode,
+        };
       }
     }
     return null;
@@ -630,7 +641,13 @@ export default function App() {
 
   const openArchiveJob = (item: JobArchiveItem, projectTitle?: string) => {
     if (projectTitle) {
-      setEditContext({ projectTitle, filename: item.filename });
+      const project = projects.find((entry) => entry.title === projectTitle && entry.files?.some((file) => file.job_id === item.job_id));
+      setEditContext({
+        projectId: project?.project_id,
+        projectTitle,
+        filename: item.filename,
+        pdfDeliveryMode: project?.pdf_delivery_mode,
+      });
     }
     if (isEditableArchiveStatus(item.status)) {
       setActiveTab("edit");
@@ -768,8 +785,13 @@ export default function App() {
     setDownloadingPdf(true);
     try {
       if (job.final_pdf_ready) {
-        await downloadFinalTranscriptPdf(job.job_id);
-        showNotice("success", "저장된 최종 PDF를 다운로드했습니다.");
+        if (editContext?.projectId && editContext?.pdfDeliveryMode === "bundle") {
+          await downloadProjectFinalTranscriptPdf(editContext.projectId);
+          showNotice("success", "저장된 프로젝트 통합 PDF를 다운로드했습니다.");
+        } else {
+          await downloadFinalTranscriptPdf(job.job_id);
+          showNotice("success", "저장된 최종 PDF를 다운로드했습니다.");
+        }
       } else {
         await downloadTranscriptPdf(job.job_id, currentTranscript);
         showNotice("success", "현재 문서 기준 PDF를 다운로드했습니다.");

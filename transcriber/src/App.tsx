@@ -4,6 +4,7 @@ import {
   clearTranscriberSession,
   createAdminEventsSource,
   createTranscriberJobInquiry,
+  deliverTranscriptPdf,
   downloadProjectFinalTranscriptPdf,
   downloadFinalTranscriptPdf,
   fetchAssignedProjects,
@@ -637,9 +638,10 @@ export default function App() {
     setSaving(true);
     try {
       await saveTranscript(job.job_id, currentTranscript, "finalize");
-      setJob({ ...job, transcript_json: currentTranscript });
+      await finalizeTranscriptPdf(job.job_id, currentTranscript);
+      setJob({ ...job, transcript_json: currentTranscript, final_pdf_ready: true, status: "final_done" });
       setChangeHistoryRefresh((value) => value + 1);
-      showNotice("success", "최종본이 저장되었습니다.");
+      showNotice("success", "최종본과 PDF가 함께 저장되었습니다.");
     } catch (err) {
       showNotice("error", err instanceof Error ? err.message : "확정 실패");
     } finally {
@@ -647,12 +649,15 @@ export default function App() {
     }
   };
 
-  const onDownloadStampedPdf = async () => {
+  const onDeliverPdf = async () => {
     if (!job) return;
     setDownloadingPdf(true);
     try {
-      await saveTranscript(job.job_id, currentTranscript, "pdf_finalize");
-      await finalizeTranscriptPdf(job.job_id, currentTranscript);
+      if (!job.final_pdf_ready) {
+        await saveTranscript(job.job_id, currentTranscript, "pdf_finalize");
+        await finalizeTranscriptPdf(job.job_id, currentTranscript);
+      }
+      await deliverTranscriptPdf(job.job_id, bundleProjectPdf);
       if (bundleProjectPdf && currentProject?.project_id) {
         await downloadProjectFinalTranscriptPdf(currentProject.project_id);
       } else {
@@ -660,9 +665,9 @@ export default function App() {
       }
       setJob({ ...job, transcript_json: currentTranscript, final_pdf_ready: true, status: "pdf_sent" });
       setChangeHistoryRefresh((value) => value + 1);
-      showNotice("success", "최종 PDF를 R2에 저장하고 다운로드했습니다.");
+      showNotice("success", bundleProjectPdf ? "통합본 PDF를 의뢰인에게 전달했습니다." : "개별 PDF를 의뢰인에게 전달했습니다.");
     } catch (err) {
-      showNotice("error", err instanceof Error ? err.message : "PDF 다운로드 실패");
+      showNotice("error", err instanceof Error ? err.message : "PDF 전달 실패");
     } finally {
       setDownloadingPdf(false);
     }
@@ -1001,11 +1006,11 @@ export default function App() {
                     </button>
                     <button
                       type="button"
-                      onClick={onDownloadStampedPdf}
+                      onClick={onDeliverPdf}
                       disabled={busy}
                       className="rounded-xl bg-slate-200 py-3 text-sm font-semibold text-slate-950 transition hover:bg-white disabled:opacity-50"
                     >
-                      {downloadingPdf ? "PDF 생성 중..." : "도장 날인 PDF"}
+                      {downloadingPdf ? "PDF 전달 중..." : "PDF 전달"}
                     </button>
                     <label className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-200">
                       <input

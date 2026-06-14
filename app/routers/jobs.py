@@ -36,10 +36,11 @@ from app.services.job_store import (
     list_client_jobs,
     list_transcribers,
     list_transcriber_jobs,
-    mark_final_pdf_saved,
+    mark_final_pdf_delivered,
     empty_transcript_json,
     mark_transcript_saved,
     serialize_job,
+    store_final_pdf,
     set_job_status,
     TRANSCRIBER_DRAFT_STATUSES,
     transcriber_can_view_job_transcript,
@@ -97,6 +98,10 @@ class JobStatusUpdateRequest(BaseModel):
 
 class ExportTranscriptPdfRequest(BaseModel):
     transcript_json: dict | None = None
+
+
+class TranscriberPdfDeliverRequest(BaseModel):
+    bundle_project_pdf: bool = False
 
 
 class JobAssignRequest(BaseModel):
@@ -205,6 +210,42 @@ def _share_response(share_token: str, expires_at: datetime) -> dict:
         "expires_at": expires_at.isoformat(),
         "expires_in_days": SHARE_EXPIRE_DAYS,
     }
+
+
+def _download_project_bundle_pdf(project_id: str, db: Session) -> Response:
+    project = get_project_record(db, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    jobs = list_project_jobs(db, project_id)
+    if not jobs:
+        raise HTTPException(status_code=404, detail="등록된 문서 없습니다.")
+
+    transcripts: list[dict] = []
+    for job in jobs:
+        transcript = get_transcript_json(job.job_id)
+        if transcript:
+            title = job.original_filename or job.title or transcript.get("filename") or f"문서 {len(transcripts) + 1}"
+            transcript = {**transcript, "filename": title}
+            transcripts.append(transcript)
+    if not transcripts:
+        raise HTTPException(status_code=404, detail="등록된 문서 없습니다.")
+
+    try:
+        bundle_bytes, bundle_name = build_project_bundle_pdf(project.title or project.project_id, transcripts)
+        encoded = quote(bundle_name)
+        return Response(
+            content=bundle_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename=\"project_bundle.pdf\"; filename*=UTF-8''{encoded}",
+                "Cache-Control": "no-cache",
+            },
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Project PDF bundle failed: {exc}") from exc
 
 
 def _get_valid_share_or_404(db: Session, token: str):
@@ -1122,8 +1163,8 @@ def finalize_transcript_pdf(
     try:
         pdf_bytes, filename = build_transcript_pdf(transcript)
         pdf_key, stored_filename = save_final_pdf(job_id, pdf_bytes, filename)
-        mark_final_pdf_saved(db, job, pdf_key, stored_filename)
-        publish_admin_event("job_updated", {"job_id": job_id, "status": "pdf_sent"})
+        store_final_pdf(db, job, pdf_key, stored_filename)
+        publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
@@ -1131,7 +1172,7 @@ def finalize_transcript_pdf(
 
     return {
         "job_id": job_id,
-        "status": "pdf_sent",
+        "status": job.status,
         "final_pdf_key": pdf_key,
         "filename": stored_filename,
         "download_url": f"/api/jobs/{job_id}/transcript.pdf/final",
@@ -1178,40 +1219,64 @@ def download_transcriber_project_final_pdf_bundle(
     project = get_project_record(db, project_id)
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
-
-    jobs = [
-        job
-        for job in list_project_jobs(db, project_id)
-        if job.assigned_transcriber_id == current.id
-    ]
+    jobs = [job for job in list_project_jobs(db, project_id) if job.assigned_transcriber_id == current.id]
     if not jobs:
         raise HTTPException(status_code=404, detail="등록된 문서 없습니다.")
+    return _download_project_bundle_pdf(project_id, db)
 
-    transcripts: list[dict] = []
-    for job in jobs:
-        transcript = get_transcript_json(job.job_id)
-        if transcript:
-            title = job.original_filename or job.title or transcript.get("filename") or f"문서 {len(transcripts) + 1}"
-            transcript = {**transcript, "filename": title}
-            transcripts.append(transcript)
-    if not transcripts:
-        raise HTTPException(status_code=404, detail="등록된 문서 없습니다.")
 
-    try:
-        bundle_bytes, bundle_name = build_project_bundle_pdf(project.title or project.project_id, transcripts)
-        encoded = quote(bundle_name)
-        return Response(
-            content=bundle_bytes,
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f"attachment; filename=\"project_bundle.pdf\"; filename*=UTF-8''{encoded}",
-                "Cache-Control": "no-cache",
-            },
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Project PDF bundle failed: {exc}") from exc
+@router.get("/share/project/{project_id}/transcript.pdf/final")
+def download_member_project_final_pdf_bundle(
+    project_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    member: Annotated[Member, Depends(get_current_member)],
+) -> Response:
+    project = get_project_record(db, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    client = get_or_create_client_for_member(db, member)
+    if project.client_id != client.id:
+        raise HTTPException(status_code=403, detail="이 프로젝트에 접근할 수 없습니다.")
+    return _download_project_bundle_pdf(project_id, db)
+
+
+@router.post("/transcriber/{job_id}/deliver-pdf")
+def transcriber_deliver_pdf(
+    job_id: str,
+    body: TranscriberPdfDeliverRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current: Annotated[Transcriber, Depends(get_current_transcriber)],
+) -> dict:
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.assigned_transcriber_id != current.id:
+        raise HTTPException(status_code=403, detail="배정된 작업만 PDF 전달할 수 있습니다.")
+    if not job.final_pdf_r2_key:
+        raise HTTPException(status_code=409, detail="먼저 최종본 확정으로 PDF를 저장해 주세요.")
+
+    if body.bundle_project_pdf:
+        if not job.project_id:
+            raise HTTPException(status_code=409, detail="프로젝트 통합본은 프로젝트에 속한 작업에서만 전달할 수 있습니다.")
+        project = get_project_record(db, job.project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        project.pdf_delivery_mode = "bundle"
+        db.commit()
+    elif job.project_id:
+        project = get_project_record(db, job.project_id)
+        if project is not None:
+            project.pdf_delivery_mode = "individual"
+            db.commit()
+
+    mark_final_pdf_delivered(db, job)
+    publish_admin_event("job_updated", {"job_id": job_id, "status": "pdf_sent"})
+    return {
+        "job_id": job_id,
+        "status": "pdf_sent",
+        "project_id": job.project_id,
+        "pdf_delivery_mode": "bundle" if body.bundle_project_pdf else "individual",
+    }
 
 
 @router.get("/share/{token}/transcript.pdf/final")
@@ -1222,6 +1287,13 @@ def download_shared_final_transcript_pdf(
     share = _get_valid_share_or_404(db, token)
     if not share.allow_pdf_download:
         raise HTTPException(status_code=403, detail="PDF 다운로드가 허용되지 않았습니다.")
+    job = get_job_record(db, share.job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.project_id:
+        project = get_project_record(db, job.project_id)
+        if project is not None and project.pdf_delivery_mode == "bundle":
+            return _download_project_bundle_pdf(job.project_id, db)
     return download_final_transcript_pdf(share.job_id, db)
 
 

@@ -38,6 +38,7 @@ export type UploadResponse = {
 
 export type JobResponse = {
   job_id: string;
+  project_id?: string | null;
   voice_key: string;
   transcript_key: string;
   audio_url: string;
@@ -150,6 +151,7 @@ export type ProjectFile = {
   due_at: string | null;
   assignee: string | null;
   pdf_ready: boolean;
+  final_pdf_filename?: string | null;
   has_inquiry?: boolean;
   client_inquiry_status?: "reply_pending" | "reply_arrived" | null;
 };
@@ -157,6 +159,7 @@ export type ProjectFile = {
 export type ProjectSummary = {
   project_id: string;
   title: string;
+  pdf_delivery_mode?: string;
   status: string;
   file_count: number;
   completed_count: number;
@@ -413,6 +416,27 @@ export async function downloadFinalTranscriptPdf(jobId: string): Promise<void> {
   const filename = parseFilenameFromDisposition(
     res.headers.get("Content-Disposition"),
     "final_transcript.pdf",
+  );
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function downloadProjectFinalTranscriptPdf(projectId: string): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/share/project/${encodeURIComponent(projectId)}/transcript.pdf/final`, {
+    headers: memberAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err));
+  }
+  const blob = await res.blob();
+  const filename = parseFilenameFromDisposition(
+    res.headers.get("Content-Disposition"),
+    "project_bundle.pdf",
   );
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
