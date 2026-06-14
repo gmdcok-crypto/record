@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -100,7 +101,38 @@ def create_project_for_upload(
 
 
 def get_project_record(db: Session, project_id: str) -> Project | None:
-    return db.scalar(select(Project).where(Project.project_id == project_id))
+    try:
+        return db.scalar(select(Project).where(Project.project_id == project_id))
+    except (OperationalError, ProgrammingError) as exc:
+        message = str(exc).lower()
+        if "pdf_delivery_mode" not in message:
+            raise
+        row = db.execute(
+            select(
+                Project.project_id,
+                Project.client_id,
+                Project.title,
+                Project.due_at,
+                Project.memo,
+                Project.priority,
+                Project.created_at,
+                Project.updated_at,
+            ).where(Project.project_id == project_id)
+        ).mappings().first()
+        if row is None:
+            return None
+        project = Project(
+            project_id=row["project_id"],
+            client_id=row["client_id"],
+            title=row["title"],
+            due_at=row["due_at"],
+            memo=row["memo"],
+            priority=row["priority"],
+        )
+        project.created_at = row["created_at"]
+        project.updated_at = row["updated_at"]
+        project.pdf_delivery_mode = "individual"
+        return project
 
 
 def list_project_jobs(db: Session, project_id: str) -> list[Job]:
@@ -138,6 +170,7 @@ def serialize_project_summary(db: Session, project: Project, *, include_files: b
     jobs = list_project_jobs(db, project.project_id)
     display_statuses = [_display_status_for_job(db, job) for job in jobs]
     completed_count = sum(1 for status in display_statuses if status in FINAL_JOB_STATUSES)
+    pdf_delivery_mode = getattr(project, "pdf_delivery_mode", "individual") or "individual"
     assignees = {
         transcriber.name
         for job in jobs
@@ -159,7 +192,7 @@ def serialize_project_summary(db: Session, project: Project, *, include_files: b
         "due_at": project.due_at.isoformat() if project.due_at else None,
         "memo": project.memo,
         "priority": project.priority,
-        "pdf_delivery_mode": project.pdf_delivery_mode,
+        "pdf_delivery_mode": pdf_delivery_mode,
         "status": compute_project_status(display_statuses),
         "file_count": len(jobs),
         "completed_count": completed_count,
