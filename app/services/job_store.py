@@ -24,6 +24,7 @@ DEFAULT_TRANSCRIBER_CODE = "TR-001"
 DEFAULT_CLIENT_CODE = "CLIENT-DEFAULT"
 DEFAULT_CLIENT_NAME = "일반 의뢰인"
 ACTIVE_JOB_STATUSES = {"assigned", "working", "first_done", "client_editing", "review_waiting"}
+TRANSCRIBER_VISIBLE_JOB_STATUSES = ACTIVE_JOB_STATUSES | {"final_done", "pdf_sent"}
 CLIENT_VISIBLE_TRANSCRIPT_STATUSES = frozenset(
     {"first_done", "client_editing", "review_waiting", "final_done", "pdf_sent"}
 )
@@ -425,7 +426,7 @@ def list_transcriber_jobs(db: Session, transcriber_code: str = DEFAULT_TRANSCRIB
         return []
     rows = db.scalars(
         select(Job)
-        .where(Job.assigned_transcriber_id == transcriber.id, Job.status.in_(ACTIVE_JOB_STATUSES))
+        .where(Job.assigned_transcriber_id == transcriber.id, Job.status.in_(TRANSCRIBER_VISIBLE_JOB_STATUSES))
         .order_by(Job.updated_at.desc())
     ).all()
     result: list[dict] = []

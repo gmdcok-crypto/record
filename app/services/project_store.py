@@ -217,7 +217,12 @@ def resolve_upload_project(
 
 def list_transcriber_projects(db: Session, transcriber_code: str) -> list[dict]:
     from app.models.admin_models import Transcriber
-    from app.services.job_store import ACTIVE_JOB_STATUSES, DEFAULT_CLIENT_NAME, _display_status_for_job, _has_manual_assignment
+    from app.services.job_store import (
+        DEFAULT_CLIENT_NAME,
+        TRANSCRIBER_VISIBLE_JOB_STATUSES,
+        _display_status_for_job,
+        _has_manual_assignment,
+    )
 
     transcriber = db.scalar(select(Transcriber).where(Transcriber.transcriber_code == transcriber_code))
     if transcriber is None:
@@ -225,7 +230,7 @@ def list_transcriber_projects(db: Session, transcriber_code: str) -> list[dict]:
 
     rows = db.scalars(
         select(Job)
-        .where(Job.assigned_transcriber_id == transcriber.id, Job.status.in_(ACTIVE_JOB_STATUSES))
+        .where(Job.assigned_transcriber_id == transcriber.id, Job.status.in_(TRANSCRIBER_VISIBLE_JOB_STATUSES))
         .order_by(Job.updated_at.desc())
     ).all()
 
