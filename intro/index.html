@@ -466,8 +466,11 @@
     <script src="./signup-modal.js?v=5"></script>
     <script>
       (function () {
+        var channelPluginKey = "";
+
         function ensureChannelBoot(pluginKey) {
           if (!pluginKey) return;
+          channelPluginKey = pluginKey;
           (function () {
             var w = window;
             if (w.ChannelIO) {
@@ -506,7 +509,7 @@
           });
         }
 
-        fetch("/api/public-config")
+        var configPromise = fetch("/api/public-config")
           .then(function (response) {
             if (!response.ok) throw new Error("public-config fetch failed");
             return response.json();
@@ -521,9 +524,20 @@
         var channelTalkButton = document.getElementById("channel-talk-btn");
         if (channelTalkButton) {
           channelTalkButton.addEventListener("click", function () {
-            if (window.ChannelIO) {
-              window.ChannelIO("showMessenger");
-            }
+            configPromise
+              .then(function (config) {
+                var pluginKey = (config && config.channelTalkPluginKey) || channelPluginKey;
+                if (!pluginKey) return;
+                ensureChannelBoot(pluginKey);
+                window.setTimeout(function () {
+                  if (window.ChannelIO) {
+                    window.ChannelIO("showMessenger");
+                  }
+                }, 200);
+              })
+              .catch(function () {
+                return undefined;
+              });
           });
         }
       })();
