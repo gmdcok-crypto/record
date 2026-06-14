@@ -166,8 +166,9 @@ function mapClientJobStatus(status: string): string {
     case "review_waiting":
       return "속기사검토";
     case "final_done":
-    case "pdf_sent":
       return "완료";
+    case "pdf_sent":
+      return "PDF 수령";
     case "cancelled":
       return "취소됨";
     default:
@@ -194,11 +195,15 @@ function archiveStatusStyle(status: string): string {
 }
 
 function isEditableArchiveStatus(status: string): boolean {
-  return EDITABLE_JOB_STATUSES.has(status);
+  return EDITABLE_JOB_STATUSES.has(status) || status === "pdf_sent";
 }
 
 function jobWorkflowStatus(job: { status?: string; workflow_status?: string } | null | undefined): string {
   return job?.workflow_status ?? job?.status ?? "";
+}
+
+function isPdfReceivedStatus(status: string): boolean {
+  return status === "pdf_sent";
 }
 
 function mapProjectStatus(status: string): string {
@@ -336,6 +341,8 @@ export default function App() {
     [job, segments, speakerLabels],
   );
   const transcriptTokens = useMemo(() => job?.transcript_json?.tokens ?? [], [job?.transcript_json?.tokens]);
+  const currentWorkflowStatus = useMemo(() => jobWorkflowStatus(job), [job]);
+  const pdfReceived = useMemo(() => isPdfReceivedStatus(currentWorkflowStatus), [currentWorkflowStatus]);
   const currentTitle = useMemo(
     () => job?.title || job?.transcript_json.filename || selectedFiles[0]?.name || "새 녹취 작업",
     [job, selectedFiles],
@@ -1338,13 +1345,19 @@ export default function App() {
               )}
             </div>
 
-            {job && !isEditableArchiveStatus(jobWorkflowStatus(job)) ? (
+            {job && !isEditableArchiveStatus(currentWorkflowStatus) ? (
               <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-5 py-10 text-center text-sm text-slate-400">
-                {jobWorkflowStatus(job) === "assigned" || jobWorkflowStatus(job) === "working" ? (
+                {currentWorkflowStatus === "assigned" || currentWorkflowStatus === "working" ? (
                   <>
                     속기사가 초벌 작업 중입니다.
                     <br />
                     속기사가 의뢰인 검토요청을 보내면 이 화면에서 검토·수정할 수 있습니다.
+                  </>
+                ) : currentWorkflowStatus === "pdf_sent" ? (
+                  <>
+                    PDF가 전달된 문서입니다.
+                    <br />
+                    아래에서 내용을 확인하고 PDF를 다운로드할 수 있습니다.
                   </>
                 ) : (
                   <>현재 상태에서는 편집할 수 없습니다. 보관함에서 의뢰인 검토 파일을 선택해 주세요.</>
@@ -1371,7 +1384,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setSpeakerSettingsOpen(true)}
-                      disabled={busy}
+                      disabled={busy || pdfReceived}
                       className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
                     >
                       화자 설정
@@ -1401,7 +1414,7 @@ export default function App() {
                         >
                           <div
                             role="button"
-                            tabIndex={busy || !speakerIds.length ? -1 : 0}
+                            tabIndex={busy || pdfReceived || !speakerIds.length ? -1 : 0}
                             onClick={() => openAddSegmentAfter(index)}
                             onKeyDown={(event) => {
                               if (event.key === "Enter" || event.key === " ") {
@@ -1411,7 +1424,7 @@ export default function App() {
                             }}
                             title="클릭하여 이 대화 다음에 새 대화 추가"
                             className={`mb-1.5 flex w-full min-w-0 items-center gap-2 rounded-lg border border-transparent px-1 py-0.5 text-left transition ${
-                              busy || !speakerIds.length
+                              busy || pdfReceived || !speakerIds.length
                                 ? "cursor-not-allowed opacity-50"
                                 : "cursor-pointer hover:border-cyan-500/30 hover:bg-cyan-500/10"
                             }`}
@@ -1421,6 +1434,7 @@ export default function App() {
                               onClick={(event) => event.stopPropagation()}
                               onMouseDown={(event) => event.stopPropagation()}
                               onChange={(e) => updateSegment(index, { speaker: e.target.value })}
+                              disabled={pdfReceived}
                               className="max-w-[9rem] shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-semibold text-slate-100 outline-none transition focus:border-blue-500"
                             >
                               {speakerIds.map((id) => (
@@ -1442,7 +1456,7 @@ export default function App() {
                             tokens={transcriptTokens}
                             playbackMs={playbackMs}
                             isAudioPlaying={isAudioPlaying}
-                            disabled={busy}
+                            disabled={busy || pdfReceived}
                             placeholder="한 번 클릭: 재생 · 더블클릭: 수정"
                             onChange={(text) => updateSegment(index, { text })}
                             onPlayRequest={() => playSegment(index, segment.start_ms)}
@@ -1491,11 +1505,17 @@ export default function App() {
                   </div>
                 ) : null}
 
+                {pdfReceived ? (
+                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+                    의뢰인에게 PDF가 전달된 상태입니다. 이 화면에서는 내용을 확인하고 PDF만 다운로드할 수 있습니다.
+                  </div>
+                ) : null}
+
                 <div className="grid gap-3 sm:grid-cols-5">
                   <button
                     type="button"
                     onClick={onSaveDraft}
-                    disabled={busy}
+                    disabled={busy || pdfReceived}
                     className="rounded-xl border border-slate-700 bg-slate-950 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
                   >
                     저장
@@ -1503,7 +1523,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={onSubmitForReview}
-                    disabled={busy}
+                    disabled={busy || pdfReceived}
                     className="rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
                   >
                     속기사검토 요청
@@ -1511,7 +1531,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={onCreateShareLink}
-                    disabled={busy || creatingShare}
+                    disabled={busy || creatingShare || pdfReceived}
                     className="rounded-xl border border-cyan-500/40 bg-cyan-500/10 py-3 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
                   >
                     {creatingShare ? "링크 생성 중..." : "공유 링크 만들기"}
