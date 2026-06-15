@@ -5,8 +5,6 @@ type PublicConfigResponse = {
   webPushVapidPublicKey?: string;
 };
 
-const PUSH_SW_PATH = "/push-sw.js";
-
 function base64UrlToUint8Array(base64String: string): Uint8Array {
   const cleaned = base64String.trim().replace(/^=+/, "").replace(/=+$/, "");
   const padding = "=".repeat((4 - (cleaned.length % 4)) % 4);
@@ -29,7 +27,9 @@ export async function fetchWebPushConfig(): Promise<{ enabled: boolean; vapidPub
 
 async function getPushRegistration(): Promise<ServiceWorkerRegistration | null> {
   if (!("serviceWorker" in navigator)) return null;
-  return navigator.serviceWorker.register(PUSH_SW_PATH);
+  const existing = await navigator.serviceWorker.getRegistration();
+  if (existing) return existing;
+  return navigator.serviceWorker.ready.catch(() => null);
 }
 
 export async function getNotificationPermissionState(): Promise<NotificationPermission | "unsupported"> {
@@ -89,7 +89,7 @@ export async function disableWebPush(): Promise<void> {
 }
 
 export async function postActiveMemberToServiceWorker(member: MemberProfile): Promise<void> {
-  const registration = await navigator.serviceWorker.getRegistration(PUSH_SW_PATH);
+  const registration = await navigator.serviceWorker.getRegistration();
   registration?.active?.postMessage({
     type: "SET_ACTIVE_MEMBER",
     payload: {
