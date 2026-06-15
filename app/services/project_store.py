@@ -1,12 +1,10 @@
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from sqlalchemy.exc import OperationalError, ProgrammingError
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.models.admin_models import Client, Job, Member, Project, Transcriber
-from app.services.database_reset import _run_sql_file
 from app.services.id_factory import generate_project_id
 from app.services.job_store import (
     DEFAULT_CLIENT_NAME,
@@ -21,8 +19,6 @@ from app.services.job_store import (
 FINAL_JOB_STATUSES = frozenset({"final_done", "pdf_sent"})
 WAITING_JOB_STATUSES = frozenset({"uploaded", "waiting_assignment"})
 WORKING_JOB_STATUSES = frozenset({"assigned", "working", "client_editing", "review_waiting"})
-SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
-PROJECT_PDF_DELIVERY_MODE_SQL = SCRIPTS_DIR / "migrate_project_pdf_delivery_mode.sql"
 
 
 class ProjectAccessError(ValueError):
@@ -45,6 +41,32 @@ def compute_project_status(display_statuses: list[str]) -> str:
 
 def _project_due_default() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=24)
+
+
+def _ensure_project_pdf_delivery_mode_column(db: Session) -> None:
+    bind = db.get_bind()
+    db.rollback()
+    with bind.begin() as conn:
+        exists = conn.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'projects'
+                  AND COLUMN_NAME = 'pdf_delivery_mode'
+                LIMIT 1
+                """
+            )
+        ).first()
+        if exists:
+            return
+        conn.execute(
+            text(
+                "ALTER TABLE projects "
+                "ADD COLUMN pdf_delivery_mode VARCHAR(20) NOT NULL DEFAULT 'individual'"
+            )
+        )
 
 
 def create_project(
@@ -75,7 +97,7 @@ def create_project(
             message = str(exc).lower()
             if attempt == 1 or "pdf_delivery_mode" not in message:
                 raise
-            _run_sql_file(db.get_bind(), PROJECT_PDF_DELIVERY_MODE_SQL)
+            _ensure_project_pdf_delivery_mode_column(db)
     raise RuntimeError("Failed to create project")
 
 
