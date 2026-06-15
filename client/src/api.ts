@@ -116,6 +116,16 @@ function parseFilenameFromDisposition(header: string | null, fallback: string): 
   return plainMatch?.[1] || fallback;
 }
 
+function normalizeNetworkError(error: unknown, fallback = "서버 연결 오류"): Error {
+  if (error instanceof Error) {
+    if (/failed to fetch|networkerror|load failed/i.test(error.message)) {
+      return new Error(fallback);
+    }
+    return error;
+  }
+  return new Error(fallback);
+}
+
 async function fetchWithRetry(input: string, init?: RequestInit, retries = 1): Promise<Response> {
   let lastError: unknown;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
@@ -127,7 +137,7 @@ async function fetchWithRetry(input: string, init?: RequestInit, retries = 1): P
       await new Promise((resolve) => window.setTimeout(resolve, 400));
     }
   }
-  throw lastError instanceof Error ? lastError : new Error("서버 연결 오류");
+  throw normalizeNetworkError(lastError);
 }
 
 export function resolveUrl(path: string): string {
@@ -192,11 +202,15 @@ export async function fetchProjects(includeFiles = true): Promise<ProjectSummary
 }
 
 export async function createProject(title: string, memo?: string): Promise<ProjectSummary> {
-  const res = await fetch(`${apiBase()}/api/projects`, {
-    method: "POST",
-    headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
-    body: JSON.stringify({ title, memo }),
-  });
+  const res = await fetchWithRetry(
+    `${apiBase()}/api/projects`,
+    {
+      method: "POST",
+      headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ title, memo }),
+    },
+    1,
+  );
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(parseErrorDetail(data));

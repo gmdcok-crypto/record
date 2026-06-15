@@ -400,6 +400,7 @@ export default function App() {
       if (!suppressError) {
         showNotice("error", err instanceof Error ? err.message : "보관함을 불러오지 못했습니다.");
       }
+      throw err;
     } finally {
       if (showLoading) setLoadingWorkspace(false);
     }
@@ -729,7 +730,11 @@ export default function App() {
       setJob(null);
       setSegments([]);
       setSpeakerLabels({});
-      await refreshWorkspace();
+      try {
+        await refreshWorkspace();
+      } catch {
+        showNotice("info", "파일 업로드는 완료되었지만 보관함 새로고침은 잠시 후 다시 시도합니다.");
+      }
     } catch (err) {
       const failureMessage = err instanceof Error ? err.message : "업로드 실패";
       if (failureMessage.includes("이미 업로드된 파일입니다")) {
