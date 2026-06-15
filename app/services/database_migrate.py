@@ -3,7 +3,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from app.services.database_reset import _run_sql_file
 
@@ -116,7 +116,7 @@ def run_sql_migration(engine: Engine, sql_path: Path) -> None:
         return
     try:
         _run_sql_file(engine, sql_path)
-    except ProgrammingError as exc:
+    except (ProgrammingError, OperationalError) as exc:
         message = str(exc)
         if _run_railway_safe_migration(engine, sql_path, message):
             return
