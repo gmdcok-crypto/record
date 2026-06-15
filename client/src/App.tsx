@@ -45,7 +45,13 @@ import {
 import UploadBillingPanel from "./UploadBillingPanel";
 import SegmentPlaybackText from "./SegmentPlaybackText";
 import { buildSegmentTimedWords, segmentContainsActiveWord } from "./playbackHighlight";
-import { enableWebPush, getNotificationPermissionState, postActiveMemberToServiceWorker } from "./webPush";
+import {
+  enableWebPush,
+  getNotificationPermissionState,
+  hasRegisteredPushSubscription,
+  postActiveMemberToServiceWorker,
+  syncWebPushRegistration,
+} from "./webPush";
 import {
   attachPlaybackTimeListener,
   attachSegmentStopListener,
@@ -322,6 +328,7 @@ export default function App() {
   const [memberName, setMemberName] = useState<string | null>(null);
   const [memberProfile, setMemberProfile] = useState<MemberProfile | null>(null);
   const [pushPermission, setPushPermission] = useState<PushPermissionState>("default");
+  const [pushRegistered, setPushRegistered] = useState(false);
   const [enablingPush, setEnablingPush] = useState(false);
   const segmentEndRef = useRef<number | null>(null);
   const [playbackMs, setPlaybackMs] = useState(0);
@@ -482,6 +489,7 @@ export default function App() {
   const refreshPushPermission = useCallback(async () => {
     const permission = await getNotificationPermissionState();
     setPushPermission(permission);
+    setPushRegistered(await hasRegisteredPushSubscription());
   }, []);
 
   const handleEnablePush = useCallback(async () => {
@@ -491,6 +499,7 @@ export default function App() {
       const result = await enableWebPush(memberProfile);
       const permission = await getNotificationPermissionState();
       setPushPermission(permission);
+      setPushRegistered(await hasRegisteredPushSubscription());
       if (result === "enabled") {
         showNotice("success", "웹푸시 알림이 활성화되었습니다.");
       } else if (result === "denied") {
@@ -517,6 +526,13 @@ export default function App() {
   useEffect(() => {
     if (!memberProfile) return;
     void postActiveMemberToServiceWorker(memberProfile);
+    void syncWebPushRegistration(memberProfile)
+      .then((registered) => {
+        if (registered) setPushRegistered(true);
+      })
+      .catch(() => {
+        setPushRegistered(false);
+      });
   }, [memberProfile]);
 
   useEffect(() => {
@@ -982,7 +998,7 @@ export default function App() {
             </h1>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {pushPermission !== "granted" ? (
+            {(!pushRegistered || pushPermission !== "granted") ? (
               <button
                 type="button"
                 onClick={() => void handleEnablePush()}
@@ -1535,7 +1551,7 @@ export default function App() {
                   />
                 </div>
 
-                {pushPermission !== "granted" ? (
+                {(!pushRegistered || pushPermission !== "granted") ? (
                   <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
                     관리자 답변, PDF 전달, 상태 변경 알림을 받으려면 브라우저 알림을 허용해 주세요.
                   </div>

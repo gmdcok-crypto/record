@@ -6,6 +6,7 @@ from typing import Any
 
 from pywebpush import WebPushException, webpush
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -30,6 +31,12 @@ def web_push_public_config() -> dict[str, Any]:
     }
 
 
+def _ensure_member_push_subscription_table(db: Session) -> None:
+    bind = db.get_bind()
+    db.rollback()
+    MemberPushSubscription.__table__.create(bind=bind, checkfirst=True)
+
+
 def upsert_member_push_subscription(
     db: Session,
     *,
@@ -40,45 +47,66 @@ def upsert_member_push_subscription(
     user_agent: str | None = None,
 ) -> MemberPushSubscription:
     normalized_endpoint = endpoint.strip()
-    row = db.scalar(select(MemberPushSubscription).where(MemberPushSubscription.endpoint == normalized_endpoint))
-    if row is None:
-        row = MemberPushSubscription(
-            member_id=member.id,
-            endpoint=normalized_endpoint,
-            p256dh_key=p256dh_key.strip(),
-            auth_key=auth_key.strip(),
-            user_agent=(user_agent or "").strip() or None,
-            is_active=1,
-        )
-        db.add(row)
-    else:
-        row.member_id = member.id
-        row.p256dh_key = p256dh_key.strip()
-        row.auth_key = auth_key.strip()
-        row.user_agent = (user_agent or "").strip() or None
-        row.is_active = 1
-    db.commit()
-    db.refresh(row)
-    return row
+    for attempt in range(2):
+        try:
+            row = db.scalar(select(MemberPushSubscription).where(MemberPushSubscription.endpoint == normalized_endpoint))
+            if row is None:
+                row = MemberPushSubscription(
+                    member_id=member.id,
+                    endpoint=normalized_endpoint,
+                    p256dh_key=p256dh_key.strip(),
+                    auth_key=auth_key.strip(),
+                    user_agent=(user_agent or "").strip() or None,
+                    is_active=1,
+                )
+                db.add(row)
+            else:
+                row.member_id = member.id
+                row.p256dh_key = p256dh_key.strip()
+                row.auth_key = auth_key.strip()
+                row.user_agent = (user_agent or "").strip() or None
+                row.is_active = 1
+            db.commit()
+            db.refresh(row)
+            return row
+        except (OperationalError, ProgrammingError):
+            if attempt == 1:
+                raise
+            _ensure_member_push_subscription_table(db)
+    raise RuntimeError("Failed to upsert member push subscription")
 
 
 def deactivate_member_push_subscription(db: Session, *, endpoint: str, member: Member | None = None) -> None:
     normalized_endpoint = endpoint.strip()
-    row = db.scalar(select(MemberPushSubscription).where(MemberPushSubscription.endpoint == normalized_endpoint))
-    if row is None:
-        return
-    if member is not None and row.member_id != member.id:
-        return
-    row.is_active = 0
-    db.commit()
+    for attempt in range(2):
+        try:
+            row = db.scalar(select(MemberPushSubscription).where(MemberPushSubscription.endpoint == normalized_endpoint))
+            if row is None:
+                return
+            if member is not None and row.member_id != member.id:
+                return
+            row.is_active = 0
+            db.commit()
+            return
+        except (OperationalError, ProgrammingError):
+            if attempt == 1:
+                raise
+            _ensure_member_push_subscription_table(db)
 
 
 def list_member_push_subscriptions(db: Session, *, member: Member) -> list[MemberPushSubscription]:
-    return db.scalars(
-        select(MemberPushSubscription)
-        .where(MemberPushSubscription.member_id == member.id, MemberPushSubscription.is_active == 1)
-        .order_by(MemberPushSubscription.updated_at.desc(), MemberPushSubscription.id.desc())
-    ).all()
+    for attempt in range(2):
+        try:
+            return db.scalars(
+                select(MemberPushSubscription)
+                .where(MemberPushSubscription.member_id == member.id, MemberPushSubscription.is_active == 1)
+                .order_by(MemberPushSubscription.updated_at.desc(), MemberPushSubscription.id.desc())
+            ).all()
+        except (OperationalError, ProgrammingError):
+            if attempt == 1:
+                raise
+            _ensure_member_push_subscription_table(db)
+    return []
 
 
 def _payload(

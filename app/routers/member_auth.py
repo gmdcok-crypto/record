@@ -121,14 +121,18 @@ def register_push_subscription(
 ) -> dict:
     if not body.endpoint.strip() or not body.keys.p256dh.strip() or not body.keys.auth.strip():
         raise HTTPException(status_code=400, detail="유효한 푸시 구독 정보가 필요합니다.")
-    subscription = upsert_member_push_subscription(
-        db,
-        member=current,
-        endpoint=body.endpoint,
-        p256dh_key=body.keys.p256dh,
-        auth_key=body.keys.auth,
-        user_agent=body.user_agent,
-    )
+    try:
+        subscription = upsert_member_push_subscription(
+            db,
+            member=current,
+            endpoint=body.endpoint,
+            p256dh_key=body.keys.p256dh,
+            auth_key=body.keys.auth,
+            user_agent=body.user_agent,
+        )
+    except Exception as exc:
+        logger.exception("push subscription register failed for member=%s", current.id)
+        raise HTTPException(status_code=503, detail="웹푸시 구독 저장 중 오류가 발생했습니다.") from exc
     return {"subscription_id": subscription.id, "registered": True}
 
 
@@ -138,7 +142,11 @@ def unregister_push_subscription(
     db: Annotated[Session, Depends(get_db)],
     current: Annotated[Member, Depends(get_current_member)],
 ) -> dict:
-    deactivate_member_push_subscription(db, endpoint=body.endpoint, member=current)
+    try:
+        deactivate_member_push_subscription(db, endpoint=body.endpoint, member=current)
+    except Exception as exc:
+        logger.exception("push subscription unregister failed for member=%s", current.id)
+        raise HTTPException(status_code=503, detail="웹푸시 구독 해제 중 오류가 발생했습니다.") from exc
     return {"unregistered": True}
 
 

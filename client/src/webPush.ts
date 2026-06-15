@@ -25,6 +25,18 @@ export async function fetchWebPushConfig(): Promise<{ enabled: boolean; vapidPub
   };
 }
 
+function subscriptionPayload(subscription: PushSubscription) {
+  const keys = subscription.toJSON().keys ?? {};
+  return {
+    endpoint: subscription.endpoint,
+    keys: {
+      p256dh: keys.p256dh ?? "",
+      auth: keys.auth ?? "",
+    },
+    user_agent: navigator.userAgent,
+  };
+}
+
 async function getPushRegistration(): Promise<ServiceWorkerRegistration | null> {
   if (!("serviceWorker" in navigator)) return null;
   const existing = await navigator.serviceWorker.getRegistration();
@@ -37,6 +49,23 @@ export async function getNotificationPermissionState(): Promise<NotificationPerm
     return "unsupported";
   }
   return Notification.permission;
+}
+
+export async function hasRegisteredPushSubscription(): Promise<boolean> {
+  const registration = await getPushRegistration();
+  if (!registration) return false;
+  const subscription = await registration.pushManager.getSubscription();
+  return Boolean(subscription);
+}
+
+export async function syncWebPushRegistration(member: MemberProfile): Promise<boolean> {
+  const registration = await getPushRegistration();
+  if (!registration) return false;
+  const subscription = await registration.pushManager.getSubscription();
+  if (!subscription) return false;
+  await registerPushSubscription(subscriptionPayload(subscription));
+  await postActiveMemberToServiceWorker(member);
+  return true;
 }
 
 export async function enableWebPush(member: MemberProfile): Promise<"enabled" | "unsupported" | "denied" | "disabled"> {
@@ -53,6 +82,7 @@ export async function enableWebPush(member: MemberProfile): Promise<"enabled" | 
   if (permission !== "granted") return "denied";
 
   const existing = await registration.pushManager.getSubscription();
+  const createdNewSubscription = !existing;
   const subscription =
     existing ??
     (await registration.pushManager.subscribe({
@@ -60,14 +90,14 @@ export async function enableWebPush(member: MemberProfile): Promise<"enabled" | 
       applicationServerKey: base64UrlToUint8Array(config.vapidPublicKey),
     }));
 
-  await registerPushSubscription({
-    endpoint: subscription.endpoint,
-    keys: {
-      p256dh: subscription.toJSON().keys?.p256dh ?? "",
-      auth: subscription.toJSON().keys?.auth ?? "",
-    },
-    user_agent: navigator.userAgent,
-  });
+  try {
+    await registerPushSubscription(subscriptionPayload(subscription));
+  } catch (error) {
+    if (createdNewSubscription) {
+      await subscription.unsubscribe().catch(() => undefined);
+    }
+    throw error;
+  }
 
   await postActiveMemberToServiceWorker(member);
   return "enabled";
