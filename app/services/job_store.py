@@ -168,6 +168,27 @@ def _ensure_job_selected_segments_column(db: Session) -> None:
         conn.execute(text("ALTER TABLE jobs ADD COLUMN selected_segments_json JSON NULL"))
 
 
+def _ensure_transcriber_grade_level_column(db: Session) -> None:
+    bind = db.get_bind()
+    db.rollback()
+    with bind.begin() as conn:
+        exists = conn.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'transcribers'
+                  AND COLUMN_NAME = 'grade_level'
+                LIMIT 1
+                """
+            )
+        ).first()
+        if exists:
+            return
+        conn.execute(text("ALTER TABLE transcribers ADD COLUMN grade_level INT NOT NULL DEFAULT 1 AFTER status"))
+
+
 def find_job_by_filename(db: Session, filename: str) -> Job | None:
     normalized = filename.strip()
     if not normalized:
@@ -526,7 +547,17 @@ def generate_transcriber_code(db: Session) -> str:
 
 
 def list_transcribers(db: Session) -> list[dict]:
-    rows = db.scalars(select(Transcriber).order_by(Transcriber.name.asc())).all()
+    for attempt in range(2):
+        try:
+            rows = db.scalars(select(Transcriber).order_by(Transcriber.name.asc())).all()
+            break
+        except (OperationalError, ProgrammingError) as exc:
+            message = str(exc).lower()
+            if attempt == 1 or "grade_level" not in message:
+                raise
+            _ensure_transcriber_grade_level_column(db)
+    else:
+        rows = []
     return [
         {
             "id": row.id,
@@ -577,27 +608,36 @@ def create_transcriber(
         raise ValueError("등급은 1등급부터 5등급까지 선택할 수 있습니다.")
 
     transcriber_code = (code or "").strip() or generate_transcriber_code(db)
-    transcriber = Transcriber(
-        transcriber_code=transcriber_code,
-        name=normalized_name,
-        grade_level=grade_level,
-        specialty=(specialty or "").strip() or None,
-        email=(email or "").strip() or None,
-        phone=(phone or "").strip() or None,
-        resident_id_masked=(resident_id or "").strip() or None,
-        bank_name=(bank_name or "").strip() or None,
-        account_number=(account_number or "").strip() or None,
-        account_holder=normalized_name,
-        unit_price=unit_price,
-        monthly_capacity=monthly_capacity,
-        status=status,
-        current_load=0,
-        auth_status="pending_signup",
-    )
-    db.add(transcriber)
-    db.commit()
-    db.refresh(transcriber)
-    return transcriber
+    for attempt in range(2):
+        transcriber = Transcriber(
+            transcriber_code=transcriber_code,
+            name=normalized_name,
+            grade_level=grade_level,
+            specialty=(specialty or "").strip() or None,
+            email=(email or "").strip() or None,
+            phone=(phone or "").strip() or None,
+            resident_id_masked=(resident_id or "").strip() or None,
+            bank_name=(bank_name or "").strip() or None,
+            account_number=(account_number or "").strip() or None,
+            account_holder=normalized_name,
+            unit_price=unit_price,
+            monthly_capacity=monthly_capacity,
+            status=status,
+            current_load=0,
+            auth_status="pending_signup",
+        )
+        try:
+            db.add(transcriber)
+            db.commit()
+            db.refresh(transcriber)
+            return transcriber
+        except (OperationalError, ProgrammingError) as exc:
+            db.rollback()
+            message = str(exc).lower()
+            if attempt == 1 or "grade_level" not in message:
+                raise
+            _ensure_transcriber_grade_level_column(db)
+    raise RuntimeError("Failed to create transcriber")
 
 
 def update_transcriber(
@@ -642,9 +682,40 @@ def update_transcriber(
         transcriber.monthly_capacity = monthly_capacity
     if status is not None:
         transcriber.status = status
-    db.commit()
-    db.refresh(transcriber)
-    return transcriber
+    for attempt in range(2):
+        try:
+            db.commit()
+            db.refresh(transcriber)
+            return transcriber
+        except (OperationalError, ProgrammingError) as exc:
+            db.rollback()
+            message = str(exc).lower()
+            if attempt == 1 or "grade_level" not in message:
+                raise
+            _ensure_transcriber_grade_level_column(db)
+            if name is not None:
+                transcriber.name = normalized_name
+                if not transcriber.account_holder:
+                    transcriber.account_holder = normalized_name
+            if grade_level is not None:
+                transcriber.grade_level = grade_level
+            if specialty is not None:
+                transcriber.specialty = specialty.strip() or None
+            if phone is not None:
+                transcriber.phone = phone.strip() or None
+            if resident_id is not None:
+                transcriber.resident_id_masked = resident_id.strip() or None
+            if bank_name is not None:
+                transcriber.bank_name = bank_name.strip() or None
+            if account_number is not None:
+                transcriber.account_number = account_number.strip() or None
+            if unit_price is not None:
+                transcriber.unit_price = unit_price
+            if monthly_capacity is not None:
+                transcriber.monthly_capacity = monthly_capacity
+            if status is not None:
+                transcriber.status = status
+    raise RuntimeError("Failed to update transcriber")
 
 
 def delete_transcriber(db: Session, transcriber: Transcriber) -> None:
