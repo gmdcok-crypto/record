@@ -1170,7 +1170,7 @@ function App() {
   const renderJobs = () => (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/92 p-4 shadow-[0_10px_30px_rgba(2,6,23,0.28)]">
       <div className="mb-4 space-y-3">
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 p-2">
+        <div className="flex flex-wrap items-center gap-2">
             <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
