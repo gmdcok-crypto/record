@@ -1451,15 +1451,6 @@ function App() {
 
   const renderTranscribers = () => (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/92 p-4 shadow-[0_10px_30px_rgba(2,6,23,0.28)]">
-      <div className="mb-4 flex justify-end">
-        <button
-          type="button"
-          onClick={openCreateTranscriberModal}
-          className="rounded-lg bg-cyan-500 px-3 py-1.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
-        >
-          추가
-        </button>
-      </div>
       <div className="mb-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
         {transcriberSummaryMetrics.map((item) => (
           <SummaryChip key={item.label} label={item.label} value={item.value} tone={item.tone} />
@@ -1883,6 +1874,15 @@ function App() {
                 </div>
                 <div className="flex flex-col items-stretch gap-2 xl:items-end">
                   <div className="flex flex-wrap items-center gap-2">
+                    {activeMenu === "transcribers" ? (
+                      <button
+                        type="button"
+                        onClick={openCreateTranscriberModal}
+                        className="rounded-md bg-cyan-500 px-3 py-1.5 text-[11px] font-semibold text-slate-950 transition hover:bg-cyan-400"
+                      >
+                        추가
+                      </button>
+                    ) : null}
                     <span className="rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1 text-[11px] text-slate-400">
                       관리자 알림: {adminPushRegistered ? "웹푸시 등록됨" : adminPushPermission === "denied" ? "권한 차단" : "미등록"}
                     </span>
