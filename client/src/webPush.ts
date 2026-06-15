@@ -8,8 +8,9 @@ type PublicConfigResponse = {
 const PUSH_SW_PATH = "/push-sw.js";
 
 function base64UrlToUint8Array(base64String: string): Uint8Array {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const normalized = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const cleaned = base64String.trim().replace(/^=+/, "").replace(/=+$/, "");
+  const padding = "=".repeat((4 - (cleaned.length % 4)) % 4);
+  const normalized = (cleaned + padding).replace(/-/g, "+").replace(/_/g, "/");
   const raw = window.atob(normalized);
   return Uint8Array.from(raw, (char) => char.charCodeAt(0));
 }
