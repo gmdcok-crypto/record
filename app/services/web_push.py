@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 from typing import Any
 
 from pywebpush import WebPushException, webpush
@@ -11,8 +12,11 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.admin_models import Job, Member, MemberPushSubscription
+from app.services.database_reset import _run_sql_file
 
 logger = logging.getLogger(__name__)
+SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
+PUSH_SUBSCRIPTIONS_SQL = SCRIPTS_DIR / "migrate_member_push_subscriptions.sql"
 
 
 def web_push_enabled() -> bool:
@@ -34,7 +38,7 @@ def web_push_public_config() -> dict[str, Any]:
 def _ensure_member_push_subscription_table(db: Session) -> None:
     bind = db.get_bind()
     db.rollback()
-    MemberPushSubscription.__table__.create(bind=bind, checkfirst=True)
+    _run_sql_file(bind, PUSH_SUBSCRIPTIONS_SQL)
 
 
 def upsert_member_push_subscription(
