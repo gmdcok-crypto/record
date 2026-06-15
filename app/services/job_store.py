@@ -2,6 +2,8 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.models.admin_models import (
@@ -145,11 +147,40 @@ def infer_title(filename: str) -> str:
     return stem.replace("_", " ").strip() or "새 녹취 작업"
 
 
+def _ensure_job_selected_segments_column(db: Session) -> None:
+    bind = db.get_bind()
+    db.rollback()
+    with bind.begin() as conn:
+        exists = conn.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'jobs'
+                  AND COLUMN_NAME = 'selected_segments_json'
+                LIMIT 1
+                """
+            )
+        ).first()
+        if exists:
+            return
+        conn.execute(text("ALTER TABLE jobs ADD COLUMN selected_segments_json JSON NULL"))
+
+
 def find_job_by_filename(db: Session, filename: str) -> Job | None:
     normalized = filename.strip()
     if not normalized:
         return None
-    return db.scalar(select(Job).where(Job.original_filename == normalized).order_by(Job.uploaded_at.desc()))
+    for attempt in range(2):
+        try:
+            return db.scalar(select(Job).where(Job.original_filename == normalized).order_by(Job.uploaded_at.desc()))
+        except (OperationalError, ProgrammingError) as exc:
+            message = str(exc).lower()
+            if attempt == 1 or "selected_segments_json" not in message:
+                raise
+            _ensure_job_selected_segments_column(db)
+    return None
 
 
 def _has_manual_assignment(db: Session, job_id: str) -> bool:
@@ -253,7 +284,15 @@ def create_job_record(
 
 
 def get_job_record(db: Session, job_id: str) -> Job | None:
-    return db.scalar(select(Job).where(Job.job_id == job_id))
+    for attempt in range(2):
+        try:
+            return db.scalar(select(Job).where(Job.job_id == job_id))
+        except (OperationalError, ProgrammingError) as exc:
+            message = str(exc).lower()
+            if attempt == 1 or "selected_segments_json" not in message:
+                raise
+            _ensure_job_selected_segments_column(db)
+    return None
 
 
 def assign_job(
@@ -409,7 +448,17 @@ def list_client_jobs(db: Session, member: Member | None = None) -> list[dict]:
     if member is not None:
         client = get_or_create_client_for_member(db, member)
         stmt = stmt.where(Job.client_id == client.id)
-    rows = db.scalars(stmt).all()
+    for attempt in range(2):
+        try:
+            rows = db.scalars(stmt).all()
+            break
+        except (OperationalError, ProgrammingError) as exc:
+            message = str(exc).lower()
+            if attempt == 1 or "selected_segments_json" not in message:
+                raise
+            _ensure_job_selected_segments_column(db)
+    else:
+        rows = []
     result: list[dict] = []
     for job in rows:
         inquiry = inquiry_summary_for_job(db, job.job_id)
@@ -669,7 +718,17 @@ def update_invoice_status(db: Session, invoice: Invoice, status: str) -> Invoice
 
 
 def dashboard_overview(db: Session) -> dict:
-    jobs = db.scalars(select(Job).order_by(Job.updated_at.desc()).limit(50)).all()
+    for attempt in range(2):
+        try:
+            jobs = db.scalars(select(Job).order_by(Job.updated_at.desc()).limit(50)).all()
+            break
+        except (OperationalError, ProgrammingError) as exc:
+            message = str(exc).lower()
+            if attempt == 1 or "selected_segments_json" not in message:
+                raise
+            _ensure_job_selected_segments_column(db)
+    else:
+        jobs = []
     transcribers = list_transcribers(db)
     settlements = db.scalars(select(Settlement).order_by(Settlement.created_at.desc()).limit(20)).all()
     invoices = db.scalars(select(Invoice).order_by(Invoice.issue_date.desc()).limit(20)).all()

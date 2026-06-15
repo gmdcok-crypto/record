@@ -8,6 +8,7 @@ from app.models.admin_models import Client, Job, Member, Project, Transcriber
 from app.services.id_factory import generate_project_id
 from app.services.job_store import (
     DEFAULT_CLIENT_NAME,
+    _ensure_job_selected_segments_column,
     _display_status_for_job,
     _visible_transcriber_for_job,
     assign_job,
@@ -171,11 +172,19 @@ def get_project_record(db: Session, project_id: str) -> Project | None:
 
 
 def list_project_jobs(db: Session, project_id: str) -> list[Job]:
-    return list(
-        db.scalars(
-            select(Job).where(Job.project_id == project_id).order_by(Job.uploaded_at.asc(), Job.job_id.asc())
-        ).all()
-    )
+    for attempt in range(2):
+        try:
+            return list(
+                db.scalars(
+                    select(Job).where(Job.project_id == project_id).order_by(Job.uploaded_at.asc(), Job.job_id.asc())
+                ).all()
+            )
+        except (OperationalError, ProgrammingError) as exc:
+            message = str(exc).lower()
+            if attempt == 1 or "selected_segments_json" not in message:
+                raise
+            _ensure_job_selected_segments_column(db)
+    return []
 
 
 def serialize_project_file(db: Session, job: Job) -> dict:
