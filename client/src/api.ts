@@ -239,6 +239,10 @@ export async function uploadVoice(
   onUploadComplete?: () => void,
   projectId?: string,
 ): Promise<UploadResponse> {
+  const requestId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const uploadViaBackend = () =>
     new Promise<UploadResponse>((resolve, reject) => {
       const form = new FormData();
@@ -250,6 +254,7 @@ export async function uploadVoice(
       const token = localStorage.getItem(MEMBER_TOKEN_KEY);
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${apiBase()}/api/upload/voice`);
+      xhr.setRequestHeader("X-Upload-Request-Id", requestId);
       if (token) {
         xhr.setRequestHeader("Authorization", `Bearer ${token}`);
       }
@@ -289,7 +294,7 @@ export async function uploadVoice(
       `${apiBase()}/api/upload/presign`,
       {
         method: "POST",
-        headers: { ...authHeaders, "Content-Type": "application/json" },
+        headers: { ...authHeaders, "Content-Type": "application/json", "X-Upload-Request-Id": requestId },
         body: JSON.stringify({
           filename: file.name,
           content_type: contentType,
@@ -339,7 +344,7 @@ export async function uploadVoice(
       `${apiBase()}/api/upload/voice/complete`,
       {
         method: "POST",
-        headers: { ...authHeaders, "Content-Type": "application/json" },
+        headers: { ...authHeaders, "Content-Type": "application/json", "X-Upload-Request-Id": requestId },
         body: JSON.stringify({
           job_id: presignData.job_id,
           object_key: presignData.object_key,
@@ -363,7 +368,7 @@ export async function uploadVoice(
       const directMessage = directError instanceof Error ? directError.message : "직접 업로드 실패";
       const backendMessage = backendError instanceof Error ? backendError.message : "서버 경유 업로드 실패";
       throw new Error(
-        `직접 업로드 실패 후 서버 경유 업로드도 실패했습니다.\n직접: ${directMessage}\n서버: ${backendMessage}`,
+        `업로드 요청 ID: ${requestId}\n직접 업로드 실패 후 서버 경유 업로드도 실패했습니다.\n직접: ${directMessage}\n서버: ${backendMessage}`,
       );
     }
   }

@@ -1,8 +1,10 @@
+import logging
+from time import perf_counter
 from pathlib import Path
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -17,6 +19,7 @@ from app.services.project_store import ProjectAccessError, resolve_upload_projec
 from app.services.r2 import create_voice_upload_url, delete_object, ensure_filename_with_extension, get_object_metadata, upload_voice_bytes
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
+logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".webm", ".mp4", ".aac", ".wma"}
 
@@ -93,11 +96,21 @@ async def upload_voice(
     db: Session = Depends(get_db),
     member: Annotated[Member | None, Depends(get_optional_current_member)] = None,
     project_id: Annotated[str | None, Form()] = None,
+    request_id: Annotated[str | None, Header(alias="X-Upload-Request-Id")] = None,
 ) -> VoiceUploadResponse:
+    started = perf_counter()
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required")
 
     content_type = (file.content_type or "application/octet-stream").split(";")[0].strip().lower()
+    logger.info(
+        "client_upload_backend_start request_id=%s filename=%s content_type=%s project_id=%s member_id=%s",
+        request_id,
+        file.filename,
+        content_type,
+        project_id,
+        member.id if member else None,
+    )
     if not is_allowed_upload(content_type, file.filename):
         raise HTTPException(
             status_code=400,
@@ -105,6 +118,13 @@ async def upload_voice(
         )
 
     content = await file.read()
+    logger.info(
+        "client_upload_backend_read request_id=%s filename=%s bytes=%s elapsed_ms=%s",
+        request_id,
+        file.filename,
+        len(content),
+        round((perf_counter() - started) * 1000, 1),
+    )
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
 
@@ -120,8 +140,10 @@ async def upload_voice(
     try:
         upload_result = upload_voice_bytes(content, file.filename, content_type)
     except ValueError as exc:
+        logger.exception("client_upload_backend_r2_config_error request_id=%s filename=%s", request_id, file.filename)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
+        logger.exception("client_upload_backend_r2_error request_id=%s filename=%s", request_id, file.filename)
         raise HTTPException(status_code=502, detail=f"R2 upload failed: {exc}") from exc
 
     response = VoiceUploadResponse(
@@ -167,6 +189,14 @@ async def upload_voice(
     )
 
     response.project_id = job.project_id
+    logger.info(
+        "client_upload_backend_success request_id=%s job_id=%s object_key=%s project_id=%s elapsed_ms=%s",
+        request_id,
+        job.job_id,
+        upload_result["object_key"],
+        job.project_id,
+        round((perf_counter() - started) * 1000, 1),
+    )
     return response
 
 
@@ -175,8 +205,18 @@ def presign_upload(
     body: PresignRequest,
     db: Annotated[Session, Depends(get_db)],
     member: Annotated[Member | None, Depends(get_optional_current_member)] = None,
+    request_id: Annotated[str | None, Header(alias="X-Upload-Request-Id")] = None,
 ) -> PresignResponse:
+    started = perf_counter()
     content_type = body.content_type.split(";")[0].strip().lower()
+    logger.info(
+        "client_upload_presign_start request_id=%s filename=%s content_type=%s project_id=%s member_id=%s",
+        request_id,
+        body.filename,
+        content_type,
+        body.project_id,
+        member.id if member else None,
+    )
     if not is_allowed_upload(content_type, body.filename):
         raise HTTPException(
             status_code=400,
@@ -205,10 +245,19 @@ def presign_upload(
     try:
         result = create_voice_upload_url(body.filename, content_type)
     except ValueError as exc:
+        logger.exception("client_upload_presign_config_error request_id=%s filename=%s", request_id, body.filename)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
+        logger.exception("client_upload_presign_error request_id=%s filename=%s", request_id, body.filename)
         raise HTTPException(status_code=502, detail=f"R2 presign failed: {exc}") from exc
 
+    logger.info(
+        "client_upload_presign_success request_id=%s job_id=%s object_key=%s elapsed_ms=%s",
+        request_id,
+        result["job_id"],
+        result["object_key"],
+        round((perf_counter() - started) * 1000, 1),
+    )
     return PresignResponse(**result)
 
 
@@ -217,8 +266,19 @@ def complete_voice_upload(
     body: VoiceUploadCompleteRequest,
     db: Annotated[Session, Depends(get_db)],
     member: Annotated[Member | None, Depends(get_optional_current_member)] = None,
+    request_id: Annotated[str | None, Header(alias="X-Upload-Request-Id")] = None,
 ) -> VoiceUploadResponse:
+    started = perf_counter()
     content_type = body.content_type.split(";")[0].strip().lower()
+    logger.info(
+        "client_upload_complete_start request_id=%s job_id=%s object_key=%s filename=%s project_id=%s member_id=%s",
+        request_id,
+        body.job_id,
+        body.object_key,
+        body.filename,
+        body.project_id,
+        member.id if member else None,
+    )
     safe_name = ensure_filename_with_extension(body.filename, content_type)
     if not is_allowed_upload(content_type, safe_name):
         raise HTTPException(status_code=400, detail=f"Unsupported content type: {content_type}")
@@ -238,6 +298,12 @@ def complete_voice_upload(
     try:
         metadata = get_object_metadata(body.object_key)
     except Exception as exc:
+        logger.exception(
+            "client_upload_complete_metadata_error request_id=%s job_id=%s object_key=%s",
+            request_id,
+            body.job_id,
+            body.object_key,
+        )
         raise HTTPException(status_code=400, detail=f"업로드된 파일을 확인할 수 없습니다: {exc}") from exc
     if int(metadata.get("size") or 0) <= 0:
         raise HTTPException(status_code=400, detail="업로드된 파일이 비어 있습니다.")
@@ -277,6 +343,15 @@ def complete_voice_upload(
         {"job_id": job.job_id, "status": job.status, "project_id": job.project_id},
     )
 
+    logger.info(
+        "client_upload_complete_success request_id=%s job_id=%s object_key=%s project_id=%s size=%s elapsed_ms=%s",
+        request_id,
+        job.job_id,
+        body.object_key,
+        job.project_id,
+        metadata.get("size"),
+        round((perf_counter() - started) * 1000, 1),
+    )
     return VoiceUploadResponse(
         job_id=job.job_id,
         project_id=job.project_id,
