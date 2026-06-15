@@ -1043,18 +1043,6 @@ function App() {
 
   const urgentJobs = useMemo(() => jobs.filter((job) => job.priority === "긴급"), [jobs]);
 
-  const compactOverviewMetrics = useMemo(
-    () => [
-      { label: "전체 파일", value: `${dashboardStats.totalJobs}건`, tone: "slate" as const },
-      { label: "배정 대기", value: `${dashboardStats.waitingAssign}건`, tone: "amber" as const },
-      { label: "작업 중", value: `${dashboardStats.working}건`, tone: "cyan" as const },
-      { label: "완료", value: `${dashboardStats.finalDone}건`, tone: "emerald" as const },
-      { label: "긴급", value: `${urgentJobs.length}건`, tone: "violet" as const },
-      { label: "미수", value: formatCurrency(dashboardStats.outstanding), tone: "amber" as const },
-    ],
-    [dashboardStats, urgentJobs.length],
-  );
-
   const memberSummaryMetrics = useMemo(
     () => [
       { label: "전체 회원", value: `${members.length}명`, tone: "slate" as const },
@@ -1180,17 +1168,8 @@ function App() {
   );
 
   const renderJobs = () => (
-    <SectionCard
-      title="의뢰 / 프로젝트 관리"
-      subtitle="검색, 상태 필터, 빠른 확인에 최적화한 시트형 운영 화면입니다."
-    >
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/92 p-4 shadow-[0_10px_30px_rgba(2,6,23,0.28)]">
       <div className="mb-4 space-y-3">
-        <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
-          {compactOverviewMetrics.map((item) => (
-            <SummaryChip key={item.label} label={item.label} value={item.value} tone={item.tone} />
-          ))}
-        </div>
-
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 p-2">
             <input
           value={query}
@@ -1356,7 +1335,7 @@ function App() {
           </table>
         )}
           </div>
-    </SectionCard>
+    </div>
   );
 
   const toggleMemberActive = async (member: MemberItem) => {
