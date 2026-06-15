@@ -5,8 +5,6 @@ import {
   createAdminEventsSource,
   createTranscriberJobInquiry,
   deliverTranscriptPdf,
-  downloadProjectFinalTranscriptPdf,
-  downloadFinalTranscriptPdf,
   fetchAssignedProjects,
   fetchTranscriberFrontendVersion,
   fetchJob,
@@ -658,11 +656,6 @@ export default function App() {
         await finalizeTranscriptPdf(job.job_id, currentTranscript);
       }
       await deliverTranscriptPdf(job.job_id, bundleProjectPdf);
-      if (bundleProjectPdf && currentProject?.project_id) {
-        await downloadProjectFinalTranscriptPdf(currentProject.project_id);
-      } else {
-        await downloadFinalTranscriptPdf(job.job_id);
-      }
       setJob({ ...job, transcript_json: currentTranscript, final_pdf_ready: true, status: "pdf_sent" });
       setChangeHistoryRefresh((value) => value + 1);
       showNotice("success", bundleProjectPdf ? "통합본 PDF를 의뢰인에게 전달했습니다." : "개별 PDF를 의뢰인에게 전달했습니다.");
