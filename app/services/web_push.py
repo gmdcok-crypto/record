@@ -112,6 +112,7 @@ def _send_payload_to_subscription(subscription: MemberPushSubscription, payload:
         data=json.dumps(payload, ensure_ascii=False),
         vapid_private_key=settings.web_push_vapid_private_key.strip(),
         vapid_claims={"sub": settings.web_push_subject.strip()},
+        timeout=3,
     )
 
 
