@@ -1,3 +1,4 @@
+import logging
 import re
 from pathlib import Path
 from datetime import datetime
@@ -13,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.dependencies.member_auth import get_current_member, get_optional_current_member
 from app.dependencies.transcriber_auth import get_current_transcriber, get_optional_current_transcriber
-from app.models.admin_models import AdminUser, Job, Member, Transcriber
+from app.models.admin_models import AdminUser, Client, Job, Member, Transcriber
 from app.db import ensure_db_initialized, get_db, get_engine
 from app.services.audio import remux_faststart, should_faststart
 from app.services.admin_events import publish_admin_event, stream_admin_events
@@ -86,6 +87,7 @@ from app.services.r2 import (
 from app.services.web_push import send_client_pdf_web_push, send_client_status_web_push
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
+logger = logging.getLogger(__name__)
 
 
 class SaveTranscriptRequest(BaseModel):
@@ -266,9 +268,26 @@ def _ensure_member_owns_job(db: Session, member: Member, job: Job) -> None:
 
 
 def _job_member(db: Session, job: Job) -> Member | None:
-    if job.client is None or not job.client.contact_email:
+    client = job.client
+    if client is None and job.client_id is not None:
+        client = db.get(Client, job.client_id)
+    if client is None:
         return None
-    return db.scalar(select(Member).where(Member.email == job.client.contact_email.strip().lower()))
+
+    client_code = (client.client_code or "").strip()
+    if client_code.startswith("MEMBER-"):
+        suffix = client_code.removeprefix("MEMBER-").strip()
+        if suffix.isdigit():
+            member = get_member_by_id(db, int(suffix))
+            if member is not None and member.is_active:
+                return member
+
+    contact_email = (client.contact_email or "").strip().lower()
+    if contact_email:
+        member = db.scalar(select(Member).where(Member.email == contact_email))
+        if member is not None and member.is_active:
+            return member
+    return None
 
 
 def _notify_client_status_change(db: Session, job: Job, *, note: str | None = None) -> None:
