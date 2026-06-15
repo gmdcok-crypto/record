@@ -276,7 +276,9 @@ def _notify_client_status_change(db: Session, job: Job, *, note: str | None = No
     if member is None:
         return
     try:
-        send_client_status_web_push(db, member=member, job=job, note=note)
+        delivered = send_client_status_web_push(db, member=member, job=job, note=note)
+        if delivered == 0:
+            logger.warning("No client status web push delivered for job %s", job.job_id)
     except Exception:
         logger.exception("Failed to send client status notification for job %s", job.job_id)
 
@@ -286,7 +288,9 @@ def _notify_client_pdf_delivery(db: Session, job: Job, *, delivery_mode: str) ->
     if member is None:
         return
     try:
-        send_client_pdf_web_push(db, member=member, job=job, delivery_mode=delivery_mode)
+        delivered = send_client_pdf_web_push(db, member=member, job=job, delivery_mode=delivery_mode)
+        if delivered == 0:
+            logger.warning("No client PDF delivery web push delivered for job %s", job.job_id)
     except Exception:
         logger.exception("Failed to send client PDF delivery notification for job %s", job.job_id)
 

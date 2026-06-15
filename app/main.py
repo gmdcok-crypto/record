@@ -144,6 +144,7 @@ def public_config() -> dict[str, str | bool]:
             settings.web_push_enabled
             and settings.web_push_vapid_public_key.strip()
             and settings.web_push_vapid_private_key.strip()
+            and settings.web_push_subject.strip()
         ),
         "webPushVapidPublicKey": settings.web_push_vapid_public_key.strip(),
     }
