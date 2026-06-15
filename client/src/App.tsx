@@ -72,6 +72,7 @@ const ACCEPT = "audio/*,video/mp4,video/webm,.wav,.mp3,.m4a,.flac,.ogg";
 const GUEST_CLIENT_NAME = "의뢰인";
 const INTRO_SIGNUP_URL =
   import.meta.env.VITE_INTRO_URL?.replace(/\/$/, "") || "https://record-voi.netlify.app";
+const CLIENT_BUILD_ID = (import.meta.env.VITE_CLIENT_BUILD_ID as string | undefined)?.trim() || "dev";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -1195,6 +1196,10 @@ export default function App() {
                   {uploadStatus}
                 </p>
               ) : null}
+
+              <p className="rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-xs text-slate-500">
+                클라이언트 버전: <span className="font-mono text-slate-300">{CLIENT_BUILD_ID}</span>
+              </p>
 
               {step === "uploading" && (
                 <div>
