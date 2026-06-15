@@ -15,6 +15,15 @@ export type TranscriptJson = {
   speaker_labels?: Record<string, string>;
 };
 
+export type TranscriptToken = {
+  text: string;
+  start_ms: number | null;
+  end_ms: number | null;
+  speaker?: string | null;
+  confidence?: number | null;
+  uncertain?: boolean;
+};
+
 export type JobResponse = {
   job_id: string;
   voice_key: string;

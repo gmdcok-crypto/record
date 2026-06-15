@@ -190,7 +190,14 @@ function KaraokeWords({
             key={`${word.start_ms}-${index}`}
             ref={active ? (element) => { activeWordRef.current = element; } : undefined}
             data-active-word={active ? "true" : undefined}
-            className={activeWordClass(active, played)}
+            className={activeWordClass(active, played, Boolean(word.uncertain))}
+            title={
+              word.uncertain
+                ? word.confidence != null
+                  ? `AI 인식 불확실 (confidence ${Math.round(word.confidence * 100)}%)`
+                  : "AI 인식 불확실"
+                : undefined
+            }
           >
             {word.text}
           </span>

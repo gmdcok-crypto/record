@@ -5,6 +5,8 @@ export type TimedWord = {
   text: string;
   start_ms: number;
   end_ms: number;
+  uncertain?: boolean;
+  confidence?: number | null;
 };
 
 function normalizeTranscriptText(value: string): string {
@@ -68,6 +70,8 @@ export function buildSegmentTimedWords(
           text: token.text,
           start_ms: start,
           end_ms: Math.max(end, start + 1),
+          uncertain: Boolean(token.uncertain),
+          confidence: typeof token.confidence === "number" ? token.confidence : null,
         };
       });
     }
@@ -84,8 +88,9 @@ export function segmentContainsActiveWord(words: TimedWord[], playbackMs: number
   return words.some((word) => isWordActive(word, playbackMs));
 }
 
-export function activeWordClass(active: boolean, played: boolean): string {
+export function activeWordClass(active: boolean, played: boolean, uncertain = false): string {
   if (active) return "rounded-sm bg-white text-slate-950";
+  if (uncertain) return played ? "text-red-300" : "text-red-400";
   if (played) return "text-slate-300";
   return "text-slate-100";
 }

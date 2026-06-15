@@ -866,6 +866,9 @@ export default function App() {
                         화자 설정
                       </button>
                     </div>
+                    <p className="mb-2 text-xs text-slate-500">
+                      빨간 글자는 AI가 인식을 어려워해 재검토가 필요한 구간입니다.
+                    </p>
                     <div className="max-h-[min(62vh,640px)] space-y-2 overflow-y-auto pr-1">
                       {segments.length ? (
                         segments.map((segment, index) => {

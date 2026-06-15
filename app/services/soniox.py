@@ -18,6 +18,9 @@ def _build_config() -> CreateTranscriptionConfig:
     return CreateTranscriptionConfig(**kwargs)
 
 
+UNCERTAIN_CONFIDENCE_THRESHOLD = 0.82
+
+
 def _build_segments(tokens: list[dict]) -> list[dict]:
     segments: list[dict] = []
     current_speaker: str | None = None
@@ -92,12 +95,15 @@ def transcribe_file(file_path: Path, filename: str, content_type: str = "") -> d
 
     tokens = []
     for token in transcript.tokens or []:
+        confidence = getattr(token, "confidence", None)
         tokens.append(
             {
                 "text": token.text,
                 "start_ms": getattr(token, "start_ms", None),
                 "end_ms": getattr(token, "end_ms", None),
                 "speaker": getattr(token, "speaker", None),
+                "confidence": confidence if isinstance(confidence, (int, float)) else None,
+                "uncertain": bool(isinstance(confidence, (int, float)) and confidence < UNCERTAIN_CONFIDENCE_THRESHOLD),
             }
         )
 

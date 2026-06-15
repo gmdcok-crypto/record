@@ -5,6 +5,8 @@ export type TranscriptToken = {
   start_ms: number | null;
   end_ms: number | null;
   speaker: string | null;
+  confidence?: number | null;
+  uncertain?: boolean;
 };
 
 export type TranscriptSegment = {

@@ -104,6 +104,9 @@ export default function JobTranscriptViewer({ job }: JobTranscriptViewerProps) {
 
       <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">녹취록</p>
+        <p className="mb-3 text-xs text-slate-500">
+          빨간 글자는 AI가 인식을 어려워해 재검토가 필요한 구간입니다.
+        </p>
         {segments.length ? (
           <div className="max-h-[52vh] space-y-2 overflow-y-auto pr-1">
             {segments.map((segment, index) => {
