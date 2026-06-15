@@ -19,15 +19,15 @@ self.addEventListener("push", (event) => {
   const body = payload.body || "";
   const url = payload.url || "/";
   const tag = payload.tag || undefined;
+  const options = {
+    body,
+    tag,
+    data: { url, jobId: payload.jobId || null, kind: payload.kind || "general" },
+    renotify: true,
+  };
 
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      tag,
-      data: { url, jobId: payload.jobId || null, kind: payload.kind || "general" },
-      icon: "/favicon.svg",
-      badge: "/favicon.svg",
-    }),
+    self.registration.showNotification(title, options),
   );
 });
 
