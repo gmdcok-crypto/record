@@ -1877,12 +1877,6 @@ function App() {
                   </h2>
                 </div>
                 <div className="flex flex-col items-stretch gap-2 xl:items-end">
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                    <SummaryChip label="총 파일" value={`${dashboardStats.totalJobs}건`} />
-                    <SummaryChip label="긴급" value={`${urgentJobs.length}건`} tone="violet" />
-                    <SummaryChip label="미수" value={formatCurrency(dashboardStats.outstanding)} tone="amber" />
-                    <SummaryChip label="정산 예정" value={formatCurrency(dashboardStats.totalSettlements)} tone="cyan" />
-                  </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1 text-[11px] text-slate-400">
                       관리자 알림: {adminPushRegistered ? "웹푸시 등록됨" : adminPushPermission === "denied" ? "권한 차단" : "미등록"}
