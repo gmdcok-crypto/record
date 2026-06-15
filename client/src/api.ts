@@ -36,6 +36,14 @@ export type UploadResponse = {
   error?: string | null;
 };
 
+type PresignedUploadResponse = {
+  job_id: string;
+  object_key: string;
+  upload_url: string;
+  expires_in: number;
+  bucket: string;
+};
+
 export type JobResponse = {
   job_id: string;
   project_id?: string | null;
@@ -224,19 +232,31 @@ export async function uploadVoice(
   onUploadComplete?: () => void,
   projectId?: string,
 ): Promise<UploadResponse> {
-  const form = new FormData();
-  form.append("file", file);
-  if (projectId) {
-    form.append("project_id", projectId);
-  }
-  const token = localStorage.getItem(MEMBER_TOKEN_KEY);
+  const authHeaders = memberAuthHeaders();
+  const contentType = file.type || "application/octet-stream";
 
-  return new Promise((resolve, reject) => {
+  const presignRes = await fetchWithRetry(
+    `${apiBase()}/api/upload/presign`,
+    {
+      method: "POST",
+      headers: { ...authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename: file.name,
+        content_type: contentType,
+        project_id: projectId ?? null,
+      }),
+    },
+    1,
+  );
+  const presignData = (await presignRes.json().catch(() => ({}))) as Partial<PresignedUploadResponse>;
+  if (!presignRes.ok || !presignData.upload_url || !presignData.job_id || !presignData.object_key || !presignData.bucket) {
+    throw new Error(parseErrorDetail(presignData));
+  }
+
+  await new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${apiBase()}/api/upload/voice`);
-    if (token) {
-      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-    }
+    xhr.open("PUT", presignData.upload_url!);
+    xhr.setRequestHeader("Content-Type", contentType);
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && onProgress) {
@@ -249,19 +269,36 @@ export async function uploadVoice(
 
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(JSON.parse(xhr.responseText) as UploadResponse);
+        resolve();
         return;
       }
-      try {
-        reject(new Error(parseErrorDetail(JSON.parse(xhr.responseText))));
-      } catch {
-        reject(new Error(`업로드 실패 (${xhr.status})`));
-      }
+      reject(new Error(`업로드 실패 (${xhr.status})`));
     };
 
     xhr.onerror = () => reject(new Error("서버 연결 오류"));
-    xhr.send(form);
+    xhr.send(file);
   });
+
+  const completeRes = await fetchWithRetry(
+    `${apiBase()}/api/upload/voice/complete`,
+    {
+      method: "POST",
+      headers: { ...authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        job_id: presignData.job_id,
+        object_key: presignData.object_key,
+        filename: file.name,
+        content_type: contentType,
+        project_id: projectId ?? null,
+      }),
+    },
+    1,
+  );
+  const completeData = (await completeRes.json().catch(() => ({}))) as UploadResponse;
+  if (!completeRes.ok) {
+    throw new Error(parseErrorDetail(completeData));
+  }
+  return completeData;
 }
 
 export async function fetchJob(jobId: string): Promise<JobResponse> {
