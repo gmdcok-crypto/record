@@ -730,11 +730,6 @@ export default function App() {
       setJob(null);
       setSegments([]);
       setSpeakerLabels({});
-      try {
-        await refreshWorkspace();
-      } catch {
-        showNotice("info", "파일 업로드는 완료되었지만 보관함 새로고침은 잠시 후 다시 시도합니다.");
-      }
     } catch (err) {
       const failureMessage = err instanceof Error ? err.message : "업로드 실패";
       if (failureMessage.includes("이미 업로드된 파일입니다")) {
@@ -788,6 +783,11 @@ export default function App() {
         const file = filesToUpload[index];
         setUploadStatus(`"${uploadedProjectTitle}" 업로드 중 ${index + 1}/${filesToUpload.length}: ${file.name}`);
         await performUpload(file, targetProjectId);
+      }
+      try {
+        await refreshWorkspace();
+      } catch {
+        showNotice("info", "파일 업로드는 완료되었지만 보관함 새로고침은 잠시 후 다시 시도합니다.");
       }
       resetUploadUi(
         `"${uploadedProjectTitle}" 프로젝트에 ${filesToUpload.length}개 파일이 추가되었습니다. 관리자 배정 후 속기사가 녹취록을 작성합니다.`,
