@@ -122,6 +122,7 @@ class Job(Base):
     r2_transcript_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     final_pdf_r2_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     final_pdf_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    selected_segments_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
     transcript_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     speaker_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)

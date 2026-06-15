@@ -20,6 +20,7 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_projects.sql",
     SCRIPTS_DIR / "migrate_project_pdf_delivery_mode.sql",
     SCRIPTS_DIR / "migrate_job_assignment_timestamp.sql",
+    SCRIPTS_DIR / "migrate_job_selected_segments.sql",
     SCRIPTS_DIR / "migrate_transcript_change_logs.sql",
     SCRIPTS_DIR / "migrate_transcriber_license.sql",
     SCRIPTS_DIR / "migrate_member_push_subscriptions.sql",
@@ -105,6 +106,25 @@ def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) ->
                     """
                 )
             )
+        logger.info("Railway-safe migration applied: %s", sql_path.name)
+        return True
+
+    if sql_path.name == "migrate_job_selected_segments.sql":
+        with engine.begin() as conn:
+            exists = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'jobs'
+                      AND COLUMN_NAME = 'selected_segments_json'
+                    LIMIT 1
+                    """
+                )
+            ).first()
+            if not exists:
+                conn.execute(text("ALTER TABLE jobs ADD COLUMN selected_segments_json JSON NULL"))
         logger.info("Railway-safe migration applied: %s", sql_path.name)
         return True
 

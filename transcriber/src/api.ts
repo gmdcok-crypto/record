@@ -9,6 +9,12 @@ export type TranscriptToken = {
   uncertain?: boolean;
 };
 
+export type SelectedUploadSegment = {
+  start_ms: number;
+  end_ms: number;
+  selected?: boolean;
+};
+
 export type TranscriptSegment = {
   speaker: string;
   text: string;
@@ -50,6 +56,7 @@ export type JobResponse = {
   };
   final_pdf_ready?: boolean;
   final_pdf_filename?: string | null;
+  selected_segments?: SelectedUploadSegment[];
   has_inquiry?: boolean;
   transcriber_inquiry_status?: "reply_pending" | "reply_arrived" | null;
 };

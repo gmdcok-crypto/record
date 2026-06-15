@@ -26,6 +26,45 @@ FOOTER_TEXT_H = 8
 STAMP_SIZE_MM = 13
 
 
+def _segment_selected(segment: dict, selected_segments: list[dict]) -> bool:
+    start_ms = segment.get("start_ms")
+    end_ms = segment.get("end_ms")
+    if start_ms is None and end_ms is None:
+        return True
+    for item in selected_segments:
+        if not item or item.get("selected") is False:
+            continue
+        selected_start = item.get("start_ms")
+        selected_end = item.get("end_ms")
+        if selected_start is None or selected_end is None:
+            continue
+        overlap_start = max(start_ms if start_ms is not None else selected_start, selected_start)
+        overlap_end = min(end_ms if end_ms is not None else selected_end, selected_end)
+        if overlap_end > overlap_start:
+            return True
+    return False
+
+
+def filter_transcript_to_selected_segments(transcript: dict, selected_segments: list[dict] | None) -> dict:
+    normalized = [item for item in (selected_segments or []) if isinstance(item, dict) and item.get("selected", True)]
+    if not normalized:
+        return transcript
+    segments = transcript.get("segments") or []
+    if not segments:
+        return transcript
+    filtered_segments = [segment for segment in segments if _segment_selected(segment, normalized)]
+    if not filtered_segments:
+        return transcript
+    labels = transcript.get("speaker_labels") or {}
+    diarized_text = _format_transcript_text(filtered_segments, labels)
+    return {
+        **transcript,
+        "segments": filtered_segments,
+        "text": diarized_text,
+        "plain_text": diarized_text,
+    }
+
+
 class TranscriptPDF(FPDF):
     def __init__(self, font_family: str):
         super().__init__()
@@ -127,6 +166,16 @@ def _append_document_end(pdf: FPDF, font: str, bold_available: bool) -> None:
         new_x=XPos.LMARGIN,
         new_y=YPos.NEXT,
     )
+
+
+def _format_transcript_text(segments: list[dict], labels: dict) -> str:
+    lines = []
+    for segment in segments:
+        speaker = _speaker_label(str(segment.get("speaker", "")), labels)
+        text = (segment.get("text") or "").strip()
+        if text:
+            lines.append(f"{speaker}: {text}")
+    return "\n\n".join(lines)
 
 
 def _append_pdf_pages(writer: PdfWriter, path: Path) -> None:

@@ -30,6 +30,7 @@ type UploadBillingPanelProps = {
   paid: boolean;
   onPaidChange: (paid: boolean) => void;
   onRemoveFile: (file: File) => void;
+  onEntriesChange?: (entries: UploadBillingFile[]) => void;
 };
 
 function formatSegmentRange(startMs: number, endMs: number): string {
@@ -49,6 +50,7 @@ export default function UploadBillingPanel({
   paid,
   onPaidChange,
   onRemoveFile,
+  onEntriesChange,
 }: UploadBillingPanelProps) {
   const entriesRef = useRef<UploadBillingFile[]>([]);
   const paidBillableRef = useRef<number | null>(null);
@@ -143,6 +145,10 @@ export default function UploadBillingPanel({
       onPaidChange(false);
     }
   }, [billingReady, billableDurationMs, paid, onPaidChange]);
+
+  useEffect(() => {
+    onEntriesChange?.(entries);
+  }, [entries, onEntriesChange]);
 
   const updateEntry = (key: string, patch: Partial<UploadBillingFile>) => {
     setEntries((prev) => prev.map((entry) => (entry.key === key ? { ...entry, ...patch } : entry)));

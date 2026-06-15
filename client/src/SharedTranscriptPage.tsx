@@ -161,6 +161,7 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
   }, [data?.job.job_id]);
 
   const tokens = useMemo(() => data?.job.transcript_json?.tokens ?? [], [data]);
+  const selectedUploadSegments = useMemo(() => data?.job.selected_segments ?? [], [data?.job.selected_segments]);
   const speakerIds = useMemo(() => mergeSpeakerIds(segments, extraSpeakerIds), [segments, extraSpeakerIds]);
   const currentTranscript = useMemo(
     () => segmentsToTranscript(data?.job.transcript_json ?? null, segments, speakerLabels),
@@ -332,10 +333,13 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
                 화자 설정
               </button>
             </div>
+            <p className="mb-2 text-xs text-slate-500">
+              노란 글자는 업로드 시 선택한 구간 밖의 텍스트입니다. PDF에는 선택한 구간만 반영됩니다.
+            </p>
             <div className="space-y-2">
             {segments.length ? (
               segments.map((segment, index) => {
-                const segmentWords = buildSegmentTimedWords(segment.text, segment, index, segments, tokens);
+                const segmentWords = buildSegmentTimedWords(segment.text, segment, index, segments, tokens, selectedUploadSegments);
                 const hasActiveWord = isAudioPlaying && segmentContainsActiveWord(segmentWords, playbackMs);
                 return (
                   <div
@@ -385,6 +389,7 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
                       segmentIndex={index}
                       segments={segments}
                       tokens={tokens}
+                      selectedSegments={selectedUploadSegments}
                       playbackMs={playbackMs}
                       isAudioPlaying={isAudioPlaying}
                       disabled={saving}

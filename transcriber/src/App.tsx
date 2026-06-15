@@ -286,6 +286,7 @@ export default function App() {
     [job, segments, speakerLabels],
   );
   const transcriptTokens = useMemo(() => job?.transcript_json?.tokens ?? [], [job?.transcript_json?.tokens]);
+  const selectedUploadSegments = useMemo(() => job?.selected_segments ?? [], [job?.selected_segments]);
 
   const loadProjects = useCallback(async (suppressError = false) => {
     setLoadingProjects(true);
@@ -869,6 +870,9 @@ export default function App() {
                     <p className="mb-2 text-xs text-slate-500">
                       빨간 글자는 AI가 인식을 어려워해 재검토가 필요한 구간입니다.
                     </p>
+                    <p className="mb-2 text-xs text-slate-500">
+                      노란 글자는 의뢰인이 업로드 시 선택한 구간 밖의 텍스트이며, PDF에는 선택 구간만 반영됩니다.
+                    </p>
                     <div className="max-h-[min(62vh,640px)] space-y-2 overflow-y-auto pr-1">
                       {segments.length ? (
                         segments.map((segment, index) => {
@@ -878,6 +882,7 @@ export default function App() {
                             index,
                             segments,
                             transcriptTokens,
+                            selectedUploadSegments,
                           );
                           const hasActiveWord =
                             isAudioPlaying && segmentContainsActiveWord(segmentWords, playbackMs);
@@ -933,6 +938,7 @@ export default function App() {
                               segmentIndex={index}
                               segments={segments}
                               tokens={transcriptTokens}
+                              selectedSegments={selectedUploadSegments}
                               playbackMs={playbackMs}
                               isAudioPlaying={isAudioPlaying}
                               disabled={aiRunning || busy}

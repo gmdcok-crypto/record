@@ -57,7 +57,7 @@ from app.services.transcript_shares import (
     get_transcript_share_by_token,
     transcript_share_is_valid,
 )
-from app.services.pdf_export import build_project_bundle_pdf, build_transcript_pdf
+from app.services.pdf_export import build_project_bundle_pdf, build_transcript_pdf, filter_transcript_to_selected_segments
 from app.services.member_auth import get_member_by_id, serialize_member_admin, set_member_active
 from app.services.member_auth import list_members_admin
 from app.services.job_transcription import transcribe_job_voice
@@ -247,6 +247,7 @@ def _download_project_bundle_pdf(project_id: str, db: Session) -> Response:
     for job in jobs:
         transcript = get_transcript_json(job.job_id)
         if transcript:
+            transcript = filter_transcript_to_selected_segments(transcript, job.selected_segments_json or [])
             title = job.original_filename or job.title or transcript.get("filename") or f"문서 {len(transcripts) + 1}"
             transcript = {**transcript, "filename": title}
             transcripts.append(transcript)
@@ -1325,20 +1326,30 @@ def stream_shared_audio(token: str, request: Request, db: Annotated[Session, Dep
 
 
 @router.get("/{job_id}/transcript.pdf")
-def export_transcript_pdf_get(job_id: str) -> Response:
+def export_transcript_pdf_get(job_id: str, db: Annotated[Session, Depends(get_db)]) -> Response:
     _ensure_job_exists(job_id)
     transcript = get_transcript_json(job_id)
     if not transcript:
         raise HTTPException(status_code=404, detail="Transcript not found")
+    job = get_job_record(db, job_id)
+    if job is not None:
+        transcript = filter_transcript_to_selected_segments(transcript, job.selected_segments_json or [])
     return _pdf_response(transcript)
 
 
 @router.post("/{job_id}/transcript.pdf")
-def export_transcript_pdf_post(job_id: str, body: ExportTranscriptPdfRequest) -> Response:
+def export_transcript_pdf_post(
+    job_id: str,
+    body: ExportTranscriptPdfRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> Response:
     _ensure_job_exists(job_id)
     transcript = body.transcript_json or get_transcript_json(job_id)
     if not transcript:
         raise HTTPException(status_code=404, detail="Transcript not found")
+    job = get_job_record(db, job_id)
+    if job is not None:
+        transcript = filter_transcript_to_selected_segments(transcript, job.selected_segments_json or [])
     return _pdf_response(transcript)
 
 
@@ -1358,6 +1369,7 @@ def finalize_transcript_pdf(
         raise HTTPException(status_code=404, detail="Job not found")
 
     try:
+        transcript = filter_transcript_to_selected_segments(transcript, job.selected_segments_json or [])
         pdf_bytes, filename = build_transcript_pdf(transcript)
         pdf_key, stored_filename = save_final_pdf(job_id, pdf_bytes, filename)
         store_final_pdf(db, job, pdf_key, stored_filename)

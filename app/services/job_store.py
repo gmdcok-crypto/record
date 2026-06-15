@@ -194,6 +194,7 @@ def create_job_record(
     transcript_json: dict | None = None,
     member: Member | None = None,
     project_id: str | None = None,
+    selected_segments: list[dict] | None = None,
 ) -> Job:
     if member is not None:
         client = get_or_create_client_for_member(db, member)
@@ -221,6 +222,7 @@ def create_job_record(
         assigned_admin_id=admin.id if admin else None,
         r2_voice_key=voice_key,
         r2_transcript_key=transcript_key,
+        selected_segments_json=selected_segments or None,
         transcript_version=1,
         speaker_count=len((transcript_json or {}).get("speaker_labels") or {}),
         memo=None,
@@ -392,6 +394,7 @@ def serialize_job(db: Session, job: Job, *, transcript_json: dict, audio_url: st
             "name": visible_transcriber.name if visible_transcriber else None,
         },
         "project_id": job.project_id,
+        "selected_segments": job.selected_segments_json or [],
         "final_pdf_ready": bool(job.final_pdf_r2_key),
         "final_pdf_filename": job.final_pdf_filename,
         "has_inquiry": inquiry["has_inquiry"],
@@ -420,6 +423,7 @@ def list_client_jobs(db: Session, member: Member | None = None) -> list[dict]:
                 "updated_at": job.updated_at.isoformat() if job.updated_at else None,
                 "assigned_at": job.assigned_at.isoformat() if job.assigned_at else None,
                 "client_name": job.client.name if job.client else DEFAULT_CLIENT_NAME,
+                "selected_segments": job.selected_segments_json or [],
                 "pdf_ready": job.status == "pdf_sent",
                 "final_pdf_filename": job.final_pdf_filename,
                 "has_inquiry": inquiry["has_inquiry"],

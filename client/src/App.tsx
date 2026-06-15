@@ -43,6 +43,7 @@ import {
   nextSpeakerId,
 } from "./transcriptEditor";
 import UploadBillingPanel from "./UploadBillingPanel";
+import type { UploadBillingFile } from "./uploadBilling";
 import SegmentPlaybackText from "./SegmentPlaybackText";
 import { buildSegmentTimedWords, segmentContainsActiveWord } from "./playbackHighlight";
 import {
@@ -289,6 +290,7 @@ export default function App() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const inquiryPanelRef = useRef<HTMLDivElement | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [uploadBillingEntries, setUploadBillingEntries] = useState<UploadBillingFile[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
   const [step, setStep] = useState<Step>("idle");
   const [progress, setProgress] = useState(0);
@@ -355,6 +357,7 @@ export default function App() {
   const transcriptTokens = useMemo(() => job?.transcript_json?.tokens ?? [], [job?.transcript_json?.tokens]);
   const currentWorkflowStatus = useMemo(() => jobWorkflowStatus(job), [job]);
   const pdfReceived = useMemo(() => isPdfReceivedStatus(currentWorkflowStatus), [currentWorkflowStatus]);
+  const selectedUploadSegments = useMemo(() => job?.selected_segments ?? [], [job?.selected_segments]);
   const currentTitle = useMemo(
     () => job?.title || job?.transcript_json.filename || selectedFiles[0]?.name || "새 녹취 작업",
     [job, selectedFiles],
@@ -723,11 +726,11 @@ export default function App() {
     void loadJobById(item.job_id, { switchToEdit: true });
   };
 
-  const performUpload = async (fileToUpload: File, projectId?: string) => {
+  const performUpload = async (fileToUpload: File, projectId?: string, selectedSegments?: { start_ms: number; end_ms: number; selected?: boolean }[]) => {
     setStep("uploading");
     setProgress(0);
     try {
-      const result = await uploadVoice(fileToUpload, setProgress, undefined, projectId);
+      const result = await uploadVoice(fileToUpload, setProgress, undefined, projectId, selectedSegments);
       setJob(null);
       setSegments([]);
       setSpeakerLabels({});
@@ -784,8 +787,17 @@ export default function App() {
       for (let index = 0; index < filesToUpload.length; index += 1) {
         uploadStarted = true;
         const file = filesToUpload[index];
+        const billingEntry = uploadBillingEntries.find((entry) => entry.file === file || entry.key === fileIdentity(file));
+        const selectedSegments =
+          billingEntry?.mode === "segments"
+            ? billingEntry.segments.filter((segment) => segment.selected).map((segment) => ({
+                start_ms: segment.start_ms,
+                end_ms: segment.end_ms,
+                selected: segment.selected,
+              }))
+            : [];
         setUploadStatus(`"${uploadedProjectTitle}" 업로드 중 ${index + 1}/${filesToUpload.length}: ${file.name}`);
-        const uploadResult = await performUpload(file, targetProjectId);
+        const uploadResult = await performUpload(file, targetProjectId, selectedSegments);
         if (uploadResult?.upload_method) {
           usedUploadMethods.add(uploadResult.upload_method);
         }
@@ -1221,6 +1233,7 @@ export default function App() {
                   paid={uploadPaid}
                   onPaidChange={setUploadPaid}
                   onRemoveFile={removeSelectedFile}
+                  onEntriesChange={setUploadBillingEntries}
                 />
               ) : null}
 
@@ -1472,6 +1485,9 @@ export default function App() {
                       화자 설정
                     </button>
                   </div>
+                  <p className="mb-2 text-xs text-slate-500">
+                    노란 글자는 업로드 시 선택한 구간 밖의 텍스트입니다. PDF에는 선택한 구간만 반영됩니다.
+                  </p>
                   <div className="space-y-2">
                     {segments.length ? (
                       segments.map((segment, index) => {
@@ -1481,6 +1497,7 @@ export default function App() {
                           index,
                           segments,
                           transcriptTokens,
+                          selectedUploadSegments,
                         );
                         const hasActiveWord =
                           isAudioPlaying && segmentContainsActiveWord(segmentWords, playbackMs);
@@ -1536,6 +1553,7 @@ export default function App() {
                             segmentIndex={index}
                             segments={segments}
                             tokens={transcriptTokens}
+                            selectedSegments={selectedUploadSegments}
                             playbackMs={playbackMs}
                             isAudioPlaying={isAudioPlaying}
                             disabled={busy || pdfReceived}

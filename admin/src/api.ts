@@ -24,6 +24,12 @@ export type TranscriptToken = {
   uncertain?: boolean;
 };
 
+export type SelectedUploadSegment = {
+  start_ms: number;
+  end_ms: number;
+  selected?: boolean;
+};
+
 export type JobResponse = {
   job_id: string;
   voice_key: string;
@@ -43,6 +49,7 @@ export type JobResponse = {
     name: string | null;
   };
   final_pdf_ready?: boolean;
+  selected_segments?: SelectedUploadSegment[];
   has_inquiry?: boolean;
   admin_inquiry_badges?: string[];
 };

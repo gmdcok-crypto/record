@@ -1,5 +1,5 @@
 import { resolveSegmentEndMs, type SegmentTiming } from "./segmentAudio";
-import type { TranscriptToken } from "./api";
+import type { SelectedUploadSegment, TranscriptToken } from "./api";
 
 export type TimedWord = {
   text: string;
@@ -7,6 +7,7 @@ export type TimedWord = {
   end_ms: number;
   uncertain?: boolean;
   confidence?: number | null;
+  outsideSelection?: boolean;
 };
 
 function normalizeTranscriptText(value: string): string {
@@ -52,6 +53,7 @@ export function buildSegmentTimedWords(
   segmentIndex: number,
   segments: SegmentTiming[],
   tokens: TranscriptToken[],
+  selectedSegments: SelectedUploadSegment[] = [],
 ): TimedWord[] {
   const endMs = resolveSegmentEndMs(segments, segmentIndex);
   const segmentTokens = tokensForSegment(tokens, segment, segmentIndex, segments);
@@ -72,12 +74,16 @@ export function buildSegmentTimedWords(
           end_ms: Math.max(end, start + 1),
           uncertain: Boolean(token.uncertain),
           confidence: typeof token.confidence === "number" ? token.confidence : null,
+          outsideSelection: isOutsideSelection(start, Math.max(end, start + 1), selectedSegments),
         };
       });
     }
   }
 
-  return buildFallbackTimedWords(segmentText, segment.start_ms, endMs);
+  return buildFallbackTimedWords(segmentText, segment.start_ms, endMs).map((word) => ({
+    ...word,
+    outsideSelection: isOutsideSelection(word.start_ms, word.end_ms, selectedSegments),
+  }));
 }
 
 export function isWordActive(word: TimedWord, playbackMs: number): boolean {
@@ -88,8 +94,18 @@ export function segmentContainsActiveWord(words: TimedWord[], playbackMs: number
   return words.some((word) => isWordActive(word, playbackMs));
 }
 
-export function activeWordClass(active: boolean, played: boolean, uncertain = false): string {
+function isOutsideSelection(startMs: number, endMs: number, selectedSegments: SelectedUploadSegment[]): boolean {
+  if (!selectedSegments.length) return false;
+  return !selectedSegments.some((segment) => {
+    if (segment.selected === false) return false;
+    return startMs < segment.end_ms && endMs > segment.start_ms;
+  });
+}
+
+
+export function activeWordClass(active: boolean, played: boolean, uncertain = false, outsideSelection = false): string {
   if (active) return "rounded-sm bg-white text-slate-950";
+  if (outsideSelection) return played ? "text-amber-300" : "text-amber-400";
   if (uncertain) return played ? "text-red-300" : "text-red-400";
   if (played) return "text-slate-300";
   return "text-slate-100";

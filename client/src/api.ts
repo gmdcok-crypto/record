@@ -8,6 +8,12 @@ export type TranscriptToken = {
   speaker: string | null;
 };
 
+export type SelectedUploadSegment = {
+  start_ms: number;
+  end_ms: number;
+  selected?: boolean;
+};
+
 export type TranscriptSegment = {
   speaker: string;
   text: string;
@@ -69,6 +75,7 @@ export type JobResponse = {
   };
   final_pdf_ready?: boolean;
   final_pdf_filename?: string | null;
+  selected_segments?: SelectedUploadSegment[];
   has_inquiry?: boolean;
   client_inquiry_status?: "reply_pending" | "reply_arrived" | null;
 };
@@ -83,6 +90,7 @@ export type JobArchiveItem = {
   client_name: string;
   pdf_ready: boolean;
   final_pdf_filename?: string | null;
+  selected_segments?: SelectedUploadSegment[];
   has_inquiry?: boolean;
   client_inquiry_status?: "reply_pending" | "reply_arrived" | null;
 };
@@ -238,6 +246,7 @@ export async function uploadVoice(
   onProgress?: (percent: number) => void,
   onUploadComplete?: () => void,
   projectId?: string,
+  selectedSegments?: SelectedUploadSegment[],
 ): Promise<UploadResponse> {
   const requestId =
     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -249,6 +258,9 @@ export async function uploadVoice(
       form.append("file", file);
       if (projectId) {
         form.append("project_id", projectId);
+      }
+      if (selectedSegments?.length) {
+        form.append("selected_segments_json", JSON.stringify(selectedSegments));
       }
 
       const token = localStorage.getItem(MEMBER_TOKEN_KEY);
@@ -299,6 +311,7 @@ export async function uploadVoice(
           filename: file.name,
           content_type: contentType,
           project_id: projectId ?? null,
+          selected_segments: selectedSegments ?? [],
         }),
       },
       1,
@@ -351,6 +364,7 @@ export async function uploadVoice(
           filename: file.name,
           content_type: contentType,
           project_id: projectId ?? null,
+          selected_segments: selectedSegments ?? [],
         }),
       },
       1,

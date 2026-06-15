@@ -158,6 +158,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   r2_transcript_key VARCHAR(255) NULL,
   final_pdf_r2_key VARCHAR(255) NULL,
   final_pdf_filename VARCHAR(255) NULL,
+  selected_segments_json JSON NULL,
   transcript_version INT NOT NULL DEFAULT 1,
   speaker_count INT NULL,
   memo TEXT NULL,

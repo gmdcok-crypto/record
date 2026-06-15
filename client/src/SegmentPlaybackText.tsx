@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { TranscriptToken } from "./api";
+import type { SelectedUploadSegment, TranscriptToken } from "./api";
 import {
   activeWordClass,
   buildSegmentTimedWords,
@@ -17,6 +17,7 @@ type Props = {
   segmentIndex: number;
   segments: SegmentTiming[];
   tokens: TranscriptToken[];
+  selectedSegments?: SelectedUploadSegment[];
   playbackMs: number;
   isAudioPlaying: boolean;
   disabled?: boolean;
@@ -34,6 +35,7 @@ export default function SegmentPlaybackText({
   segmentIndex,
   segments,
   tokens,
+  selectedSegments = [],
   playbackMs,
   isAudioPlaying,
   disabled = false,
@@ -50,8 +52,8 @@ export default function SegmentPlaybackText({
   const playTimerRef = useRef<number | null>(null);
 
   const words = useMemo(
-    () => buildSegmentTimedWords(value, segment, segmentIndex, segments, tokens),
-    [value, segment, segmentIndex, segments, tokens],
+    () => buildSegmentTimedWords(value, segment, segmentIndex, segments, tokens, selectedSegments),
+    [value, segment, segmentIndex, segments, tokens, selectedSegments],
   );
 
   const showKaraoke = isAudioPlaying && !editing && !readOnly && words.length > 0 && segment.start_ms != null;
@@ -190,7 +192,8 @@ function KaraokeWords({
             key={`${word.start_ms}-${index}`}
             ref={active ? (element) => { activeWordRef.current = element; } : undefined}
             data-active-word={active ? "true" : undefined}
-            className={activeWordClass(active, played)}
+            className={activeWordClass(active, played, Boolean(word.outsideSelection))}
+            title={word.outsideSelection ? "선택 구간 밖 텍스트" : undefined}
           >
             {word.text}
           </span>

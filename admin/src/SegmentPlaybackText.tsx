@@ -7,6 +7,7 @@ import {
   type TimedWord,
   type TranscriptToken,
 } from "./playbackHighlight";
+import type { SelectedUploadSegment } from "./api";
 import type { SegmentTiming } from "./segmentAudio";
 
 const PLAY_CLICK_DELAY_MS = 280;
@@ -17,6 +18,7 @@ type Props = {
   segmentIndex: number;
   segments: SegmentTiming[];
   tokens: TranscriptToken[];
+  selectedSegments?: SelectedUploadSegment[];
   playbackMs: number;
   isAudioPlaying: boolean;
   disabled?: boolean;
@@ -34,6 +36,7 @@ export default function SegmentPlaybackText({
   segmentIndex,
   segments,
   tokens,
+  selectedSegments = [],
   playbackMs,
   isAudioPlaying,
   disabled = false,
@@ -50,8 +53,8 @@ export default function SegmentPlaybackText({
   const playTimerRef = useRef<number | null>(null);
 
   const words = useMemo(
-    () => buildSegmentTimedWords(value, segment, segmentIndex, segments, tokens),
-    [value, segment, segmentIndex, segments, tokens],
+    () => buildSegmentTimedWords(value, segment, segmentIndex, segments, tokens, selectedSegments),
+    [value, segment, segmentIndex, segments, tokens, selectedSegments],
   );
 
   const showKaraoke = isAudioPlaying && !editing && !readOnly && words.length > 0 && segment.start_ms != null;
@@ -190,9 +193,11 @@ function KaraokeWords({
             key={`${word.start_ms}-${index}`}
             ref={active ? (element) => { activeWordRef.current = element; } : undefined}
             data-active-word={active ? "true" : undefined}
-            className={activeWordClass(active, played, Boolean(word.uncertain))}
+            className={activeWordClass(active, played, Boolean(word.uncertain), Boolean(word.outsideSelection))}
             title={
-              word.uncertain
+              word.outsideSelection
+                ? "선택 구간 밖 텍스트"
+                : word.uncertain
                 ? word.confidence != null
                   ? `AI 인식 불확실 (confidence ${Math.round(word.confidence * 100)}%)`
                   : "AI 인식 불확실"

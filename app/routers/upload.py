@@ -60,6 +60,7 @@ class PresignRequest(BaseModel):
     filename: str = Field(..., min_length=1, max_length=255)
     content_type: str = Field(default="application/octet-stream")
     project_id: str | None = None
+    selected_segments: list[dict] | None = None
 
 
 class PresignResponse(BaseModel):
@@ -88,6 +89,7 @@ class VoiceUploadCompleteRequest(BaseModel):
     filename: str = Field(..., min_length=1, max_length=255)
     content_type: str = Field(default="application/octet-stream")
     project_id: str | None = None
+    selected_segments: list[dict] | None = None
 
 
 @router.post("/voice", response_model=VoiceUploadResponse)
@@ -96,8 +98,11 @@ async def upload_voice(
     db: Session = Depends(get_db),
     member: Annotated[Member | None, Depends(get_optional_current_member)] = None,
     project_id: Annotated[str | None, Form()] = None,
+    selected_segments_json: Annotated[str | None, Form()] = None,
     request_id: Annotated[str | None, Header(alias="X-Upload-Request-Id")] = None,
 ) -> VoiceUploadResponse:
+    import json
+
     started = perf_counter()
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required")
@@ -159,6 +164,14 @@ async def upload_voice(
         client = ensure_seed_data(db)
 
     resolved_project_id: str | None = None
+    selected_segments: list[dict] | None = None
+    if selected_segments_json:
+        try:
+            parsed = json.loads(selected_segments_json)
+            if isinstance(parsed, list):
+                selected_segments = parsed
+        except Exception:
+            selected_segments = None
     if member is not None or project_id:
         if member is None:
             raise HTTPException(status_code=401, detail="프로젝트 업로드는 회원 로그인이 필요합니다.")
@@ -182,6 +195,7 @@ async def upload_voice(
         voice_key=upload_result["object_key"],
         member=member,
         project_id=resolved_project_id,
+        selected_segments=selected_segments,
     )
     publish_admin_event(
         "job_created",
@@ -337,6 +351,7 @@ def complete_voice_upload(
         voice_key=body.object_key,
         member=member,
         project_id=resolved_project_id,
+        selected_segments=body.selected_segments if isinstance(body.selected_segments, list) else None,
     )
     publish_admin_event(
         "job_created",
