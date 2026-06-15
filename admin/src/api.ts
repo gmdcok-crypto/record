@@ -1,3 +1,5 @@
+const DEFAULT_REMOTE_API_URL = "https://record-production.up.railway.app";
+
 export type Segment = {
   speaker: string;
   text: string;
@@ -225,7 +227,12 @@ export type AdminOverview = {
 
 function apiBase(): string {
   const configured = import.meta.env.VITE_API_URL?.replace(/\/$/, "");
-  return configured || window.location.origin;
+  if (configured) return configured;
+  const { origin, hostname } = window.location;
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    return origin;
+  }
+  return DEFAULT_REMOTE_API_URL;
 }
 
 export function getApiBaseUrl(): string {
