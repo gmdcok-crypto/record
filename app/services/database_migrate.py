@@ -23,6 +23,7 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_transcript_change_logs.sql",
     SCRIPTS_DIR / "migrate_transcriber_license.sql",
     SCRIPTS_DIR / "migrate_member_push_subscriptions.sql",
+    SCRIPTS_DIR / "migrate_admin_push_subscriptions.sql",
 ]
 
 

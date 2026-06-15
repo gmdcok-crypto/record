@@ -11,12 +11,13 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.admin_models import Job, Member, MemberPushSubscription
+from app.models.admin_models import AdminPushSubscription, AdminUser, Job, Member, MemberPushSubscription
 from app.services.database_reset import _run_sql_file
 
 logger = logging.getLogger(__name__)
 SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
 PUSH_SUBSCRIPTIONS_SQL = SCRIPTS_DIR / "migrate_member_push_subscriptions.sql"
+ADMIN_PUSH_SUBSCRIPTIONS_SQL = SCRIPTS_DIR / "migrate_admin_push_subscriptions.sql"
 
 
 def web_push_enabled() -> bool:
@@ -39,6 +40,12 @@ def _ensure_member_push_subscription_table(db: Session) -> None:
     bind = db.get_bind()
     db.rollback()
     _run_sql_file(bind, PUSH_SUBSCRIPTIONS_SQL)
+
+
+def _ensure_admin_push_subscription_table(db: Session) -> None:
+    bind = db.get_bind()
+    db.rollback()
+    _run_sql_file(bind, ADMIN_PUSH_SUBSCRIPTIONS_SQL)
 
 
 def upsert_member_push_subscription(
@@ -80,6 +87,45 @@ def upsert_member_push_subscription(
     raise RuntimeError("Failed to upsert member push subscription")
 
 
+def upsert_admin_push_subscription(
+    db: Session,
+    *,
+    admin_user: AdminUser,
+    endpoint: str,
+    p256dh_key: str,
+    auth_key: str,
+    user_agent: str | None = None,
+) -> AdminPushSubscription:
+    normalized_endpoint = endpoint.strip()
+    for attempt in range(2):
+        try:
+            row = db.scalar(select(AdminPushSubscription).where(AdminPushSubscription.endpoint == normalized_endpoint))
+            if row is None:
+                row = AdminPushSubscription(
+                    admin_user_id=admin_user.id,
+                    endpoint=normalized_endpoint,
+                    p256dh_key=p256dh_key.strip(),
+                    auth_key=auth_key.strip(),
+                    user_agent=(user_agent or "").strip() or None,
+                    is_active=1,
+                )
+                db.add(row)
+            else:
+                row.admin_user_id = admin_user.id
+                row.p256dh_key = p256dh_key.strip()
+                row.auth_key = auth_key.strip()
+                row.user_agent = (user_agent or "").strip() or None
+                row.is_active = 1
+            db.commit()
+            db.refresh(row)
+            return row
+        except (OperationalError, ProgrammingError):
+            if attempt == 1:
+                raise
+            _ensure_admin_push_subscription_table(db)
+    raise RuntimeError("Failed to upsert admin push subscription")
+
+
 def deactivate_member_push_subscription(db: Session, *, endpoint: str, member: Member | None = None) -> None:
     normalized_endpoint = endpoint.strip()
     for attempt in range(2):
@@ -98,6 +144,24 @@ def deactivate_member_push_subscription(db: Session, *, endpoint: str, member: M
             _ensure_member_push_subscription_table(db)
 
 
+def deactivate_admin_push_subscription(db: Session, *, endpoint: str, admin_user: AdminUser | None = None) -> None:
+    normalized_endpoint = endpoint.strip()
+    for attempt in range(2):
+        try:
+            row = db.scalar(select(AdminPushSubscription).where(AdminPushSubscription.endpoint == normalized_endpoint))
+            if row is None:
+                return
+            if admin_user is not None and row.admin_user_id != admin_user.id:
+                return
+            row.is_active = 0
+            db.commit()
+            return
+        except (OperationalError, ProgrammingError):
+            if attempt == 1:
+                raise
+            _ensure_admin_push_subscription_table(db)
+
+
 def list_member_push_subscriptions(db: Session, *, member: Member) -> list[MemberPushSubscription]:
     for attempt in range(2):
         try:
@@ -110,6 +174,21 @@ def list_member_push_subscriptions(db: Session, *, member: Member) -> list[Membe
             if attempt == 1:
                 raise
             _ensure_member_push_subscription_table(db)
+    return []
+
+
+def list_admin_push_subscriptions(db: Session, *, admin_user: AdminUser) -> list[AdminPushSubscription]:
+    for attempt in range(2):
+        try:
+            return db.scalars(
+                select(AdminPushSubscription)
+                .where(AdminPushSubscription.admin_user_id == admin_user.id, AdminPushSubscription.is_active == 1)
+                .order_by(AdminPushSubscription.updated_at.desc(), AdminPushSubscription.id.desc())
+            ).all()
+        except (OperationalError, ProgrammingError):
+            if attempt == 1:
+                raise
+            _ensure_admin_push_subscription_table(db)
     return []
 
 
@@ -165,9 +244,34 @@ def send_web_push_to_member(db: Session, *, member: Member, payload: dict[str, A
     return delivered
 
 
+def send_web_push_to_admin(db: Session, *, admin_user: AdminUser, payload: dict[str, Any]) -> int:
+    if not web_push_enabled():
+        return 0
+    delivered = 0
+    for subscription in list_admin_push_subscriptions(db, admin_user=admin_user):
+        try:
+            _send_payload_to_subscription(subscription, payload)
+            delivered += 1
+        except WebPushException as exc:
+            logger.warning("Web push failed for admin=%s subscription=%s: %s", admin_user.id, subscription.id, exc)
+            subscription.is_active = 0
+            db.commit()
+        except Exception:
+            logger.exception("Unexpected web push failure for admin=%s subscription=%s", admin_user.id, subscription.id)
+    return delivered
+
+
 def _client_job_url(job: Job) -> str:
     base = settings.public_client_url.rstrip("/")
     return f"{base}?job_id={job.job_id}" if base else ""
+
+
+def _admin_job_url(job: Job) -> str:
+    base = settings.public_admin_url.rstrip("/")
+    if not base:
+        return ""
+    separator = "&" if "?" in base else "?"
+    return f"{base}{separator}job_id={job.job_id}"
 
 
 def send_client_status_web_push(db: Session, *, member: Member, job: Job, note: str | None = None) -> int:
@@ -224,5 +328,45 @@ def send_client_inquiry_web_push(db: Session, *, member: Member, job: Job, sende
             tag=f"job-inquiry-{job.job_id}",
             job_id=job.job_id,
             kind="inquiry_reply",
+        ),
+    )
+
+
+def send_admin_inquiry_web_push(
+    db: Session,
+    *,
+    admin_user: AdminUser,
+    job: Job,
+    sender_name: str,
+    message_preview: str,
+    sender_role: str,
+) -> int:
+    role_label = "의뢰인" if sender_role == "client" else "속기사" if sender_role == "transcriber" else "사용자"
+    return send_web_push_to_admin(
+        db,
+        admin_user=admin_user,
+        payload=_payload(
+            title=f"{role_label} 문의 도착",
+            body=f"{job.original_filename}: {sender_name} - {message_preview}",
+            url=_admin_job_url(job),
+            tag=f"admin-inquiry-{job.job_id}",
+            job_id=job.job_id,
+            kind="admin_inquiry",
+        ),
+    )
+
+
+def send_admin_review_request_web_push(db: Session, *, admin_user: AdminUser, job: Job, note: str | None = None) -> int:
+    extra = f" {note.strip()}" if note and note.strip() else ""
+    return send_web_push_to_admin(
+        db,
+        admin_user=admin_user,
+        payload=_payload(
+            title="의뢰인 검토 요청",
+            body=f"{job.original_filename}: 속기사 재검토 요청이 접수되었습니다.{extra}",
+            url=_admin_job_url(job),
+            tag=f"admin-review-{job.job_id}",
+            job_id=job.job_id,
+            kind="admin_review_request",
         ),
     )

@@ -18,6 +18,11 @@ import {
   type AdminOverview,
   type JobResponse,
 } from "./api";
+import {
+  enableAdminWebPush,
+  getAdminNotificationPermissionState,
+  hasRegisteredAdminPushSubscription,
+} from "./webPush";
 
 type MenuKey =
   | "dashboard"
@@ -181,6 +186,16 @@ const MENU_BASE: Array<Omit<MenuItem, "count">> = [
   { key: "reports", label: "집계" },
   { key: "analytics", label: "분석" },
 ];
+
+function notifyAdminEvent(title: string, body: string) {
+  if (typeof window === "undefined" || !("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+  try {
+    new Notification(title, { body });
+  } catch {
+    // ignore browser notification failures
+  }
+}
 
 function formatCurrency(value: number): string {
   return `${value.toLocaleString("ko-KR")}원`;
@@ -493,6 +508,9 @@ function App() {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
+  const [adminPushPermission, setAdminPushPermission] = useState<NotificationPermission | "unsupported">("default");
+  const [adminPushRegistered, setAdminPushRegistered] = useState(false);
+  const [adminPushLoading, setAdminPushLoading] = useState(false);
   const [detailJobId, setDetailJobId] = useState<string | null>(null);
   const [detailJob, setDetailJob] = useState<JobResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -527,6 +545,19 @@ function App() {
   };
 
   useEffect(() => {
+    void (async () => {
+      const permission = await getAdminNotificationPermissionState();
+      setAdminPushPermission(permission);
+      if (permission === "unsupported") {
+        setAdminPushRegistered(false);
+        return;
+      }
+      const registered = await hasRegisteredAdminPushSubscription().catch(() => false);
+      setAdminPushRegistered(registered);
+    })();
+  }, []);
+
+  useEffect(() => {
     let alive = true;
 
     const initialLoad = async () => {
@@ -536,6 +567,11 @@ function App() {
         const data = await fetchAdminOverview();
         if (!alive) return;
         setOverview(data);
+        const queryJobId = new URLSearchParams(window.location.search).get("job_id");
+        if (queryJobId) {
+          setActiveMenu("jobs");
+          void openDetailModal(queryJobId);
+        }
       } catch (err) {
         if (!alive) return;
         console.error(err);
@@ -553,8 +589,22 @@ function App() {
     void initialLoad();
 
     const eventSource = createAdminEventsSource();
-    eventSource.addEventListener("admin_update", () => {
+    eventSource.addEventListener("admin_update", (event) => {
       if (!alive) return;
+      try {
+        const payload = JSON.parse((event as MessageEvent<string>).data || "{}") as {
+          type?: string;
+          payload?: Record<string, unknown>;
+        };
+        if (payload.type === "job_inquiry_created" && payload.payload?.sender_role === "client") {
+          notifyAdminEvent("의뢰인 문의 도착", "의뢰인이 관리자에게 새 문의를 남겼습니다.");
+        }
+        if (payload.type === "job_updated" && payload.payload?.status === "review_waiting") {
+          notifyAdminEvent("의뢰인 검토 요청", "의뢰인이 속기사 검토 요청을 보냈습니다.");
+        }
+      } catch {
+        // ignore malformed SSE payloads
+      }
       void loadOverview({ silent: true });
     });
     eventSource.addEventListener("error", () => {
@@ -569,6 +619,21 @@ function App() {
       eventSource.close();
       window.removeEventListener("focus", refreshVisibleData);
       document.removeEventListener("visibilitychange", refreshVisibleData);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const handler = (event: MessageEvent<{ type?: string; payload?: { jobId?: string | null } }>) => {
+      if (event.data?.type !== "ADMIN_WEB_PUSH_NOTIFICATION_CLICK") return;
+      const jobId = event.data?.payload?.jobId;
+      if (!jobId) return;
+      setActiveMenu("jobs");
+      void openDetailModal(jobId);
+    };
+    navigator.serviceWorker.addEventListener("message", handler);
+    return () => {
+      navigator.serviceWorker.removeEventListener("message", handler);
     };
   }, []);
 
@@ -695,6 +760,38 @@ function App() {
       console.error(err);
       window.alert(err instanceof Error ? err.message : "요청 처리 중 오류가 발생했습니다.");
       setLoading(false);
+    }
+  };
+
+  const enableAdminPushNotifications = async () => {
+    setAdminPushLoading(true);
+    try {
+      const result = await enableAdminWebPush();
+      const permission = await getAdminNotificationPermissionState();
+      setAdminPushPermission(permission);
+      const registered = await hasRegisteredAdminPushSubscription().catch(() => false);
+      setAdminPushRegistered(registered);
+
+      if (result === "enabled") {
+        setActionNotice({
+          kind: "success",
+          title: "관리자 알림 등록 완료",
+          message: "이 브라우저에서 의뢰인 문의와 검토 요청을 웹푸시로 받습니다.",
+        });
+        return;
+      }
+      if (result === "disabled") {
+        throw new Error("서버 웹푸시 설정이 아직 완료되지 않았습니다.");
+      }
+      if (result === "denied") {
+        throw new Error("브라우저 알림 권한이 차단되어 있습니다.");
+      }
+      throw new Error("이 브라우저에서는 웹푸시를 사용할 수 없습니다.");
+    } catch (err) {
+      console.error(err);
+      window.alert(err instanceof Error ? err.message : "관리자 웹푸시 등록 중 오류가 발생했습니다.");
+    } finally {
+      setAdminPushLoading(false);
     }
   };
 
@@ -1800,11 +1897,28 @@ function App() {
                                     : "분석"}
                   </h2>
                 </div>
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                  <SummaryChip label="총 파일" value={`${dashboardStats.totalJobs}건`} />
-                  <SummaryChip label="긴급" value={`${urgentJobs.length}건`} tone="violet" />
-                  <SummaryChip label="미수" value={formatCurrency(dashboardStats.outstanding)} tone="amber" />
-                  <SummaryChip label="정산 예정" value={formatCurrency(dashboardStats.totalSettlements)} tone="cyan" />
+                <div className="flex flex-col items-stretch gap-2 xl:items-end">
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <SummaryChip label="총 파일" value={`${dashboardStats.totalJobs}건`} />
+                    <SummaryChip label="긴급" value={`${urgentJobs.length}건`} tone="violet" />
+                    <SummaryChip label="미수" value={formatCurrency(dashboardStats.outstanding)} tone="amber" />
+                    <SummaryChip label="정산 예정" value={formatCurrency(dashboardStats.totalSettlements)} tone="cyan" />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1 text-[11px] text-slate-400">
+                      관리자 알림: {adminPushRegistered ? "웹푸시 등록됨" : adminPushPermission === "denied" ? "권한 차단" : "미등록"}
+                    </span>
+                    {!adminPushRegistered ? (
+                      <button
+                        type="button"
+                        onClick={() => void enableAdminPushNotifications()}
+                        disabled={adminPushLoading || adminPushPermission === "unsupported"}
+                        className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-semibold text-cyan-300 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {adminPushLoading ? "등록 중..." : "관리자 알림 받기"}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </section>

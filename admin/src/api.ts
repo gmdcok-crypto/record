@@ -231,6 +231,52 @@ export function createAdminEventsSource(): EventSource {
   return new EventSource(`${apiBase()}/api/jobs/admin/events`);
 }
 
+export type PushSubscriptionPayload = {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+  user_agent?: string;
+};
+
+export async function fetchWebPushConfig(): Promise<{ enabled: boolean; vapidPublicKey: string }> {
+  const res = await fetch(`${apiBase()}/api/public-config`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    webPushEnabled?: boolean;
+    webPushVapidPublicKey?: string;
+  };
+  return {
+    enabled: Boolean(data.webPushEnabled && data.webPushVapidPublicKey),
+    vapidPublicKey: data.webPushVapidPublicKey?.trim() ?? "",
+  };
+}
+
+export async function registerAdminPushSubscription(payload: PushSubscriptionPayload): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/push-subscriptions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "관리자 웹푸시 구독 실패");
+  }
+}
+
+export async function unregisterAdminPushSubscription(payload: PushSubscriptionPayload): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/push-subscriptions`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "관리자 웹푸시 구독 해제 실패");
+  }
+}
+
 export async function fetchJob(jobId: string): Promise<JobResponse> {
   const res = await fetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}`);
   if (!res.ok) {

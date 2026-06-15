@@ -84,7 +84,14 @@ from app.services.r2 import (
     save_final_pdf,
     save_transcript_json,
 )
-from app.services.web_push import send_client_pdf_web_push, send_client_status_web_push
+from app.services.web_push import (
+    deactivate_admin_push_subscription,
+    send_admin_inquiry_web_push,
+    send_admin_review_request_web_push,
+    send_client_pdf_web_push,
+    send_client_status_web_push,
+    upsert_admin_push_subscription,
+)
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 logger = logging.getLogger(__name__)
@@ -157,6 +164,17 @@ class SettlementStatusUpdateRequest(BaseModel):
 
 class InvoiceStatusUpdateRequest(BaseModel):
     status: str
+
+
+class PushSubscriptionKeys(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class PushSubscriptionRequest(BaseModel):
+    endpoint: str
+    keys: PushSubscriptionKeys
+    user_agent: str | None = None
 
 
 class TranscriptShareCreateRequest(BaseModel):
@@ -290,6 +308,10 @@ def _job_member(db: Session, job: Job) -> Member | None:
     return None
 
 
+def _default_admin_user(db: Session) -> AdminUser | None:
+    return db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
+
+
 def _notify_client_status_change(db: Session, job: Job, *, note: str | None = None) -> None:
     member = _job_member(db, job)
     if member is None:
@@ -312,6 +334,49 @@ def _notify_client_pdf_delivery(db: Session, job: Job, *, delivery_mode: str) ->
             logger.warning("No client PDF delivery web push delivered for job %s", job.job_id)
     except Exception:
         logger.exception("Failed to send client PDF delivery notification for job %s", job.job_id)
+
+
+def _notify_admin_inquiry(
+    db: Session,
+    job: Job,
+    *,
+    sender_name: str,
+    message: str,
+    sender_role: str,
+) -> None:
+    admin = _default_admin_user(db)
+    if admin is None:
+        return
+    preview = " ".join((message or "").split())
+    if len(preview) > 120:
+        preview = preview[:119].rstrip() + "…"
+    try:
+        delivered = send_admin_inquiry_web_push(
+            db,
+            admin_user=admin,
+            job=job,
+            sender_name=sender_name,
+            message_preview=preview,
+            sender_role=sender_role,
+        )
+        if delivered == 0:
+            logger.info("Admin inquiry web push delivered 0 notifications for job %s", job.job_id)
+    except Exception:
+        logger.exception("Failed to send admin inquiry web push for job %s", job.job_id)
+
+
+def _maybe_notify_admin_review_request(db: Session, job: Job, *, note: str | None = None) -> None:
+    if job.status != "review_waiting":
+        return
+    admin = _default_admin_user(db)
+    if admin is None:
+        return
+    try:
+        delivered = send_admin_review_request_web_push(db, admin_user=admin, job=job, note=note)
+        if delivered == 0:
+            logger.info("Admin review-request web push delivered 0 notifications for job %s", job.job_id)
+    except Exception:
+        logger.exception("Failed to send admin review-request web push for job %s", job.job_id)
 
 
 @router.get("")
@@ -487,6 +552,47 @@ def admin_events() -> StreamingResponse:
     )
 
 
+@router.post("/admin/push-subscriptions")
+def register_admin_push_subscription(
+    body: PushSubscriptionRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    if not body.endpoint.strip() or not body.keys.p256dh.strip() or not body.keys.auth.strip():
+        raise HTTPException(status_code=400, detail="유효한 푸시 구독 정보가 필요합니다.")
+    admin = _default_admin_user(db)
+    if admin is None:
+        raise HTTPException(status_code=503, detail="기본 관리자 계정을 찾을 수 없습니다.")
+    try:
+        subscription = upsert_admin_push_subscription(
+            db,
+            admin_user=admin,
+            endpoint=body.endpoint,
+            p256dh_key=body.keys.p256dh,
+            auth_key=body.keys.auth,
+            user_agent=body.user_agent,
+        )
+    except Exception as exc:
+        logger.exception("admin push subscription register failed")
+        raise HTTPException(status_code=503, detail="관리자 웹푸시 구독 저장 중 오류가 발생했습니다.") from exc
+    return {"subscription_id": subscription.id, "registered": True}
+
+
+@router.delete("/admin/push-subscriptions")
+def unregister_admin_push_subscription(
+    body: PushSubscriptionRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    admin = _default_admin_user(db)
+    if admin is None:
+        return {"unregistered": True}
+    try:
+        deactivate_admin_push_subscription(db, endpoint=body.endpoint, admin_user=admin)
+    except Exception as exc:
+        logger.exception("admin push subscription unregister failed")
+        raise HTTPException(status_code=503, detail="관리자 웹푸시 구독 해제 중 오류가 발생했습니다.") from exc
+    return {"unregistered": True}
+
+
 @router.get("/admin/transcribers")
 def admin_transcribers(db: Annotated[Session, Depends(get_db)]) -> dict:
     return {"transcribers": list_transcribers(db)}
@@ -587,6 +693,7 @@ def create_client_job_inquiry(
         )
     except Exception:
         logger.exception("Failed to send client inquiry notification for job %s", job_id)
+    _notify_admin_inquiry(db, job, sender_name=member.name, message=message["message"], sender_role="client")
     publish_admin_event("job_inquiry_created", {"job_id": job_id, "thread_type": THREAD_CLIENT_ADMIN, "sender_role": "client"})
     return {"message": message}
 
@@ -633,6 +740,7 @@ def create_transcriber_job_inquiry(
         )
     except Exception:
         logger.exception("Failed to send transcriber inquiry notification for job %s", job_id)
+    _notify_admin_inquiry(db, job, sender_name=current.name, message=message["message"], sender_role="transcriber")
     publish_admin_event("job_inquiry_created", {"job_id": job_id, "thread_type": THREAD_TRANSCRIBER_ADMIN, "sender_role": "transcriber"})
     return {"message": message}
 
@@ -1482,6 +1590,7 @@ def submit_shared_review_request(
         )
         job = set_job_status(db, job, "review_waiting", "공유 링크에서 속기사 재검수 요청")
         _notify_client_status_change(db, job, note="속기사 재검토 요청이 접수되었습니다.")
+        _maybe_notify_admin_review_request(db, job, note="공유 링크에서 속기사 재검수 요청")
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
@@ -1502,5 +1611,6 @@ def update_job_status(
         raise HTTPException(status_code=404, detail="Job not found")
     job = set_job_status(db, job, body.status, body.note)
     _notify_client_status_change(db, job, note=body.note)
+    _maybe_notify_admin_review_request(db, job, note=body.note)
     publish_admin_event("job_updated", {"job_id": job.job_id, "status": job.status})
     return {"job_id": job.job_id, "status": job.status}

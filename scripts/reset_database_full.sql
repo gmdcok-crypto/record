@@ -6,6 +6,7 @@ DROP TABLE IF EXISTS settlements;
 DROP TABLE IF EXISTS invoice_payments;
 DROP TABLE IF EXISTS invoices;
 DROP TABLE IF EXISTS member_push_subscriptions;
+DROP TABLE IF EXISTS admin_push_subscriptions;
 DROP TABLE IF EXISTS job_inquiry_messages;
 DROP TABLE IF EXISTS job_notes;
 DROP TABLE IF EXISTS job_status_logs;
@@ -357,6 +358,24 @@ CREATE TABLE IF NOT EXISTS member_push_subscriptions (
   UNIQUE KEY uq_member_push_subscriptions_endpoint (endpoint(255)),
   KEY idx_member_push_subscriptions_member_id (member_id),
   KEY idx_member_push_subscriptions_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS admin_push_subscriptions (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  admin_user_id BIGINT NOT NULL,
+  endpoint VARCHAR(500) NOT NULL,
+  p256dh_key VARCHAR(255) NOT NULL,
+  auth_key VARCHAR(255) NOT NULL,
+  user_agent VARCHAR(255) NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_admin_push_subscriptions_admin_user
+    FOREIGN KEY (admin_user_id) REFERENCES admin_users(id)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  UNIQUE KEY uq_admin_push_subscriptions_endpoint (endpoint(255)),
+  KEY idx_admin_push_subscriptions_admin_user_id (admin_user_id),
+  KEY idx_admin_push_subscriptions_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS invoices (
