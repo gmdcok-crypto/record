@@ -190,6 +190,39 @@ def _ensure_transcriber_grade_level_column(db: Session) -> None:
         conn.execute(text("ALTER TABLE transcribers ADD COLUMN grade_level INT NOT NULL DEFAULT 1 AFTER status"))
 
 
+def _ensure_transcriber_grade_rates_table(db: Session) -> None:
+    bind = db.get_bind()
+    db.rollback()
+    with bind.begin() as conn:
+        exists = conn.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'transcriber_grade_rates'
+                LIMIT 1
+                """
+            )
+        ).first()
+        if exists:
+            return
+        conn.execute(
+            text(
+                """
+                CREATE TABLE transcriber_grade_rates (
+                  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                  grade_level INT NOT NULL,
+                  per_minute_rate DECIMAL(12,2) NOT NULL DEFAULT 0,
+                  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                  UNIQUE KEY uk_transcriber_grade_rates_level (grade_level)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """
+            )
+        )
+
+
 def find_job_by_filename(db: Session, filename: str) -> Job | None:
     normalized = filename.strip()
     if not normalized:
@@ -583,7 +616,17 @@ def list_transcribers(db: Session) -> list[dict]:
 
 
 def list_transcriber_grade_rates(db: Session) -> list[dict]:
-    rows = db.scalars(select(TranscriberGradeRate).order_by(TranscriberGradeRate.grade_level.asc())).all()
+    for attempt in range(2):
+        try:
+            rows = db.scalars(select(TranscriberGradeRate).order_by(TranscriberGradeRate.grade_level.asc())).all()
+            break
+        except (OperationalError, ProgrammingError) as exc:
+            message = str(exc).lower()
+            if attempt == 1 or "transcriber_grade_rates" not in message:
+                raise
+            _ensure_transcriber_grade_rates_table(db)
+    else:
+        rows = []
     return [
         {
             "id": row.id,
@@ -599,23 +642,41 @@ def upsert_transcriber_grade_rate(db: Session, grade_level: int, per_minute_rate
         raise ValueError("등급은 1등급부터 5등급까지 선택할 수 있습니다.")
     if per_minute_rate < 0:
         raise ValueError("분당 전사금액은 0원 이상이어야 합니다.")
-    rate = db.scalar(select(TranscriberGradeRate).where(TranscriberGradeRate.grade_level == grade_level))
-    if rate is None:
-        rate = TranscriberGradeRate(grade_level=grade_level, per_minute_rate=per_minute_rate)
-        db.add(rate)
-    else:
-        rate.per_minute_rate = per_minute_rate
-    db.commit()
-    db.refresh(rate)
-    return rate
+    for attempt in range(2):
+        try:
+            rate = db.scalar(select(TranscriberGradeRate).where(TranscriberGradeRate.grade_level == grade_level))
+            if rate is None:
+                rate = TranscriberGradeRate(grade_level=grade_level, per_minute_rate=per_minute_rate)
+                db.add(rate)
+            else:
+                rate.per_minute_rate = per_minute_rate
+            db.commit()
+            db.refresh(rate)
+            return rate
+        except (OperationalError, ProgrammingError) as exc:
+            db.rollback()
+            message = str(exc).lower()
+            if attempt == 1 or "transcriber_grade_rates" not in message:
+                raise
+            _ensure_transcriber_grade_rates_table(db)
+    raise RuntimeError("Failed to save transcriber grade rate")
 
 
 def delete_transcriber_grade_rate(db: Session, rate_id: int) -> None:
-    rate = db.scalar(select(TranscriberGradeRate).where(TranscriberGradeRate.id == rate_id))
-    if rate is None:
-        raise ValueError("등급별 요율을 찾을 수 없습니다.")
-    db.delete(rate)
-    db.commit()
+    for attempt in range(2):
+        try:
+            rate = db.scalar(select(TranscriberGradeRate).where(TranscriberGradeRate.id == rate_id))
+            if rate is None:
+                raise ValueError("등급별 요율을 찾을 수 없습니다.")
+            db.delete(rate)
+            db.commit()
+            return
+        except (OperationalError, ProgrammingError) as exc:
+            db.rollback()
+            message = str(exc).lower()
+            if attempt == 1 or "transcriber_grade_rates" not in message:
+                raise
+            _ensure_transcriber_grade_rates_table(db)
 
 
 def get_transcriber_by_code(db: Session, transcriber_code: str = DEFAULT_TRANSCRIBER_CODE) -> Transcriber | None:
