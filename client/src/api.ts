@@ -1,4 +1,5 @@
 const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
+const DEFAULT_REMOTE_API_URL = "https://record-production.up.railway.app";
 
 export type TranscriptToken = {
   text: string;
@@ -95,7 +96,12 @@ export type HealthResponse = {
 };
 
 function apiBase(): string {
-  return API_URL || window.location.origin;
+  if (API_URL) return API_URL;
+  const { origin, hostname } = window.location;
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    return origin;
+  }
+  return DEFAULT_REMOTE_API_URL;
 }
 
 export function createAdminEventsSource(): EventSource {
