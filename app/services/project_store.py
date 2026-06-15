@@ -1,10 +1,12 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.admin_models import Client, Job, Member, Project, Transcriber
+from app.services.database_reset import _run_sql_file
 from app.services.id_factory import generate_project_id
 from app.services.job_store import (
     DEFAULT_CLIENT_NAME,
@@ -19,6 +21,8 @@ from app.services.job_store import (
 FINAL_JOB_STATUSES = frozenset({"final_done", "pdf_sent"})
 WAITING_JOB_STATUSES = frozenset({"uploaded", "waiting_assignment"})
 WORKING_JOB_STATUSES = frozenset({"assigned", "working", "client_editing", "review_waiting"})
+SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
+PROJECT_PDF_DELIVERY_MODE_SQL = SCRIPTS_DIR / "migrate_project_pdf_delivery_mode.sql"
 
 
 class ProjectAccessError(ValueError):
@@ -52,18 +56,27 @@ def create_project(
     memo: str | None = None,
     priority: str = "normal",
 ) -> Project:
-    project = Project(
-        project_id=generate_project_id(),
-        client_id=client.id,
-        title=title.strip() or "새 녹취 프로젝트",
-        due_at=due_at or _project_due_default(),
-        memo=memo,
-        priority=priority,
-    )
-    db.add(project)
-    db.commit()
-    db.refresh(project)
-    return project
+    for attempt in range(2):
+        project = Project(
+            project_id=generate_project_id(),
+            client_id=client.id,
+            title=title.strip() or "새 녹취 프로젝트",
+            due_at=due_at or _project_due_default(),
+            memo=memo,
+            priority=priority,
+        )
+        try:
+            db.add(project)
+            db.commit()
+            db.refresh(project)
+            return project
+        except (OperationalError, ProgrammingError) as exc:
+            db.rollback()
+            message = str(exc).lower()
+            if attempt == 1 or "pdf_delivery_mode" not in message:
+                raise
+            _run_sql_file(db.get_bind(), PROJECT_PDF_DELIVERY_MODE_SQL)
+    raise RuntimeError("Failed to create project")
 
 
 def create_project_for_member(
