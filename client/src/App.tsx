@@ -726,10 +726,11 @@ export default function App() {
     setStep("uploading");
     setProgress(0);
     try {
-      await uploadVoice(fileToUpload, setProgress, undefined, projectId);
+      const result = await uploadVoice(fileToUpload, setProgress, undefined, projectId);
       setJob(null);
       setSegments([]);
       setSpeakerLabels({});
+      return result;
     } catch (err) {
       const failureMessage = err instanceof Error ? err.message : "업로드 실패";
       if (failureMessage.includes("이미 업로드된 파일입니다")) {
@@ -757,6 +758,7 @@ export default function App() {
     try {
       let targetProjectId: string | undefined;
       let uploadedProjectTitle = uploadProjectLabel;
+      const usedUploadMethods = new Set<string>();
       if (uploadProjectMode === "existing") {
         if (!selectedUploadProjectId || !selectedUploadProject) {
           showNotice("error", "업로드할 프로젝트를 선택해 주세요.");
@@ -782,15 +784,24 @@ export default function App() {
         uploadStarted = true;
         const file = filesToUpload[index];
         setUploadStatus(`"${uploadedProjectTitle}" 업로드 중 ${index + 1}/${filesToUpload.length}: ${file.name}`);
-        await performUpload(file, targetProjectId);
+        const uploadResult = await performUpload(file, targetProjectId);
+        if (uploadResult?.upload_method) {
+          usedUploadMethods.add(uploadResult.upload_method);
+        }
       }
       try {
         await refreshWorkspace();
       } catch {
         showNotice("info", "파일 업로드는 완료되었지만 보관함 새로고침은 잠시 후 다시 시도합니다.");
       }
+      const uploadMethodLabel =
+        usedUploadMethods.size === 0
+          ? ""
+          : usedUploadMethods.size === 1
+            ? `\n업로드 방식: ${usedUploadMethods.has("direct") ? "직접 업로드" : "서버 경유 업로드"}`
+            : "\n업로드 방식: 직접 업로드 + 서버 경유 업로드";
       resetUploadUi(
-        `"${uploadedProjectTitle}" 프로젝트에 ${filesToUpload.length}개 파일이 추가되었습니다. 관리자 배정 후 속기사가 녹취록을 작성합니다.`,
+        `"${uploadedProjectTitle}" 프로젝트에 ${filesToUpload.length}개 파일이 추가되었습니다. 관리자 배정 후 속기사가 녹취록을 작성합니다.${uploadMethodLabel}`,
       );
       setActiveTab("archive");
     } catch (err) {

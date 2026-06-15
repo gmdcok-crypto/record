@@ -30,6 +30,7 @@ export type UploadResponse = {
   object_key: string;
   bucket: string;
   status: string;
+  upload_method?: "direct" | "backend";
   transcript_text?: string | null;
   transcript_key?: string | null;
   transcript_json?: TranscriptJson | null;
@@ -232,73 +233,126 @@ export async function uploadVoice(
   onUploadComplete?: () => void,
   projectId?: string,
 ): Promise<UploadResponse> {
+  const uploadViaBackend = () =>
+    new Promise<UploadResponse>((resolve, reject) => {
+      const form = new FormData();
+      form.append("file", file);
+      if (projectId) {
+        form.append("project_id", projectId);
+      }
+
+      const token = localStorage.getItem(MEMBER_TOKEN_KEY);
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `${apiBase()}/api/upload/voice`);
+      if (token) {
+        xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      }
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && onProgress) {
+          onProgress(Math.round((event.loaded / event.total) * 100));
+          if (event.loaded >= event.total && onUploadComplete) {
+            onUploadComplete();
+          }
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve({
+            ...(JSON.parse(xhr.responseText) as UploadResponse),
+            upload_method: "backend",
+          });
+          return;
+        }
+        try {
+          reject(new Error(parseErrorDetail(JSON.parse(xhr.responseText))));
+        } catch {
+          reject(new Error(`업로드 실패 (${xhr.status})`));
+        }
+      };
+
+      xhr.onerror = () => reject(new Error("서버 연결 오류"));
+      xhr.send(form);
+    });
+
   const authHeaders = memberAuthHeaders();
   const contentType = file.type || "application/octet-stream";
+  try {
+    const presignRes = await fetchWithRetry(
+      `${apiBase()}/api/upload/presign`,
+      {
+        method: "POST",
+        headers: { ...authHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          content_type: contentType,
+          project_id: projectId ?? null,
+        }),
+      },
+      1,
+    );
+    const presignData = (await presignRes.json().catch(() => ({}))) as Partial<PresignedUploadResponse>;
+    if (
+      !presignRes.ok ||
+      !presignData.upload_url ||
+      !presignData.job_id ||
+      !presignData.object_key ||
+      !presignData.bucket
+    ) {
+      throw new Error(parseErrorDetail(presignData));
+    }
 
-  const presignRes = await fetchWithRetry(
-    `${apiBase()}/api/upload/presign`,
-    {
-      method: "POST",
-      headers: { ...authHeaders, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        filename: file.name,
-        content_type: contentType,
-        project_id: projectId ?? null,
-      }),
-    },
-    1,
-  );
-  const presignData = (await presignRes.json().catch(() => ({}))) as Partial<PresignedUploadResponse>;
-  if (!presignRes.ok || !presignData.upload_url || !presignData.job_id || !presignData.object_key || !presignData.bucket) {
-    throw new Error(parseErrorDetail(presignData));
-  }
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", presignData.upload_url!);
+      xhr.setRequestHeader("Content-Type", contentType);
 
-  await new Promise<void>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", presignData.upload_url!);
-    xhr.setRequestHeader("Content-Type", contentType);
-
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable && onProgress) {
-        onProgress(Math.round((event.loaded / event.total) * 100));
-        if (event.loaded >= event.total && onUploadComplete) {
-          onUploadComplete();
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && onProgress) {
+          onProgress(Math.round((event.loaded / event.total) * 100));
+          if (event.loaded >= event.total && onUploadComplete) {
+            onUploadComplete();
+          }
         }
-      }
-    };
+      };
 
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve();
-        return;
-      }
-      reject(new Error(`업로드 실패 (${xhr.status})`));
-    };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve();
+          return;
+        }
+        reject(new Error(`업로드 실패 (${xhr.status})`));
+      };
 
-    xhr.onerror = () => reject(new Error("서버 연결 오류"));
-    xhr.send(file);
-  });
+      xhr.onerror = () => reject(new Error("서버 연결 오류"));
+      xhr.send(file);
+    });
 
-  const completeRes = await fetchWithRetry(
-    `${apiBase()}/api/upload/voice/complete`,
-    {
-      method: "POST",
-      headers: { ...authHeaders, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        job_id: presignData.job_id,
-        object_key: presignData.object_key,
-        filename: file.name,
-        content_type: contentType,
-        project_id: projectId ?? null,
-      }),
-    },
-    1,
-  );
-  const completeData = (await completeRes.json().catch(() => ({}))) as UploadResponse;
-  if (!completeRes.ok) {
-    throw new Error(parseErrorDetail(completeData));
+    const completeRes = await fetchWithRetry(
+      `${apiBase()}/api/upload/voice/complete`,
+      {
+        method: "POST",
+        headers: { ...authHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_id: presignData.job_id,
+          object_key: presignData.object_key,
+          filename: file.name,
+          content_type: contentType,
+          project_id: projectId ?? null,
+        }),
+      },
+      1,
+    );
+    const completeData = (await completeRes.json().catch(() => ({}))) as UploadResponse;
+    if (!completeRes.ok) {
+      throw new Error(parseErrorDetail(completeData));
+    }
+    return { ...completeData, upload_method: "direct" };
+  } catch (error) {
+    console.warn("direct upload failed, falling back to backend upload", error);
+    return uploadViaBackend();
   }
-  return completeData;
 }
 
 export async function fetchJob(jobId: string): Promise<JobResponse> {
