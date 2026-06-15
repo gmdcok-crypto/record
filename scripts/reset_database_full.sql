@@ -3,6 +3,7 @@ SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS settlement_items;
 DROP TABLE IF EXISTS settlements;
+DROP TABLE IF EXISTS transcriber_grade_rates;
 DROP TABLE IF EXISTS invoice_payments;
 DROP TABLE IF EXISTS invoices;
 DROP TABLE IF EXISTS member_push_subscriptions;
@@ -480,6 +481,15 @@ CREATE TABLE IF NOT EXISTS settlement_items (
   UNIQUE KEY uk_settlement_items_job (settlement_id, job_id),
   KEY idx_settlement_items_transcriber_id (transcriber_id),
   KEY idx_settlement_items_job_id (job_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS transcriber_grade_rates (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  grade_level INT NOT NULL,
+  per_minute_rate DECIMAL(12,2) NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_transcriber_grade_rates_level (grade_level)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS transcript_history (

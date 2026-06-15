@@ -24,6 +24,7 @@ from app.services.project_store import get_project_record, list_project_jobs, li
 from app.services.job_store import (
     assign_job,
     create_transcriber,
+    delete_transcriber_grade_rate,
     dashboard_overview,
     DEFAULT_ADMIN_EMAIL,
     generate_transcriber_code,
@@ -35,6 +36,7 @@ from app.services.job_store import (
     get_or_create_client_for_member,
     get_transcriber_by_code,
     list_client_jobs,
+    list_transcriber_grade_rates,
     list_transcribers,
     list_transcriber_jobs,
     mark_final_pdf_delivered,
@@ -46,6 +48,7 @@ from app.services.job_store import (
     TRANSCRIBER_DRAFT_STATUSES,
     transcriber_can_view_job_transcript,
     transcript_visible_to_client,
+    upsert_transcriber_grade_rate,
     update_invoice_status,
     update_settlement_status,
     update_transcriber,
@@ -162,6 +165,11 @@ class AdminTranscriberCreateRequest(BaseModel):
 
 class SettlementStatusUpdateRequest(BaseModel):
     status: str
+
+
+class TranscriberGradeRateRequest(BaseModel):
+    grade_level: int
+    per_minute_rate: float
 
 
 class InvoiceStatusUpdateRequest(BaseModel):
@@ -537,6 +545,7 @@ def admin_overview(db: Annotated[Session, Depends(get_db)]) -> dict:
             "members": list_members_admin(db),
             "jobs": list_client_jobs(db, member=None),
             "transcribers": list_transcribers(db),
+            "transcriber_grade_rates": list_transcriber_grade_rates(db),
             "settlements": [],
             "sales": [],
         }
@@ -906,6 +915,43 @@ def admin_create_transcriber(
         "monthly_capacity": transcriber.monthly_capacity,
         "unit_price": float(transcriber.unit_price or 0),
     }
+
+
+@router.get("/admin/transcriber-grade-rates")
+def admin_list_transcriber_grade_rates(db: Annotated[Session, Depends(get_db)]) -> dict:
+    return {"rates": list_transcriber_grade_rates(db)}
+
+
+@router.post("/admin/transcriber-grade-rates")
+def admin_upsert_transcriber_grade_rate(
+    body: TranscriberGradeRateRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    try:
+        rate = upsert_transcriber_grade_rate(db, body.grade_level, body.per_minute_rate)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    publish_admin_event("transcriber_grade_rate_updated", {"grade_level": rate.grade_level})
+    return {
+        "rate": {
+            "id": rate.id,
+            "grade_level": rate.grade_level,
+            "per_minute_rate": float(rate.per_minute_rate or 0),
+        }
+    }
+
+
+@router.delete("/admin/transcriber-grade-rates/{rate_id}")
+def admin_delete_transcriber_grade_rate(
+    rate_id: int,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    try:
+        delete_transcriber_grade_rate(db, rate_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    publish_admin_event("transcriber_grade_rate_deleted", {"id": rate_id})
+    return {"deleted": True, "id": rate_id}
 
 
 @router.post("/admin/transcribers/{transcriber_code}/revoke-auth")

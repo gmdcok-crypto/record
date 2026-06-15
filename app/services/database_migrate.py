@@ -24,6 +24,7 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_job_selected_segments.sql",
     SCRIPTS_DIR / "migrate_transcript_change_logs.sql",
     SCRIPTS_DIR / "migrate_transcriber_license.sql",
+    SCRIPTS_DIR / "migrate_transcriber_grade_rates.sql",
     SCRIPTS_DIR / "migrate_member_push_subscriptions.sql",
     SCRIPTS_DIR / "migrate_admin_push_subscriptions.sql",
 ]
@@ -145,6 +146,37 @@ def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) ->
             ).first()
             if not exists:
                 conn.execute(text("ALTER TABLE transcribers ADD COLUMN grade_level INT NOT NULL DEFAULT 1 AFTER status"))
+        logger.info("Railway-safe migration applied: %s", sql_path.name)
+        return True
+
+    if sql_path.name == "migrate_transcriber_grade_rates.sql":
+        with engine.begin() as conn:
+            table_exists = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM information_schema.TABLES
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'transcriber_grade_rates'
+                    LIMIT 1
+                    """
+                )
+            ).first()
+            if not table_exists:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE transcriber_grade_rates (
+                          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                          grade_level INT NOT NULL,
+                          per_minute_rate DECIMAL(12,2) NOT NULL DEFAULT 0,
+                          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                          UNIQUE KEY uk_transcriber_grade_rates_level (grade_level)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                        """
+                    )
+                )
         logger.info("Railway-safe migration applied: %s", sql_path.name)
         return True
 

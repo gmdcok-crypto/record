@@ -464,6 +464,15 @@ CREATE TABLE IF NOT EXISTS settlement_items (
   KEY idx_settlement_items_job_id (job_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS transcriber_grade_rates (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  grade_level INT NOT NULL,
+  per_minute_rate DECIMAL(12,2) NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_transcriber_grade_rates_level (grade_level)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Optional seed/status log example:
 -- INSERT INTO job_status_logs (job_id, from_status, to_status, change_note)
 -- VALUES ('uuid', 'uploaded', 'waiting_assignment', '업로드 후 운영 검토 대기');

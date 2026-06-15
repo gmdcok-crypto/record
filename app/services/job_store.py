@@ -17,6 +17,7 @@ from app.models.admin_models import (
     Member,
     Settlement,
     SettlementItem,
+    TranscriberGradeRate,
     Transcriber,
 )
 
@@ -581,6 +582,42 @@ def list_transcribers(db: Session) -> list[dict]:
     ]
 
 
+def list_transcriber_grade_rates(db: Session) -> list[dict]:
+    rows = db.scalars(select(TranscriberGradeRate).order_by(TranscriberGradeRate.grade_level.asc())).all()
+    return [
+        {
+            "id": row.id,
+            "grade_level": row.grade_level,
+            "per_minute_rate": float(row.per_minute_rate or 0),
+        }
+        for row in rows
+    ]
+
+
+def upsert_transcriber_grade_rate(db: Session, grade_level: int, per_minute_rate: float) -> TranscriberGradeRate:
+    if grade_level < 1 or grade_level > 5:
+        raise ValueError("등급은 1등급부터 5등급까지 선택할 수 있습니다.")
+    if per_minute_rate < 0:
+        raise ValueError("분당 전사금액은 0원 이상이어야 합니다.")
+    rate = db.scalar(select(TranscriberGradeRate).where(TranscriberGradeRate.grade_level == grade_level))
+    if rate is None:
+        rate = TranscriberGradeRate(grade_level=grade_level, per_minute_rate=per_minute_rate)
+        db.add(rate)
+    else:
+        rate.per_minute_rate = per_minute_rate
+    db.commit()
+    db.refresh(rate)
+    return rate
+
+
+def delete_transcriber_grade_rate(db: Session, rate_id: int) -> None:
+    rate = db.scalar(select(TranscriberGradeRate).where(TranscriberGradeRate.id == rate_id))
+    if rate is None:
+        raise ValueError("등급별 요율을 찾을 수 없습니다.")
+    db.delete(rate)
+    db.commit()
+
+
 def get_transcriber_by_code(db: Session, transcriber_code: str = DEFAULT_TRANSCRIBER_CODE) -> Transcriber | None:
     return db.scalar(select(Transcriber).where(Transcriber.transcriber_code == transcriber_code))
 
@@ -863,6 +900,7 @@ def dashboard_overview(db: Session) -> dict:
             for job in jobs
         ],
         "transcribers": transcribers,
+        "transcriber_grade_rates": list_transcriber_grade_rates(db),
         "settlements": [
             {
                 "id": row.id,

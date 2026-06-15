@@ -7,16 +7,20 @@ import {
   createTranscriber,
   createAdminEventsSource,
   deleteTranscriber,
+  deleteTranscriberGradeRate,
   fetchAdminOverview,
   revokeTranscriberAuth,
+  fetchTranscriberGradeRates,
   fetchNextTranscriberCode,
   fetchJob,
+  saveTranscriberGradeRate,
   updateInvoiceStatus,
   updateMemberActive,
   updateSettlementStatus,
   updateTranscriber,
   type AdminOverview,
   type JobResponse,
+  type TranscriberGradeRate as ApiTranscriberGradeRate,
 } from "./api";
 import {
   enableAdminWebPush,
@@ -160,6 +164,12 @@ type SettlementItem = {
   amount: number;
   status: SettlementStatus;
   paidAt: string;
+};
+
+type GradeRateItem = {
+  id: number;
+  gradeLevel: number;
+  perMinuteRate: number;
 };
 
 type SalesItem = {
@@ -527,6 +537,8 @@ function App() {
   const [transcriberModalOpen, setTranscriberModalOpen] = useState(false);
   const [editingTranscriberId, setEditingTranscriberId] = useState<string | null>(null);
   const [transcriberForm, setTranscriberForm] = useState<TranscriberForm>(EMPTY_TRANSCRIBER_FORM);
+  const [gradeRateModalOpen, setGradeRateModalOpen] = useState(false);
+  const [gradeRateForm, setGradeRateForm] = useState({ gradeLevel: "1", perMinuteRate: "" });
 
   const loadOverview = async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
@@ -742,6 +754,16 @@ function App() {
     }));
   }, [overview]);
 
+  const transcriberGradeRates = useMemo<GradeRateItem[]>(
+    () =>
+      (overview?.transcriber_grade_rates ?? []).map((item: ApiTranscriberGradeRate) => ({
+        id: item.id,
+        gradeLevel: item.grade_level,
+        perMinuteRate: item.per_minute_rate,
+      })),
+    [overview],
+  );
+
   const sales = useMemo<SalesItem[]>(() => {
     return (overview?.sales ?? []).map((item) => ({
       id: item.id,
@@ -932,6 +954,42 @@ function App() {
   const closeTranscriberModal = () => {
     setTranscriberModalOpen(false);
     setEditingTranscriberId(null);
+  };
+
+  const openGradeRateModal = async () => {
+    try {
+      const rates = await fetchTranscriberGradeRates();
+      setOverview((current) => (current ? { ...current, transcriber_grade_rates: rates } : current));
+    } catch (err) {
+      console.error(err);
+    }
+    setGradeRateForm({ gradeLevel: "1", perMinuteRate: "" });
+    setGradeRateModalOpen(true);
+  };
+
+  const closeGradeRateModal = () => {
+    setGradeRateModalOpen(false);
+    setGradeRateForm({ gradeLevel: "1", perMinuteRate: "" });
+  };
+
+  const saveGradeRate = async () => {
+    const gradeLevel = Math.min(5, Math.max(1, Number(gradeRateForm.gradeLevel) || 1));
+    const perMinuteRate = Number(gradeRateForm.perMinuteRate);
+    if (!Number.isFinite(perMinuteRate) || perMinuteRate < 0) {
+      window.alert("분당 전사금액은 0원 이상 숫자로 입력해 주세요.");
+      return;
+    }
+    await runAdminAction("등급별 전사금액이 저장되었습니다.", async () => {
+      await saveTranscriberGradeRate({ grade_level: gradeLevel, per_minute_rate: perMinuteRate });
+    });
+    closeGradeRateModal();
+  };
+
+  const removeGradeRate = async (item: GradeRateItem) => {
+    if (!window.confirm(`${item.gradeLevel}등급 요율을 삭제하시겠습니까?`)) return;
+    await runAdminAction("등급별 전사금액이 삭제되었습니다.", async () => {
+      await deleteTranscriberGradeRate(item.id);
+    });
   };
 
   const saveTranscriberModal = async () => {
@@ -1875,13 +1933,22 @@ function App() {
                 <div className="flex flex-col items-stretch gap-2 xl:items-end">
                   <div className="flex flex-wrap items-center gap-2">
                     {activeMenu === "transcribers" ? (
-                      <button
-                        type="button"
-                        onClick={openCreateTranscriberModal}
-                        className="rounded-md bg-cyan-500 px-3 py-1.5 text-[11px] font-semibold text-slate-950 transition hover:bg-cyan-400"
-                      >
-                        추가
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => void openGradeRateModal()}
+                          className="rounded-md border border-slate-700 bg-slate-900/90 px-3 py-1.5 text-[11px] font-semibold text-slate-200 transition hover:bg-slate-800"
+                        >
+                          등급별 요율 관리
+                        </button>
+                        <button
+                          type="button"
+                          onClick={openCreateTranscriberModal}
+                          className="rounded-md bg-cyan-500 px-3 py-1.5 text-[11px] font-semibold text-slate-950 transition hover:bg-cyan-400"
+                        >
+                          추가
+                        </button>
+                      </>
                     ) : null}
                     <span className="rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1 text-[11px] text-slate-400">
                       관리자 알림: {adminPushRegistered ? "웹푸시 등록됨" : adminPushPermission === "denied" ? "권한 차단" : "미등록"}
@@ -2389,6 +2456,109 @@ function App() {
               >
                 저장
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {gradeRateModalOpen ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-950 p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">속기사 관리</p>
+                <h3 className="mt-1 text-xl font-semibold text-white">등급별 분당 전사금액</h3>
+              </div>
+              <button
+                type="button"
+                onClick={closeGradeRateModal}
+                className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300"
+              >
+                닫기
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-[160px_1fr_auto]">
+              <label>
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">등급</span>
+                <select
+                  value={gradeRateForm.gradeLevel}
+                  onChange={(e) => setGradeRateForm((prev) => ({ ...prev, gradeLevel: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+                >
+                  <option value="1">1등급</option>
+                  <option value="2">2등급</option>
+                  <option value="3">3등급</option>
+                  <option value="4">4등급</option>
+                  <option value="5">5등급</option>
+                </select>
+              </label>
+              <label>
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">분당 전사금액</span>
+                <input
+                  value={gradeRateForm.perMinuteRate}
+                  onChange={(e) => setGradeRateForm((prev) => ({ ...prev, perMinuteRate: e.target.value }))}
+                  placeholder="예: 1200"
+                  inputMode="numeric"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+                />
+              </label>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={() => void saveGradeRate()}
+                  className="w-full rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950"
+                >
+                  저장
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5 overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/70">
+              {transcriberGradeRates.length === 0 ? (
+                <EmptyState message="등록된 등급별 전사금액이 없습니다." />
+              ) : (
+                <table className="w-full min-w-[520px] border-collapse text-[13px]">
+                  <thead>
+                    <tr className="border-b border-slate-800 bg-slate-950 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      <th className="px-3 py-2">등급</th>
+                      <th className="px-3 py-2">분당 전사금액</th>
+                      <th className="px-3 py-2">동작</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transcriberGradeRates.map((item) => (
+                      <tr key={item.id} className="border-t border-slate-800 bg-slate-950/40 text-slate-300 hover:bg-slate-900/50">
+                        <td className="px-3 py-2 font-medium text-white">{item.gradeLevel}등급</td>
+                        <td className="px-3 py-2">{formatCurrency(item.perMinuteRate)}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setGradeRateForm({
+                                  gradeLevel: String(item.gradeLevel),
+                                  perMinuteRate: String(Math.round(item.perMinuteRate)),
+                                })
+                              }
+                              className="rounded-md border border-slate-700 px-2.5 py-1 text-[11px] font-medium text-slate-200"
+                            >
+                              수정
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void removeGradeRate(item)}
+                              className="rounded-md border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-medium text-rose-300"
+                            >
+                              삭제
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>

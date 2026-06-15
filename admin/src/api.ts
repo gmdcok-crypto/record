@@ -141,6 +141,12 @@ export type AdminOverviewTranscriber = {
   auth_status: string;
 };
 
+export type TranscriberGradeRate = {
+  id: number;
+  grade_level: number;
+  per_minute_rate: number;
+};
+
 export type AdminOverviewSettlement = {
   id: number;
   month: string;
@@ -212,6 +218,7 @@ export type AdminOverview = {
   members?: AdminOverviewMember[];
   jobs: AdminOverviewJob[];
   transcribers: AdminOverviewTranscriber[];
+  transcriber_grade_rates?: TranscriberGradeRate[];
   settlements: AdminOverviewSettlement[];
   sales: AdminOverviewSale[];
 };
@@ -423,6 +430,38 @@ export async function createTranscriber(payload: {
   });
   if (!res.ok) {
     throw await parseApiError(res, "속기사 추가 실패");
+  }
+}
+
+export async function fetchTranscriberGradeRates(): Promise<TranscriberGradeRate[]> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/transcriber-grade-rates`);
+  if (!res.ok) {
+    throw await parseApiError(res, "등급별 요율 조회 실패");
+  }
+  const data = (await res.json()) as { rates?: TranscriberGradeRate[] };
+  return data.rates ?? [];
+}
+
+export async function saveTranscriberGradeRate(payload: {
+  grade_level: number;
+  per_minute_rate: number;
+}): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/transcriber-grade-rates`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "등급별 요율 저장 실패");
+  }
+}
+
+export async function deleteTranscriberGradeRate(rateId: number): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/transcriber-grade-rates/${rateId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "등급별 요율 삭제 실패");
   }
 }
 

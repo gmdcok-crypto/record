@@ -312,3 +312,13 @@ class SettlementItem(Base):
     final_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     note: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class TranscriberGradeRate(Base):
+    __tablename__ = "transcriber_grade_rates"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    grade_level: Mapped[int] = mapped_column(Integer, nullable=False, unique=True, index=True)
+    per_minute_rate: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
