@@ -349,9 +349,17 @@ export async function uploadVoice(
       throw new Error(parseErrorDetail(completeData));
     }
     return { ...completeData, upload_method: "direct" };
-  } catch (error) {
-    console.warn("direct upload failed, falling back to backend upload", error);
-    return uploadViaBackend();
+  } catch (directError) {
+    console.warn("direct upload failed, falling back to backend upload", directError);
+    try {
+      return await uploadViaBackend();
+    } catch (backendError) {
+      const directMessage = directError instanceof Error ? directError.message : "직접 업로드 실패";
+      const backendMessage = backendError instanceof Error ? backendError.message : "서버 경유 업로드 실패";
+      throw new Error(
+        `직접 업로드 실패 후 서버 경유 업로드도 실패했습니다.\n직접: ${directMessage}\n서버: ${backendMessage}`,
+      );
+    }
   }
 }
 
