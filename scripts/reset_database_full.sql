@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS transcribers (
   phone VARCHAR(30) NULL COMMENT '휴대폰 번호',
   email VARCHAR(150) NULL,
   status ENUM('available', 'working', 'off', 'inactive') NOT NULL DEFAULT 'available',
+  grade_level INT NOT NULL DEFAULT 1,
   specialty VARCHAR(200) NULL,
   unit_price_type ENUM('per_minute', 'per_case', 'custom') NOT NULL DEFAULT 'per_minute',
   unit_price DECIMAL(12,2) NOT NULL DEFAULT 0,

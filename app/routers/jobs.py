@@ -130,6 +130,7 @@ class MemberActiveUpdateRequest(BaseModel):
 
 class AdminTranscriberUpdateRequest(BaseModel):
     name: str | None = None
+    grade_level: int | None = None
     specialty: str | None = None
     phone: str | None = None
     resident_id: str | None = None
@@ -147,6 +148,7 @@ class DatabaseResetRequest(BaseModel):
 class AdminTranscriberCreateRequest(BaseModel):
     code: str | None = None
     name: str
+    grade_level: int = 1
     specialty: str | None = None
     email: str | None = None
     phone: str | None = None
@@ -847,6 +849,7 @@ def admin_update_transcriber(
             db,
             transcriber,
             name=body.name,
+            grade_level=body.grade_level,
             specialty=body.specialty,
             phone=body.phone,
             resident_id=body.resident_id,
@@ -862,6 +865,7 @@ def admin_update_transcriber(
     return {
         "code": transcriber.transcriber_code,
         "name": transcriber.name,
+        "grade_level": transcriber.grade_level,
         "status": transcriber.status,
         "specialty": transcriber.specialty,
         "monthly_capacity": transcriber.monthly_capacity,
@@ -879,6 +883,7 @@ def admin_create_transcriber(
             db,
             code=body.code,
             name=body.name,
+            grade_level=body.grade_level,
             specialty=body.specialty,
             email=body.email,
             phone=body.phone,
@@ -895,6 +900,7 @@ def admin_create_transcriber(
     return {
         "code": transcriber.transcriber_code,
         "name": transcriber.name,
+        "grade_level": transcriber.grade_level,
         "status": transcriber.status,
         "specialty": transcriber.specialty,
         "monthly_capacity": transcriber.monthly_capacity,

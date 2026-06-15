@@ -117,6 +117,7 @@ type MemberItem = {
 type Transcriber = {
   id: string;
   name: string;
+  gradeLevel: number;
   phone: string;
   residentId: string;
   bankName: string;
@@ -134,6 +135,7 @@ type Transcriber = {
 type TranscriberForm = {
   code: string;
   name: string;
+  gradeLevel: string;
   phone: string;
   residentId: string;
   bankName: string;
@@ -143,6 +145,7 @@ type TranscriberForm = {
 const EMPTY_TRANSCRIBER_FORM: TranscriberForm = {
   code: "",
   name: "",
+  gradeLevel: "1",
   phone: "",
   residentId: "",
   bankName: "",
@@ -711,6 +714,7 @@ function App() {
     return (overview?.transcribers ?? []).map((person) => ({
       id: person.code,
       name: person.name,
+      gradeLevel: person.grade_level || 1,
       phone: person.phone || "",
       residentId: person.resident_id || "",
       bankName: person.bank_name || "",
@@ -916,6 +920,7 @@ function App() {
     setTranscriberForm({
       code: person.id,
       name: person.name,
+      gradeLevel: String(person.gradeLevel || 1),
       phone: person.phone,
       residentId: person.residentId,
       bankName: person.bankName,
@@ -937,6 +942,7 @@ function App() {
 
     const profilePayload = {
       name: transcriberForm.name.trim(),
+      grade_level: Math.min(5, Math.max(1, Number(transcriberForm.gradeLevel) || 1)),
       phone: transcriberForm.phone.trim() || undefined,
       resident_id: transcriberForm.residentId.trim() || undefined,
       bank_name: transcriberForm.bankName.trim() || undefined,
@@ -1466,11 +1472,12 @@ function App() {
         {transcribers.length === 0 ? (
           <EmptyState message="속기사 관리 데이터가 없습니다." />
         ) : (
-          <table className="w-full min-w-[1160px] border-collapse text-[13px]">
+          <table className="w-full min-w-[1240px] border-collapse text-[13px]">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-950 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                 <th className="px-3 py-2">코드</th>
                 <th className="px-3 py-2">이름</th>
+                <th className="px-3 py-2">등급</th>
                 <th className="px-3 py-2">로그인 ID</th>
                 <th className="px-3 py-2">로그인</th>
                 <th className="px-3 py-2">상태</th>
@@ -1486,6 +1493,7 @@ function App() {
                 <tr key={person.id} className="border-t border-slate-800 bg-slate-950/40 text-slate-300 hover:bg-slate-900/50">
                   <td className="px-3 py-2 font-mono text-[11px] text-slate-400">{person.id}</td>
                   <td className="px-3 py-2 font-medium text-white">{person.name}</td>
+                  <td className="px-3 py-2">{person.gradeLevel}등급</td>
                   <td className="px-3 py-2">{person.loginId}</td>
                   <td className="px-3 py-2">
                     <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ${authStatusTone(person.authStatus)}`}>
@@ -2316,6 +2324,20 @@ function App() {
                   placeholder="이름"
                   className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
                 />
+              </label>
+              <label>
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">등급</span>
+                <select
+                  value={transcriberForm.gradeLevel}
+                  onChange={(e) => setTranscriberForm((prev) => ({ ...prev, gradeLevel: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+                >
+                  <option value="1">1등급</option>
+                  <option value="2">2등급</option>
+                  <option value="3">3등급</option>
+                  <option value="4">4등급</option>
+                  <option value="5">5등급</option>
+                </select>
               </label>
               <label>
                 <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">휴대폰 번호</span>

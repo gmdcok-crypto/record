@@ -532,6 +532,7 @@ def list_transcribers(db: Session) -> list[dict]:
             "id": row.id,
             "code": row.transcriber_code,
             "name": row.name,
+            "grade_level": row.grade_level,
             "phone": row.phone,
             "resident_id": row.resident_id_masked,
             "bank_name": row.bank_name,
@@ -558,6 +559,7 @@ def create_transcriber(
     *,
     code: str | None = None,
     name: str,
+    grade_level: int = 1,
     specialty: str | None = None,
     email: str | None = None,
     phone: str | None = None,
@@ -571,11 +573,14 @@ def create_transcriber(
     normalized_name = name.strip()
     if not normalized_name:
         raise ValueError("Transcriber name is required")
+    if grade_level < 1 or grade_level > 5:
+        raise ValueError("등급은 1등급부터 5등급까지 선택할 수 있습니다.")
 
     transcriber_code = (code or "").strip() or generate_transcriber_code(db)
     transcriber = Transcriber(
         transcriber_code=transcriber_code,
         name=normalized_name,
+        grade_level=grade_level,
         specialty=(specialty or "").strip() or None,
         email=(email or "").strip() or None,
         phone=(phone or "").strip() or None,
@@ -600,6 +605,7 @@ def update_transcriber(
     transcriber: Transcriber,
     *,
     name: str | None = None,
+    grade_level: int | None = None,
     specialty: str | None = None,
     phone: str | None = None,
     resident_id: str | None = None,
@@ -616,6 +622,10 @@ def update_transcriber(
         transcriber.name = normalized_name
         if not transcriber.account_holder:
             transcriber.account_holder = normalized_name
+    if grade_level is not None:
+        if grade_level < 1 or grade_level > 5:
+            raise ValueError("등급은 1등급부터 5등급까지 선택할 수 있습니다.")
+        transcriber.grade_level = grade_level
     if specialty is not None:
         transcriber.specialty = specialty.strip() or None
     if phone is not None:

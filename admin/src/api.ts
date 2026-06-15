@@ -126,6 +126,7 @@ export type AdminOverviewTranscriber = {
   id: number;
   code: string;
   name: string;
+  grade_level: number;
   phone: string | null;
   resident_id: string | null;
   bank_name: string | null;
@@ -382,6 +383,7 @@ export async function updateTranscriber(
   transcriberCode: string,
   payload: {
     name?: string;
+    grade_level?: number;
     specialty?: string;
     phone?: string;
     resident_id?: string;
@@ -404,6 +406,7 @@ export async function updateTranscriber(
 
 export async function createTranscriber(payload: {
   name: string;
+  grade_level?: number;
   specialty?: string;
   phone?: string;
   resident_id?: string;

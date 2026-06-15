@@ -63,6 +63,7 @@ class Transcriber(Base):
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     email: Mapped[str | None] = mapped_column(String(150), unique=True, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="available")
+    grade_level: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     specialty: Mapped[str | None] = mapped_column(String(200), nullable=True)
     unit_price_type: Mapped[str] = mapped_column(String(20), nullable=False, default="per_minute")
     unit_price: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)

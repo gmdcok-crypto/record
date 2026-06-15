@@ -13,6 +13,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
 
 STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_transcriber_profile.sql",
+    SCRIPTS_DIR / "migrate_transcriber_grade.sql",
     SCRIPTS_DIR / "migrate_transcriber_auth.sql",
     SCRIPTS_DIR / "migrate_transcriber_auth_status.sql",
     SCRIPTS_DIR / "migrate_member_auth.sql",
@@ -125,6 +126,25 @@ def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) ->
             ).first()
             if not exists:
                 conn.execute(text("ALTER TABLE jobs ADD COLUMN selected_segments_json JSON NULL"))
+        logger.info("Railway-safe migration applied: %s", sql_path.name)
+        return True
+
+    if sql_path.name == "migrate_transcriber_grade.sql":
+        with engine.begin() as conn:
+            exists = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'transcribers'
+                      AND COLUMN_NAME = 'grade_level'
+                    LIMIT 1
+                    """
+                )
+            ).first()
+            if not exists:
+                conn.execute(text("ALTER TABLE transcribers ADD COLUMN grade_level INT NOT NULL DEFAULT 1 AFTER status"))
         logger.info("Railway-safe migration applied: %s", sql_path.name)
         return True
 
