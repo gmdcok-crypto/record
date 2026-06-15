@@ -61,7 +61,7 @@ export default function UploadBillingPanel({
   const billableDurationMs = useMemo(() => totalBillableDurationMs(entries), [entries]);
   const quote = useMemo(() => calculateQuote(billableDurationMs), [billableDurationMs]);
   const billingReady = useMemo(
-    () => isUploadBillingReady(entries) && !quote.overLimit && quote.tier != null,
+    () => isUploadBillingReady(entries) && (quote.tier != null || (quote.totalWithVat ?? 0) > 0),
     [entries, quote],
   );
 
@@ -223,30 +223,31 @@ export default function UploadBillingPanel({
 
         {entries.some((entry) => entry.loading) ? (
           <p className="mt-2 text-sm text-slate-400">파일 재생 시간을 확인하는 중입니다…</p>
-        ) : quote.overLimit ? (
-          <p className="mt-2 text-sm text-amber-200">
-            계산 시간 {formatDurationHuman(quote.durationMs)} — 60분 이상은 별도 문의가 필요합니다.
-          </p>
         ) : !billingReady ? (
           <p className="mt-2 text-sm text-amber-200">
             구간 선택 파일은 구간을 추가해야 견적이 완료됩니다.
           </p>
-        ) : quote.tier ? (
+        ) : quote.tier || (quote.totalWithVat ?? 0) > 0 ? (
           <>
             <p className="mt-2 text-sm text-slate-300">
               계산 기준 시간: <span className="font-semibold text-white">{formatDurationHuman(quote.durationMs)}</span>
             </p>
             <p className="mt-1 text-sm text-slate-300">
-              적용 구간: <span className="font-semibold text-white">{quote.tier.label}</span>
+              적용 구간: <span className="font-semibold text-white">{quote.label || quote.tier?.label || "-"}</span>
             </p>
+            {quote.overLimit && (quote.extraMinutes ?? 0) > 0 ? (
+              <p className="mt-1 text-sm text-amber-200">
+                60분 요금에 초과 {quote.extraMinutes}분 x 분당 3,000원이 추가됩니다.
+              </p>
+            ) : null}
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-3">
                 <p className="text-xs text-slate-500">PDF 기본요금</p>
-                <p className="mt-1 text-lg font-bold text-white">{formatKrw(quote.tier.baseFee)}</p>
+                <p className="mt-1 text-lg font-bold text-white">{formatKrw(quote.totalBaseFee ?? quote.tier?.baseFee ?? 0)}</p>
               </div>
               <div className="rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-3 py-3">
                 <p className="text-xs text-cyan-200/80">부가세 포함 결제금액</p>
-                <p className="mt-1 text-2xl font-bold text-cyan-100">{formatKrw(quote.tier.totalWithVat)}</p>
+                <p className="mt-1 text-2xl font-bold text-cyan-100">{formatKrw(quote.totalWithVat ?? quote.tier?.totalWithVat ?? 0)}</p>
               </div>
             </div>
           </>
@@ -265,10 +266,10 @@ export default function UploadBillingPanel({
             <button
               type="button"
               onClick={handlePay}
-              disabled={!billingReady || !quote.tier}
+              disabled={!billingReady || (quote.totalWithVat ?? 0) <= 0}
               className="rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
             >
-              {quote.tier ? `${formatKrw(quote.tier.totalWithVat)} 결제하기` : "결제하기"}
+              {(quote.totalWithVat ?? 0) > 0 ? `${formatKrw(quote.totalWithVat ?? 0)} 결제하기` : "결제하기"}
             </button>
           )}
           {paid ? (

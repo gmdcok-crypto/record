@@ -5,6 +5,8 @@ export type QuoteTier = {
   totalWithVat: number;
 };
 
+const OVER_60_MINUTE_EXTRA_PER_MINUTE = 3_000;
+
 /** 최종 통합 녹취록 요금표 (부가세 10% 포함 결제금액) */
 export const QUOTE_TIERS: QuoteTier[] = [
   { maxMinutes: 3, label: "3분 미만", baseFee: 20_000, totalWithVat: 22_000 },
@@ -21,20 +23,47 @@ export type QuoteResult = {
   durationMs: number;
   tier: QuoteTier | null;
   overLimit: boolean;
+  extraMinutes?: number;
+  extraFee?: number;
+  totalBaseFee?: number;
+  totalWithVat?: number;
+  label?: string;
 };
 
 export function calculateQuote(durationMs: number): QuoteResult {
   if (durationMs <= 0) {
-    return { durationMs: 0, tier: null, overLimit: false };
+    return { durationMs: 0, tier: null, overLimit: false, extraMinutes: 0, extraFee: 0, totalBaseFee: 0, totalWithVat: 0, label: "" };
   }
 
   const durationMinutes = durationMs / 60_000;
+  const lastTier = QUOTE_TIERS[QUOTE_TIERS.length - 1] ?? null;
   if (durationMinutes >= 60) {
-    return { durationMs, tier: null, overLimit: true };
+    const extraMinutes = Math.ceil((durationMs - 60 * 60_000) / 60_000);
+    const extraFee = Math.max(0, extraMinutes) * OVER_60_MINUTE_EXTRA_PER_MINUTE;
+    const totalBaseFee = (lastTier?.baseFee ?? 0) + extraFee;
+    return {
+      durationMs,
+      tier: lastTier,
+      overLimit: true,
+      extraMinutes: Math.max(0, extraMinutes),
+      extraFee,
+      totalBaseFee,
+      totalWithVat: Math.round(totalBaseFee * 1.1),
+      label: `60분 초과 (+${Math.max(0, extraMinutes)}분)`,
+    };
   }
 
   const tier = QUOTE_TIERS.find((item) => durationMinutes < item.maxMinutes) ?? null;
-  return { durationMs, tier, overLimit: false };
+  return {
+    durationMs,
+    tier,
+    overLimit: false,
+    extraMinutes: 0,
+    extraFee: 0,
+    totalBaseFee: tier?.baseFee ?? 0,
+    totalWithVat: tier?.totalWithVat ?? 0,
+    label: tier?.label ?? "",
+  };
 }
 
 export function formatKrw(amount: number): string {
