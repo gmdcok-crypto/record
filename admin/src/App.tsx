@@ -1450,10 +1450,8 @@ function App() {
   );
 
   const renderTranscribers = () => (
-    <SectionCard
-      title="속기사 관리"
-      subtitle="상태, 로그인, 작업량을 같은 표에서 빠르게 확인합니다."
-      action={
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/92 p-4 shadow-[0_10px_30px_rgba(2,6,23,0.28)]">
+      <div className="mb-4 flex justify-end">
         <button
           type="button"
           onClick={openCreateTranscriberModal}
@@ -1461,8 +1459,7 @@ function App() {
         >
           추가
         </button>
-      }
-    >
+      </div>
       <div className="mb-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
         {transcriberSummaryMetrics.map((item) => (
           <SummaryChip key={item.label} label={item.label} value={item.value} tone={item.tone} />
@@ -1541,7 +1538,7 @@ function App() {
           </table>
         )}
       </div>
-    </SectionCard>
+    </div>
   );
 
   const renderProgress = () => (
