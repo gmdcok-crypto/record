@@ -289,6 +289,7 @@ class Settlement(Base):
     gross_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     adjustment_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     final_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    total_paid_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft", index=True)
     confirmed_by_admin_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id"), nullable=True)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -310,6 +311,17 @@ class SettlementItem(Base):
     amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     adjustment_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     final_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class SettlementPayment(Base):
+    __tablename__ = "settlement_payments"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    settlement_id: Mapped[int] = mapped_column(ForeignKey("settlements.id"), nullable=False, index=True)
+    amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    paid_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now(), index=True)
     note: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 

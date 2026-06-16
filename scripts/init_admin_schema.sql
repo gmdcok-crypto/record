@@ -419,6 +419,7 @@ CREATE TABLE IF NOT EXISTS settlements (
   gross_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
   adjustment_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
   final_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  total_paid_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
   status ENUM('draft', 'confirmed', 'paid') NOT NULL DEFAULT 'draft',
   confirmed_by_admin_id BIGINT NULL,
   confirmed_at DATETIME NULL,
@@ -462,6 +463,20 @@ CREATE TABLE IF NOT EXISTS settlement_items (
   UNIQUE KEY uk_settlement_items_job (settlement_id, job_id),
   KEY idx_settlement_items_transcriber_id (transcriber_id),
   KEY idx_settlement_items_job_id (job_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS settlement_payments (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  settlement_id BIGINT NOT NULL,
+  amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  paid_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  note VARCHAR(255) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_settlement_payments_settlement
+    FOREIGN KEY (settlement_id) REFERENCES settlements(id)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  KEY idx_settlement_payments_settlement_id (settlement_id),
+  KEY idx_settlement_payments_paid_at (paid_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS transcriber_grade_rates (

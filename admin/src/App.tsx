@@ -14,9 +14,9 @@ import {
   fetchNextTranscriberCode,
   fetchJob,
   saveTranscriberGradeRate,
+  recordSettlementPayment,
   updateInvoiceStatus,
   updateMemberActive,
-  updateSettlementStatus,
   updateTranscriber,
   type AdminOverview,
   type JobResponse,
@@ -162,6 +162,7 @@ type SettlementItem = {
   transcriber: string;
   jobs: number;
   amount: number;
+  totalPaidAmount: number;
   status: SettlementStatus;
   paidAt: string;
 };
@@ -539,6 +540,9 @@ function App() {
   const [transcriberForm, setTranscriberForm] = useState<TranscriberForm>(EMPTY_TRANSCRIBER_FORM);
   const [gradeRateModalOpen, setGradeRateModalOpen] = useState(false);
   const [gradeRateForm, setGradeRateForm] = useState({ gradeLevel: "1", perMinuteRate: "" });
+  const [settlementPayTarget, setSettlementPayTarget] = useState<SettlementItem | null>(null);
+  const [settlementPayAmount, setSettlementPayAmount] = useState("");
+  const [settlementPayNote, setSettlementPayNote] = useState("");
 
   const loadOverview = async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
@@ -749,6 +753,7 @@ function App() {
       transcriber: String(item.transcriber),
       jobs: item.jobs,
       amount: item.amount,
+      totalPaidAmount: item.total_paid_amount ?? 0,
       status: mapSettlementStatus(item.status),
       paidAt: item.paid_at ? formatDateTime(item.paid_at) : "-",
     }));
@@ -910,11 +915,32 @@ function App() {
     closeAssignModal();
   };
 
-  const handleSettlementConfirm = async (item: SettlementItem) => {
-    const nextStatus = item.status === "정산 대기" ? "confirmed" : "paid";
-    await runAdminAction("정산 상태가 변경되었습니다.", async () => {
-      await updateSettlementStatus(item.id, nextStatus);
+  const openSettlementPayModal = (item: SettlementItem) => {
+    setSettlementPayTarget(item);
+    setSettlementPayAmount("");
+    setSettlementPayNote("");
+  };
+
+  const closeSettlementPayModal = () => {
+    setSettlementPayTarget(null);
+    setSettlementPayAmount("");
+    setSettlementPayNote("");
+  };
+
+  const submitSettlementPayment = async () => {
+    if (!settlementPayTarget) return;
+    const amount = Number(settlementPayAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      window.alert("입금액은 0보다 큰 숫자로 입력해 주세요.");
+      return;
+    }
+    await runAdminAction("정산 처리되었습니다.", async () => {
+      await recordSettlementPayment(settlementPayTarget.id, {
+        amount,
+        note: settlementPayNote.trim() || undefined,
+      });
     });
+    closeSettlementPayModal();
   };
 
   const handleInvoiceConfirm = async (item: SalesItem) => {
@@ -1617,24 +1643,15 @@ function App() {
   const renderSettlements = () => (
     <SectionCard
       title="정산 관리"
-      subtitle="월별 정산 상태를 시트처럼 검토하고 즉시 확정합니다."
+      subtitle="월별 정산 내역에 입금액을 입력해 바로 정산 처리합니다."
       action={
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveMenu("reports")}
-            className="rounded-lg border border-slate-700 bg-slate-800/90 px-3 py-1.5 text-sm font-medium text-slate-200"
-          >
-            정산서 출력
-          </button>
-          <button
-            type="button"
-            onClick={() => settlements[0] && void handleSettlementConfirm(settlements[0])}
-            className="rounded-lg bg-cyan-500 px-3 py-1.5 text-sm font-semibold text-slate-950"
-          >
-            정산 확정
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setActiveMenu("reports")}
+          className="rounded-lg border border-slate-700 bg-slate-800/90 px-3 py-1.5 text-sm font-medium text-slate-200"
+        >
+          정산서 출력
+        </button>
       }
     >
       <div className="mb-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -1645,7 +1662,7 @@ function App() {
           tone="amber"
         />
         <SummaryChip
-          label="정산 확정"
+          label="부분 정산"
           value={`${settlements.filter((item) => item.status === "정산 확정").length}건`}
           tone="cyan"
         />
@@ -1688,10 +1705,10 @@ function App() {
                     {item.status !== "지급 완료" ? (
                       <button
                         type="button"
-                        onClick={() => void handleSettlementConfirm(item)}
+                        onClick={() => openSettlementPayModal(item)}
                         className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-medium text-cyan-300"
                       >
-                        {item.status === "정산 대기" ? "정산 확정" : "지급 완료"}
+                        정산
                       </button>
                     ) : (
                       <span className="text-[11px] text-slate-500">처리 완료</span>
@@ -2559,6 +2576,72 @@ function App() {
                   </tbody>
                 </table>
               )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {settlementPayTarget ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-950 p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">정산 관리</p>
+                <h3 className="mt-1 text-xl font-semibold text-white">정산 처리</h3>
+                <p className="mt-2 text-sm text-slate-400">
+                  {settlementPayTarget.transcriber} · {settlementPayTarget.month}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeSettlementPayModal}
+                className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300"
+              >
+                닫기
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-300">
+                <p>정산액: {formatCurrency(settlementPayTarget.amount)}</p>
+                <p className="mt-1">누적 입금액: {formatCurrency(settlementPayTarget.totalPaidAmount)}</p>
+              </div>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">입금액</span>
+                <input
+                  value={settlementPayAmount}
+                  onChange={(e) => setSettlementPayAmount(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="예: 150000"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">메모</span>
+                <input
+                  value={settlementPayNote}
+                  onChange={(e) => setSettlementPayNote(e.target.value)}
+                  placeholder="선택 입력"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+                />
+              </label>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeSettlementPayModal}
+                className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitSettlementPayment()}
+                className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950"
+              >
+                정산 처리
+              </button>
             </div>
           </div>
         </div>

@@ -155,6 +155,7 @@ export type AdminOverviewSettlement = {
   transcriber: string | number;
   jobs: number;
   amount: number;
+  total_paid_amount?: number;
   status: string;
   paid_at: string | null;
 };
@@ -499,6 +500,17 @@ export async function updateSettlementStatus(settlementId: number, status: strin
   });
   if (!res.ok) {
     throw await parseApiError(res, "정산 상태 변경 실패");
+  }
+}
+
+export async function recordSettlementPayment(settlementId: number, payload: { amount: number; note?: string }): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/jobs/admin/settlements/${settlementId}/payment`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "정산 처리 실패");
   }
 }
 

@@ -17,6 +17,7 @@ from app.models.admin_models import (
     Member,
     Settlement,
     SettlementItem,
+    SettlementPayment,
     TranscriberGradeRate,
     Transcriber,
 )
@@ -679,6 +680,90 @@ def delete_transcriber_grade_rate(db: Session, rate_id: int) -> None:
             _ensure_transcriber_grade_rates_table(db)
 
 
+def _ensure_settlement_payment_storage(db: Session) -> None:
+    bind = db.get_bind()
+    db.rollback()
+    with bind.begin() as conn:
+        paid_column_exists = conn.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'settlements'
+                  AND COLUMN_NAME = 'total_paid_amount'
+                LIMIT 1
+                """
+            )
+        ).first()
+        if not paid_column_exists:
+            conn.execute(
+                text(
+                    "ALTER TABLE settlements "
+                    "ADD COLUMN total_paid_amount DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER final_amount"
+                )
+            )
+
+        payment_table_exists = conn.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'settlement_payments'
+                LIMIT 1
+                """
+            )
+        ).first()
+        if not payment_table_exists:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE settlement_payments (
+                      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                      settlement_id BIGINT NOT NULL,
+                      amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+                      paid_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                      note VARCHAR(255) NULL,
+                      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                      CONSTRAINT fk_settlement_payments_settlement
+                        FOREIGN KEY (settlement_id) REFERENCES settlements(id)
+                        ON UPDATE CASCADE ON DELETE CASCADE,
+                      KEY idx_settlement_payments_settlement_id (settlement_id),
+                      KEY idx_settlement_payments_paid_at (paid_at)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    """
+                )
+            )
+
+
+def record_settlement_payment(db: Session, settlement: Settlement, amount: float, note: str | None = None) -> Settlement:
+    if amount <= 0:
+        raise ValueError("입금액은 0보다 커야 합니다.")
+    for attempt in range(2):
+        try:
+            payment = SettlementPayment(
+                settlement_id=settlement.id,
+                amount=amount,
+                paid_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                note=(note or "").strip() or None,
+            )
+            db.add(payment)
+            settlement.total_paid_amount = float(settlement.total_paid_amount or 0) + amount
+            settlement.paid_at = payment.paid_at
+            settlement.status = "paid" if settlement.total_paid_amount >= float(settlement.final_amount or 0) else "confirmed"
+            db.commit()
+            db.refresh(settlement)
+            return settlement
+        except (OperationalError, ProgrammingError) as exc:
+            db.rollback()
+            message = str(exc).lower()
+            if attempt == 1 or ("settlement_payments" not in message and "total_paid_amount" not in message):
+                raise
+            _ensure_settlement_payment_storage(db)
+    raise RuntimeError("Failed to record settlement payment")
+
+
 def get_transcriber_by_code(db: Session, transcriber_code: str = DEFAULT_TRANSCRIBER_CODE) -> Transcriber | None:
     return db.scalar(select(Transcriber).where(Transcriber.transcriber_code == transcriber_code))
 
@@ -971,6 +1056,7 @@ def dashboard_overview(db: Session) -> dict:
                 ),
                 "jobs": row.total_jobs,
                 "amount": float(row.final_amount or 0),
+                "total_paid_amount": float(row.total_paid_amount or 0),
                 "status": row.status,
                 "paid_at": row.paid_at.isoformat() if row.paid_at else None,
             }

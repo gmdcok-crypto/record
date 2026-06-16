@@ -25,6 +25,7 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_transcript_change_logs.sql",
     SCRIPTS_DIR / "migrate_transcriber_license.sql",
     SCRIPTS_DIR / "migrate_transcriber_grade_rates.sql",
+    SCRIPTS_DIR / "migrate_settlement_payments.sql",
     SCRIPTS_DIR / "migrate_member_push_subscriptions.sql",
     SCRIPTS_DIR / "migrate_admin_push_subscriptions.sql",
 ]
@@ -173,6 +174,62 @@ def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) ->
                           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                           updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                           UNIQUE KEY uk_transcriber_grade_rates_level (grade_level)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                        """
+                    )
+                )
+        logger.info("Railway-safe migration applied: %s", sql_path.name)
+        return True
+
+    if sql_path.name == "migrate_settlement_payments.sql":
+        with engine.begin() as conn:
+            paid_column_exists = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'settlements'
+                      AND COLUMN_NAME = 'total_paid_amount'
+                    LIMIT 1
+                    """
+                )
+            ).first()
+            if not paid_column_exists:
+                conn.execute(
+                    text(
+                        "ALTER TABLE settlements "
+                        "ADD COLUMN total_paid_amount DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER final_amount"
+                    )
+                )
+
+            payment_table_exists = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM information_schema.TABLES
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'settlement_payments'
+                    LIMIT 1
+                    """
+                )
+            ).first()
+            if not payment_table_exists:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE settlement_payments (
+                          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                          settlement_id BIGINT NOT NULL,
+                          amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+                          paid_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                          note VARCHAR(255) NULL,
+                          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                          CONSTRAINT fk_settlement_payments_settlement
+                            FOREIGN KEY (settlement_id) REFERENCES settlements(id)
+                            ON UPDATE CASCADE ON DELETE CASCADE,
+                          KEY idx_settlement_payments_settlement_id (settlement_id),
+                          KEY idx_settlement_payments_paid_at (paid_at)
                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                         """
                     )

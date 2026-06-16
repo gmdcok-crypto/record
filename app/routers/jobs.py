@@ -42,6 +42,7 @@ from app.services.job_store import (
     mark_final_pdf_delivered,
     empty_transcript_json,
     mark_transcript_saved,
+    record_settlement_payment,
     serialize_job,
     store_final_pdf,
     set_job_status,
@@ -165,6 +166,11 @@ class AdminTranscriberCreateRequest(BaseModel):
 
 class SettlementStatusUpdateRequest(BaseModel):
     status: str
+
+
+class SettlementPaymentRequest(BaseModel):
+    amount: float
+    note: str | None = None
 
 
 class TranscriberGradeRateRequest(BaseModel):
@@ -1017,6 +1023,28 @@ def admin_update_invoice(
     invoice = update_invoice_status(db, invoice, body.status)
     publish_admin_event("invoice_updated", {"invoice_id": invoice.id})
     return {"id": invoice.id, "status": invoice.invoice_status}
+
+
+@router.post("/admin/settlements/{settlement_id}/payment")
+def admin_record_settlement_payment(
+    settlement_id: int,
+    body: SettlementPaymentRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    settlement = get_settlement_record(db, settlement_id)
+    if settlement is None:
+        raise HTTPException(status_code=404, detail="Settlement not found")
+    try:
+        settlement = record_settlement_payment(db, settlement, body.amount, body.note)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    publish_admin_event("settlement_payment_recorded", {"settlement_id": settlement.id})
+    return {
+        "id": settlement.id,
+        "status": settlement.status,
+        "total_paid_amount": float(settlement.total_paid_amount or 0),
+        "paid_at": settlement.paid_at.isoformat() if settlement.paid_at else None,
+    }
 
 
 def _resolve_transcriber_portal_user(
