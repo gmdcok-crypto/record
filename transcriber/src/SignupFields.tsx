@@ -122,7 +122,7 @@ export function PhoneVerifyPreview() {
       </SignupSplit>
       <SignupField value="" placeholder="인증번호 6자리" disabled />
       <p className="m-0 text-[0.78rem] text-slate-500">
-        휴대폰·주민등록번호·계좌 정보는 로그인 후 추가정보 입력에서 등록합니다.
+        회원가입 후 로그인하면 개인정보 설정에서 포트원 본인인증과 계좌 정보를 테스트할 수 있습니다.
       </p>
     </div>
   );

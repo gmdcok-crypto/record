@@ -147,6 +147,12 @@ def public_config() -> dict[str, str | bool]:
             and settings.web_push_subject.strip()
         ),
         "webPushVapidPublicKey": settings.web_push_vapid_public_key.strip(),
+        "portoneStoreId": settings.portone_store_id.strip(),
+        "portonePaymentChannelKey": settings.portone_payment_channel_key.strip(),
+        "portoneIdentityChannelKey": settings.portone_identity_channel_key.strip(),
+        "portoneEnv": settings.portone_env.strip(),
+        "portonePaymentEnabled": settings.portone_payment_enabled,
+        "portoneIdentityEnabled": settings.portone_identity_enabled,
     }
 
 

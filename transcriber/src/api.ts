@@ -135,6 +135,15 @@ export type TranscriberProfileUpdateInput = {
   resident_id?: string;
 };
 
+export type PortOnePublicConfig = {
+  portoneStoreId: string;
+  portonePaymentChannelKey: string;
+  portoneIdentityChannelKey: string;
+  portoneEnv: string;
+  portonePaymentEnabled: boolean;
+  portoneIdentityEnabled: boolean;
+};
+
 export const TRANSCRIBER_TOKEN_KEY = "transcriber_access_token";
 
 function apiBase(): string {
@@ -204,6 +213,35 @@ export async function fetchTranscriberMe(): Promise<TranscriberAuthProfile | nul
     clearTranscriberSession();
     return null;
   }
+}
+
+export async function fetchPortOnePublicConfig(): Promise<PortOnePublicConfig> {
+  const res = await fetch(`${apiBase()}/api/public-config`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  const data = (await res.json().catch(() => ({}))) as Partial<PortOnePublicConfig>;
+  return {
+    portoneStoreId: data.portoneStoreId?.trim() ?? "",
+    portonePaymentChannelKey: data.portonePaymentChannelKey?.trim() ?? "",
+    portoneIdentityChannelKey: data.portoneIdentityChannelKey?.trim() ?? "",
+    portoneEnv: data.portoneEnv?.trim() ?? "live",
+    portonePaymentEnabled: Boolean(data.portonePaymentEnabled),
+    portoneIdentityEnabled: Boolean(data.portoneIdentityEnabled),
+  };
+}
+
+export async function completePortOneIdentityVerification(identityVerificationId: string): Promise<TranscriberAuthProfile> {
+  const res = await fetch(`${apiBase()}/api/transcriber/auth/identity-verifications/complete`, {
+    method: "POST",
+    headers: { ...transcriberAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ identityVerificationId }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data));
+  }
+  return (data as { transcriber: TranscriberAuthProfile }).transcriber;
 }
 
 export async function updateTranscriberProfile(input: TranscriberProfileUpdateInput): Promise<TranscriberAuthProfile> {

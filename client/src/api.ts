@@ -628,6 +628,15 @@ export type MemberProfile = {
   phone: string | null;
 };
 
+export type PortOnePublicConfig = {
+  portoneStoreId: string;
+  portonePaymentChannelKey: string;
+  portoneIdentityChannelKey: string;
+  portoneEnv: string;
+  portonePaymentEnabled: boolean;
+  portoneIdentityEnabled: boolean;
+};
+
 export type PushSubscriptionInput = {
   endpoint: string;
   keys: {
@@ -671,6 +680,38 @@ export async function fetchMemberMe(): Promise<MemberProfile | null> {
   } catch {
     clearMemberSession();
     return null;
+  }
+}
+
+export async function fetchPortOnePublicConfig(): Promise<PortOnePublicConfig> {
+  const res = await fetch(`${apiBase()}/api/public-config`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  const data = (await res.json().catch(() => ({}))) as Partial<PortOnePublicConfig>;
+  return {
+    portoneStoreId: data.portoneStoreId?.trim() ?? "",
+    portonePaymentChannelKey: data.portonePaymentChannelKey?.trim() ?? "",
+    portoneIdentityChannelKey: data.portoneIdentityChannelKey?.trim() ?? "",
+    portoneEnv: data.portoneEnv?.trim() ?? "live",
+    portonePaymentEnabled: Boolean(data.portonePaymentEnabled),
+    portoneIdentityEnabled: Boolean(data.portoneIdentityEnabled),
+  };
+}
+
+export async function completePortOnePayment(input: {
+  paymentId: string;
+  amount: number;
+  orderName: string;
+}): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/member/auth/payments/complete`, {
+    method: "POST",
+    headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data));
   }
 }
 

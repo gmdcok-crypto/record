@@ -1,5 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
-import type { TranscriberAuthProfile, TranscriberProfileUpdateInput } from "./api";
+import * as PortOne from "@portone/browser-sdk/v2";
+import {
+  completePortOneIdentityVerification,
+  fetchPortOnePublicConfig,
+  type TranscriberAuthProfile,
+  type TranscriberProfileUpdateInput,
+} from "./api";
 
 type Props = {
   open: boolean;
@@ -38,6 +44,7 @@ export default function TranscriberProfileSettingsModal({
   const [licensePreviewUrl, setLicensePreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [verifyingIdentity, setVerifyingIdentity] = useState(false);
 
   useEffect(() => {
     if (!open || !profile) return;
@@ -108,6 +115,40 @@ export default function TranscriberProfileSettingsModal({
 
   const previewIsPdf = (profile.license_filename || licenseFile?.name || "").toLowerCase().endsWith(".pdf");
 
+  const handleIdentityVerification = async () => {
+    setError("");
+    setVerifyingIdentity(true);
+    try {
+      const config = await fetchPortOnePublicConfig();
+      if (!config.portoneIdentityEnabled || !config.portoneStoreId || !config.portoneIdentityChannelKey) {
+        throw new Error("포트원 본인인증 설정이 아직 완료되지 않았습니다.");
+      }
+      const identityVerificationId =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? `identity-verification-${crypto.randomUUID()}`
+          : `identity-verification-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const response = await PortOne.requestIdentityVerification({
+        storeId: config.portoneStoreId,
+        identityVerificationId,
+        channelKey: config.portoneIdentityChannelKey,
+      });
+      if (!response) {
+        throw new Error("본인인증 결과를 확인하지 못했습니다.");
+      }
+      if (response.code !== undefined) {
+        throw new Error(response.message || "본인인증이 취소되었습니다.");
+      }
+      const verified = await completePortOneIdentityVerification(identityVerificationId);
+      onSaved(verified);
+      setPhone(verified.phone ?? "");
+      setResidentId(formatResidentId(verified.resident_id ?? ""));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "본인인증에 실패했습니다.");
+    } finally {
+      setVerifyingIdentity(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
@@ -137,6 +178,25 @@ export default function TranscriberProfileSettingsModal({
               className={fieldClassName()}
             />
           </label>
+
+          <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-medium text-slate-400">본인인증</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  포트원 본인인증 후 휴대폰 번호와 기본 신원정보를 반영합니다.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleIdentityVerification()}
+                disabled={saving || verifyingIdentity}
+                className="rounded-lg bg-sky-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:opacity-50"
+              >
+                {verifyingIdentity ? "본인인증 진행 중..." : "본인인증"}
+              </button>
+            </div>
+          </div>
 
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-slate-500">주민등록번호</span>

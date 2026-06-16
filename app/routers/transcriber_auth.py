@@ -1,6 +1,9 @@
 import logging
+import json
 import time
 from typing import Annotated
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
@@ -68,6 +71,12 @@ class TranscriberProfileUpdateRequest(BaseModel):
     resident_id: str | None = None
 
 
+class PortOneIdentityCompleteRequest(BaseModel):
+    identity_verification_id: str = Field(alias="identityVerificationId", min_length=1)
+
+    model_config = {"populate_by_name": True}
+
+
 class AuthTokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -102,6 +111,30 @@ def _auth_error_to_http(exc: TranscriberAuthError) -> HTTPException:
     if "비활성화" in message:
         return HTTPException(status_code=403, detail=message)
     return HTTPException(status_code=400, detail=message)
+
+
+def _fetch_portone_json(path: str) -> dict:
+    if not settings.portone_api_secret.strip():
+        raise HTTPException(status_code=503, detail="포트원 API 설정이 완료되지 않았습니다.")
+
+    request = Request(
+        f"https://api.portone.io{path}",
+        headers={
+            "Authorization": f"PortOne {settings.portone_api_secret.strip()}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+    try:
+        with urlopen(request, timeout=15) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore")
+        raise HTTPException(status_code=502, detail=f"포트원 조회 실패: {body or exc.reason}") from exc
+    except URLError as exc:
+        raise HTTPException(status_code=502, detail=f"포트원 연결 실패: {exc.reason}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"포트원 응답 처리 실패: {exc}") from exc
 
 
 @router.get("/check-login-id")
@@ -185,6 +218,54 @@ def transcriber_update_profile(
         resident_id=body.resident_id,
     )
     return {"transcriber": serialize_transcriber_auth(transcriber)}
+
+
+@router.post("/identity-verifications/complete")
+def transcriber_complete_identity_verification(
+    body: PortOneIdentityCompleteRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current: Annotated[Transcriber, Depends(get_current_transcriber)],
+) -> dict:
+    verification = _fetch_portone_json(
+        f"/identity-verifications/{body.identity_verification_id}"
+    )
+    if verification.get("status") != "VERIFIED":
+        raise HTTPException(status_code=409, detail="본인인증이 아직 완료되지 않았습니다.")
+
+    verified_customer = verification.get("verifiedCustomer") or {}
+    phone = str(verified_customer.get("phoneNumber") or "").strip() or None
+    birth_date = str(verified_customer.get("birthDate") or "").strip()
+    gender = str(verified_customer.get("gender") or "").strip()
+    resident_id = None
+    if birth_date:
+        compact_birth = birth_date.replace("-", "")
+        if len(compact_birth) == 8:
+            resident_id = compact_birth[2:]
+            if gender:
+                gender_code_map = {"MALE": "1", "FEMALE": "2"}
+                gender_code = gender_code_map.get(gender.upper(), "")
+                if gender_code:
+                    resident_id = f"{resident_id}-{gender_code}"
+
+    transcriber = update_transcriber_profile(
+        db,
+        current,
+        phone=phone,
+        resident_id=resident_id,
+    )
+    return {
+        "ok": True,
+        "identity_verification_id": body.identity_verification_id,
+        "transcriber": serialize_transcriber_auth(transcriber),
+        "verified_customer": {
+            "name": verified_customer.get("name"),
+            "phoneNumber": verified_customer.get("phoneNumber"),
+            "birthDate": verified_customer.get("birthDate"),
+            "gender": verified_customer.get("gender"),
+            "ci": verified_customer.get("ci"),
+            "di": verified_customer.get("di"),
+        },
+    }
 
 
 @router.post("/profile/license")

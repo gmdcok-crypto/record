@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     web_push_vapid_public_key: str = ""
     web_push_vapid_private_key: str = ""
     web_push_subject: str = "mailto:ops@example.com"
+    portone_api_secret: str = ""
+    portone_store_id: str = ""
+    portone_payment_channel_key: str = ""
+    portone_identity_channel_key: str = ""
+    portone_webhook_secret: str = ""
+    portone_env: str = "live"
     # 0 = never expire (no exp claim). Set e.g. 10080 for 7 days.
     jwt_expire_minutes: int = 0
 
@@ -58,6 +64,22 @@ class Settings(BaseSettings):
     @property
     def jwt_configured(self) -> bool:
         return bool(self.jwt_secret.strip())
+
+    @property
+    def portone_payment_enabled(self) -> bool:
+        return bool(
+            self.portone_api_secret.strip()
+            and self.portone_store_id.strip()
+            and self.portone_payment_channel_key.strip()
+        )
+
+    @property
+    def portone_identity_enabled(self) -> bool:
+        return bool(
+            self.portone_api_secret.strip()
+            and self.portone_store_id.strip()
+            and self.portone_identity_channel_key.strip()
+        )
 
     @property
     def resolved_database_url(self) -> str:

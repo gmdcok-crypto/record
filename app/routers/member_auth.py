@@ -1,6 +1,9 @@
 import logging
+import json
 import time
 from typing import Annotated
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr, Field
@@ -53,6 +56,14 @@ class PushSubscriptionRequest(BaseModel):
     user_agent: str | None = None
 
 
+class PortOnePaymentCompleteRequest(BaseModel):
+    payment_id: str = Field(alias="paymentId", min_length=1)
+    amount: int = Field(ge=0)
+    order_name: str = Field(alias="orderName", min_length=1)
+
+    model_config = {"populate_by_name": True}
+
+
 def _auth_error_to_http(exc: MemberAuthError) -> HTTPException:
     message = str(exc)
     if "이미" in message:
@@ -74,6 +85,30 @@ def _issue_token(member) -> MemberAuthTokenResponse:
         access_token=access_token,
         member=serialize_member(member),
     )
+
+
+def _fetch_portone_json(path: str) -> dict:
+    if not settings.portone_api_secret.strip():
+        raise HTTPException(status_code=503, detail="포트원 API 설정이 완료되지 않았습니다.")
+
+    request = Request(
+        f"https://api.portone.io{path}",
+        headers={
+            "Authorization": f"PortOne {settings.portone_api_secret.strip()}",
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+    try:
+        with urlopen(request, timeout=15) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore")
+        raise HTTPException(status_code=502, detail=f"포트원 조회 실패: {body or exc.reason}") from exc
+    except URLError as exc:
+        raise HTTPException(status_code=502, detail=f"포트원 연결 실패: {exc.reason}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"포트원 응답 처리 실패: {exc}") from exc
 
 
 @router.get("/check-email")
@@ -111,6 +146,32 @@ def member_signup(body: MemberSignupRequest, db: Annotated[Session, Depends(get_
 @router.get("/me")
 def member_me(current: Annotated[Member, Depends(get_current_member)]) -> dict:
     return {"member": serialize_member(current)}
+
+
+@router.post("/payments/complete")
+def complete_portone_payment(
+    body: PortOnePaymentCompleteRequest,
+    current: Annotated[Member, Depends(get_current_member)],
+) -> dict:
+    payment = _fetch_portone_json(f"/payments/{body.payment_id}")
+    if payment.get("status") != "PAID":
+        raise HTTPException(status_code=409, detail="결제가 아직 완료되지 않았습니다.")
+
+    total_amount = int(((payment.get("amount") or {}).get("total")) or 0)
+    if total_amount != body.amount:
+        raise HTTPException(status_code=409, detail="결제 금액 검증에 실패했습니다.")
+
+    order_name = str(payment.get("orderName") or "")
+    if order_name and order_name != body.order_name:
+        raise HTTPException(status_code=409, detail="결제 주문명 검증에 실패했습니다.")
+
+    return {
+        "ok": True,
+        "payment_id": body.payment_id,
+        "amount": total_amount,
+        "order_name": order_name or body.order_name,
+        "member_id": current.id,
+    }
 
 
 @router.post("/push-subscriptions")

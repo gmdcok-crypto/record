@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import * as PortOne from "@portone/browser-sdk/v2";
 
 import TimeHmsSelect from "./TimeHmsSelect";
+import { completePortOnePayment, fetchPortOnePublicConfig } from "./api";
 import {
   ZERO_HMS,
   calculateQuote,
@@ -57,6 +59,7 @@ export default function UploadBillingPanel({
   const [entries, setEntries] = useState<UploadBillingFile[]>([]);
   const [segmentForms, setSegmentForms] = useState<Record<string, { start: typeof ZERO_HMS; end: typeof ZERO_HMS }>>({});
   const [segmentFormErrors, setSegmentFormErrors] = useState<Record<string, string>>({});
+  const [paymentError, setPaymentError] = useState("");
 
   const billableDurationMs = useMemo(() => totalBillableDurationMs(entries), [entries]);
   const quote = useMemo(() => calculateQuote(billableDurationMs), [billableDurationMs]);
@@ -150,6 +153,10 @@ export default function UploadBillingPanel({
     onEntriesChange?.(entries);
   }, [entries, onEntriesChange]);
 
+  useEffect(() => {
+    setPaymentError("");
+  }, [billableDurationMs, quote.totalWithVat]);
+
   const updateEntry = (key: string, patch: Partial<UploadBillingFile>) => {
     setEntries((prev) => prev.map((entry) => (entry.key === key ? { ...entry, ...patch } : entry)));
   };
@@ -187,10 +194,48 @@ export default function UploadBillingPanel({
     setSegmentFormErrors((prev) => ({ ...prev, [entry.key]: "" }));
   };
 
-  const handlePay = () => {
+  const handlePay = async () => {
     if (!billingReady || !quote.tier) return;
-    paidBillableRef.current = billableDurationMs;
-    onPaidChange(true);
+    setPaymentError("");
+    try {
+      const config = await fetchPortOnePublicConfig();
+      if (!config.portonePaymentEnabled || !config.portoneStoreId || !config.portonePaymentChannelKey) {
+        throw new Error("포트원 결제 설정이 아직 완료되지 않았습니다.");
+      }
+
+      const totalAmount = quote.totalWithVat ?? 0;
+      const paymentId =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? `payment-${crypto.randomUUID()}`
+          : `payment-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const orderName =
+        entries.length > 1
+          ? `녹취록 업로드 ${entries.length}건`
+          : `${entries[0]?.file.name ?? "녹취록 업로드"} 결제`;
+
+      const response = await PortOne.requestPayment({
+        storeId: config.portoneStoreId,
+        channelKey: config.portonePaymentChannelKey,
+        paymentId,
+        orderName,
+        totalAmount,
+        currency: "CURRENCY_KRW",
+        payMethod: "CARD",
+      });
+
+      if (!response) {
+        throw new Error("결제 결과를 확인하지 못했습니다.");
+      }
+      if (response.code !== undefined) {
+        throw new Error(response.message || "결제가 취소되었습니다.");
+      }
+
+      await completePortOnePayment({ paymentId, amount: totalAmount, orderName });
+      paidBillableRef.current = billableDurationMs;
+      onPaidChange(true);
+    } catch (error) {
+      setPaymentError(error instanceof Error ? error.message : "결제에 실패했습니다.");
+    }
   };
 
   if (!entries.length) return null;
@@ -282,6 +327,10 @@ export default function UploadBillingPanel({
             </button>
           ) : null}
         </div>
+
+        {paymentError ? (
+          <p className="mt-3 text-xs text-rose-300">{paymentError}</p>
+        ) : null}
 
         {!paid && billingReady ? (
           <p className="mt-3 text-xs text-slate-500">결제 완료 후 업로드 버튼이 활성화됩니다.</p>
