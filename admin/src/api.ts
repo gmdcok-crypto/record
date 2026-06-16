@@ -152,6 +152,7 @@ export type TranscriberGradeRate = {
 export type AdminOverviewSettlement = {
   id: number;
   month: string;
+  transcriber_id?: number;
   transcriber: string | number;
   jobs: number;
   amount: number;

@@ -118,6 +118,7 @@ type MemberItem = {
 };
 
 type Transcriber = {
+  numericId: number;
   id: string;
   name: string;
   gradeLevel: number;
@@ -158,6 +159,7 @@ const EMPTY_TRANSCRIBER_FORM: TranscriberForm = {
 type SettlementItem = {
   id: number;
   month: string;
+  transcriberId: number | null;
   transcriber: string;
   jobs: number;
   amount: number;
@@ -726,6 +728,7 @@ function App() {
 
   const transcribers = useMemo<Transcriber[]>(() => {
     return (overview?.transcribers ?? []).map((person) => ({
+      numericId: person.id,
       id: person.code,
       name: person.name,
       gradeLevel: person.grade_level || 1,
@@ -748,6 +751,7 @@ function App() {
     return (overview?.settlements ?? []).map((item) => ({
       id: item.id,
       month: item.month,
+      transcriberId: item.transcriber_id ?? null,
       transcriber: String(item.transcriber),
       jobs: item.jobs,
       amount: item.amount,
@@ -758,9 +762,11 @@ function App() {
   }, [overview]);
 
   const settlementByTranscriber = useMemo(() => {
-    const map = new Map<string, SettlementItem>();
+    const map = new Map<number, SettlementItem>();
     settlements.forEach((item) => {
-      map.set(item.transcriber, item);
+      if (item.transcriberId != null) {
+        map.set(item.transcriberId, item);
+      }
     });
     return map;
   }, [settlements]);
@@ -1589,7 +1595,7 @@ function App() {
                   <td className="px-3 py-2 text-[12px] text-slate-400">{person.qualityScore}</td>
                   <td className="px-3 py-2">
                     {(() => {
-                      const settlementItem = settlementByTranscriber.get(person.name);
+                      const settlementItem = settlementByTranscriber.get(person.numericId);
                       return (
                     <div className="flex flex-wrap gap-2">
                       <button

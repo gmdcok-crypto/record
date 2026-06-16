@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import OperationalError, ProgrammingError
@@ -737,6 +737,197 @@ def _ensure_settlement_payment_storage(db: Session) -> None:
             )
 
 
+def _round_settlement_minutes(duration_seconds: int | None) -> int:
+    seconds = int(duration_seconds or 0)
+    if seconds <= 0:
+        return 0
+    return int((seconds + 30) // 60)
+
+
+def _month_period(target: datetime) -> tuple[date, date]:
+    period_start = date(target.year, target.month, 1)
+    if target.month == 12:
+        next_month = date(target.year + 1, 1, 1)
+    else:
+        next_month = date(target.year, target.month + 1, 1)
+    return period_start, next_month - timedelta(days=1)
+
+
+def _build_settlement_no(transcriber_id: int, period_start: date) -> str:
+    return f"SET-{period_start:%Y%m}-{transcriber_id:04d}"
+
+
+def _resolve_settlement_unit_price(transcriber: Transcriber, rates_by_grade: dict[int, float]) -> float:
+    grade_rate = float(rates_by_grade.get(int(transcriber.grade_level or 1), 0) or 0)
+    if grade_rate > 0:
+        return grade_rate
+    return float(transcriber.unit_price or 0)
+
+
+def _settlement_status_for_amounts(total_paid_amount: float, final_amount: float) -> str:
+    if total_paid_amount > 0:
+        return "paid" if total_paid_amount >= final_amount else "confirmed"
+    return "waiting"
+
+
+def sync_generated_settlements(db: Session) -> None:
+    _ensure_transcriber_grade_rates_table(db)
+
+    completed_jobs = db.scalars(
+        select(Job).where(
+            Job.status == "pdf_sent",
+            Job.assigned_transcriber_id.is_not(None),
+        )
+    ).all()
+
+    pdf_sent_at_by_job: dict[str, datetime] = {}
+    if completed_jobs:
+        job_ids = [job.job_id for job in completed_jobs]
+        status_logs = db.scalars(
+            select(JobStatusLog)
+            .where(
+                JobStatusLog.job_id.in_(job_ids),
+                JobStatusLog.to_status == "pdf_sent",
+            )
+            .order_by(JobStatusLog.changed_at.desc())
+        ).all()
+        for row in status_logs:
+            pdf_sent_at_by_job.setdefault(row.job_id, row.changed_at)
+
+    rates_by_grade = {
+        int(row["grade_level"]): float(row["per_minute_rate"] or 0)
+        for row in list_transcriber_grade_rates(db)
+    }
+
+    grouped_entries: dict[tuple[int, date, date], list[dict]] = {}
+    for job in completed_jobs:
+        transcriber = job.transcriber
+        if transcriber is None:
+            continue
+        delivered_at = (
+            pdf_sent_at_by_job.get(job.job_id)
+            or job.completed_at
+            or job.finalized_at
+            or job.final_pdf_generated_at
+            or job.updated_at
+            or job.uploaded_at
+            or datetime.now(timezone.utc).replace(tzinfo=None)
+        )
+        period_start, period_end = _month_period(delivered_at)
+        quantity_minutes = _round_settlement_minutes(job.duration_seconds)
+        unit_price = _resolve_settlement_unit_price(transcriber, rates_by_grade)
+        amount = float(unit_price * quantity_minutes)
+        grouped_entries.setdefault((transcriber.id, period_start, period_end), []).append(
+            {
+                "job": job,
+                "unit_price": unit_price,
+                "quantity_minutes": quantity_minutes,
+                "amount": amount,
+            }
+        )
+
+    settlements = db.scalars(select(Settlement).order_by(Settlement.created_at.desc())).all()
+    settlement_by_key: dict[tuple[int, date, date], Settlement] = {}
+    for settlement in settlements:
+        key = (settlement.transcriber_id, settlement.period_start, settlement.period_end)
+        if key not in settlement_by_key:
+            settlement_by_key[key] = settlement
+
+    settlement_status_by_job: dict[str, str] = {}
+    settlement_amount_by_job: dict[str, float] = {}
+
+    for key, entries in grouped_entries.items():
+        transcriber_id, period_start, period_end = key
+        settlement = settlement_by_key.get(key)
+        if settlement is None:
+            settlement = Settlement(
+                settlement_no=_build_settlement_no(transcriber_id, period_start),
+                transcriber_id=transcriber_id,
+                period_start=period_start,
+                period_end=period_end,
+                total_jobs=0,
+                total_minutes=0,
+                gross_amount=0,
+                adjustment_amount=0,
+                final_amount=0,
+                total_paid_amount=0,
+                status="waiting",
+            )
+            db.add(settlement)
+            db.flush()
+            settlement_by_key[key] = settlement
+
+        existing_items = {
+            item.job_id: item
+            for item in db.scalars(select(SettlementItem).where(SettlementItem.settlement_id == settlement.id)).all()
+        }
+
+        total_jobs = 0
+        total_minutes = 0
+        gross_amount = 0.0
+        desired_job_ids: set[str] = set()
+
+        for entry in entries:
+            job = entry["job"]
+            desired_job_ids.add(job.job_id)
+            total_jobs += 1
+            total_minutes += int(entry["quantity_minutes"])
+            gross_amount += float(entry["amount"])
+
+            item = existing_items.get(job.job_id)
+            if item is None:
+                item = SettlementItem(
+                    settlement_id=settlement.id,
+                    job_id=job.job_id,
+                    transcriber_id=transcriber_id,
+                )
+                db.add(item)
+
+            item.transcriber_id = transcriber_id
+            item.unit_price = float(entry["unit_price"])
+            item.quantity_minutes = int(entry["quantity_minutes"])
+            item.amount = float(entry["amount"])
+            item.adjustment_amount = 0
+            item.final_amount = float(entry["amount"])
+
+        for job_id, item in existing_items.items():
+            if job_id not in desired_job_ids:
+                db.delete(item)
+
+        settlement.total_jobs = total_jobs
+        settlement.total_minutes = total_minutes
+        settlement.gross_amount = gross_amount
+        settlement.adjustment_amount = 0
+        settlement.final_amount = gross_amount
+        settlement.status = _settlement_status_for_amounts(
+            float(settlement.total_paid_amount or 0),
+            float(settlement.final_amount or 0),
+        )
+        if settlement.status == "waiting" and float(settlement.total_paid_amount or 0) <= 0:
+            settlement.paid_at = None
+
+        for entry in entries:
+            job = entry["job"]
+            settlement_amount_by_job[job.job_id] = float(entry["amount"])
+            settlement_status_by_job[job.job_id] = settlement.status
+
+    for job in completed_jobs:
+        job.settlement_amount = settlement_amount_by_job.get(job.job_id, 0)
+        job.settlement_status = settlement_status_by_job.get(job.job_id, "waiting")
+
+    stale_jobs = db.scalars(
+        select(Job).where(
+            Job.status != "pdf_sent",
+            or_(Job.settlement_amount != 0, Job.settlement_status != "waiting"),
+        )
+    ).all()
+    for job in stale_jobs:
+        job.settlement_amount = 0
+        job.settlement_status = "waiting"
+
+    db.commit()
+
+
 def record_settlement_payment(db: Session, settlement: Settlement, amount: float, note: str | None = None) -> Settlement:
     if amount <= 0:
         raise ValueError("입금액은 0보다 커야 합니다.")
@@ -982,6 +1173,7 @@ def update_invoice_status(db: Session, invoice: Invoice, status: str) -> Invoice
 
 
 def dashboard_overview(db: Session) -> dict:
+    sync_generated_settlements(db)
     for attempt in range(2):
         try:
             jobs = db.scalars(select(Job).order_by(Job.updated_at.desc()).limit(50)).all()
@@ -1051,6 +1243,7 @@ def dashboard_overview(db: Session) -> dict:
             {
                 "id": row.id,
                 "month": f"{row.period_start:%Y-%m}",
+                "transcriber_id": row.transcriber_id,
                 "transcriber": (
                     db.scalar(select(Transcriber.name).where(Transcriber.id == row.transcriber_id)) or row.transcriber_id
                 ),
