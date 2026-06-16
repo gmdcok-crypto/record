@@ -707,6 +707,20 @@ export async function fetchPortOnePublicConfig(): Promise<PortOnePublicConfig> {
   };
 }
 
+export async function fetchClientFrontendVersion(): Promise<string | null> {
+  try {
+    const res = await fetch(`${apiBase()}/api/client/version`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { version?: string | null };
+    return data.version ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function completePortOnePayment(input: {
   paymentId: string;
   amount: number;

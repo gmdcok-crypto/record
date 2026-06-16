@@ -8,6 +8,7 @@ import {
   downloadProjectFinalTranscriptPdf,
   downloadTranscriptPdf,
   downloadFinalTranscriptPdf,
+  fetchClientFrontendVersion,
   fetchJob,
   fetchClientJobInquiries,
   fetchMemberMe,
@@ -73,6 +74,7 @@ type ClientTab = "upload" | "archive" | "edit";
 type UploadProjectMode = "existing" | "new";
 type EditableSegment = TranscriptSegment & { id: string };
 type PushPermissionState = NotificationPermission | "unsupported";
+const FRONTEND_VERSION_POLL_MS = 60_000;
 
 const EDITABLE_JOB_STATUSES = new Set(["first_done", "client_editing"]);
 
@@ -297,6 +299,8 @@ export default function App() {
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const inquiryPanelRef = useRef<HTMLDivElement | null>(null);
+  const frontendVersionRef = useRef<string | null>(null);
+  const frontendReloadingRef = useRef(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadBillingEntries, setUploadBillingEntries] = useState<UploadBillingFile[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -634,6 +638,47 @@ export default function App() {
     void restoreSession();
     void refreshPushPermission();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkFrontendVersion = async () => {
+      if (frontendReloadingRef.current || busy) return;
+      const nextVersion = await fetchClientFrontendVersion();
+      if (cancelled || !nextVersion) return;
+
+      if (!frontendVersionRef.current) {
+        frontendVersionRef.current = nextVersion;
+        return;
+      }
+
+      if (frontendVersionRef.current !== nextVersion) {
+        frontendReloadingRef.current = true;
+        window.location.reload();
+      }
+    };
+
+    void checkFrontendVersion();
+    const intervalId = window.setInterval(() => {
+      void checkFrontendVersion();
+    }, FRONTEND_VERSION_POLL_MS);
+
+    const handleVisible = () => {
+      if (document.visibilityState === "visible") {
+        void checkFrontendVersion();
+      }
+    };
+
+    window.addEventListener("focus", handleVisible);
+    document.addEventListener("visibilitychange", handleVisible);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleVisible);
+      document.removeEventListener("visibilitychange", handleVisible);
+    };
+  }, [busy]);
 
   useEffect(() => {
     if (!memberProfile) return;

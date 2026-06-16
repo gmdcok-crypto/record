@@ -136,6 +136,11 @@ def transcriber_frontend_version() -> dict[str, str | None]:
     return {"version": _frontend_version(TRANSCRIBER_DIR)}
 
 
+@app.get("/api/client/version")
+def client_frontend_version() -> dict[str, str | None]:
+    return {"version": _frontend_version(STATIC_DIR)}
+
+
 @app.get("/api/public-config")
 def public_config() -> dict[str, str | bool]:
     return {
