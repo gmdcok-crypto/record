@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  cancelClientJob,
   checkHealth,
   createAdminEventsSource,
   createProject,
@@ -331,7 +330,6 @@ export default function App() {
   const [submittingReview, setSubmittingReview] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [creatingShare, setCreatingShare] = useState(false);
-  const [cancelTarget, setCancelTarget] = useState<JobArchiveItem | null>(null);
   const [duplicateDialogMessage, setDuplicateDialogMessage] = useState("");
   const [uploadPaid, setUploadPaid] = useState(false);
   const [activeTab, setActiveTab] = useState<ClientTab>("upload");
@@ -1118,33 +1116,6 @@ export default function App() {
     showNotice("success", "대화 구간이 추가되었습니다.");
   };
 
-  const onCancelUpload = async (jobId: string) => {
-    try {
-      await cancelClientJob(jobId);
-      if (job?.job_id === jobId) {
-        setJob(null);
-        setSegments([]);
-        setSpeakerLabels({});
-        setStep("idle");
-      }
-      await refreshWorkspace();
-      showNotice("success", "배정 전 업로드를 취소했습니다.");
-    } catch (err) {
-      showNotice("error", err instanceof Error ? err.message : "업로드 취소 실패");
-    }
-  };
-
-  const closeCancelDialog = () => {
-    setCancelTarget(null);
-  };
-
-  const confirmCancelUpload = async () => {
-    if (!cancelTarget) return;
-    const jobId = cancelTarget.job_id;
-    setCancelTarget(null);
-    await onCancelUpload(jobId);
-  };
-
   const tabs: { id: ClientTab; label: string }[] = [
     { id: "upload", label: "업로드" },
     { id: "archive", label: "보관함" },
@@ -1468,18 +1439,7 @@ export default function App() {
                                 </div>
                                 <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
                                   <span className="font-mono">{file.job_id}</span>
-                                  <div className="flex items-center gap-2">
-                                    <span>{formatDateTime(file.uploaded_at)}</span>
-                                    {file.status === "waiting_assignment" ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => setCancelTarget(item)}
-                                        className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-300"
-                                      >
-                                        취소
-                                      </button>
-                                    ) : null}
-                                  </div>
+                                  <span>{formatDateTime(file.uploaded_at)}</span>
                                 </div>
                               </div>
                             );
@@ -1760,34 +1720,6 @@ export default function App() {
           </section>
           ) : null}
         </main>
-
-        {cancelTarget ? (
-          <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
-            <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-2xl shadow-black/40">
-              <h3 className="text-lg font-semibold text-white">업로드 취소</h3>
-              <p className="mt-3 text-sm leading-6 text-slate-300">
-                <span className="font-medium text-white">{cancelTarget.filename}</span> 업로드를 취소하시겠습니까?
-                배정 전 파일만 취소할 수 있으며, 취소하면 보관함과 저장된 원본 파일이 함께 삭제됩니다.
-              </p>
-              <div className="mt-5 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={closeCancelDialog}
-                  className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-slate-800"
-                >
-                  닫기
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void confirmCancelUpload()}
-                  className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-500"
-                >
-                  취소 진행
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
 
         {duplicateDialogMessage ? (
           <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
