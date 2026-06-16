@@ -30,7 +30,9 @@ type UploadBillingPanelProps = {
   fileIdentity: (file: File) => string;
   formatSize: (bytes: number) => string;
   paid: boolean;
+  uploading?: boolean;
   onPaidChange: (paid: boolean) => void;
+  onPaymentConfirmed?: () => void;
   onRemoveFile: (file: File) => void;
   onEntriesChange?: (entries: UploadBillingFile[]) => void;
   onPaymentPending?: (payload: { paymentId: string; amount: number; orderName: string } | null) => void;
@@ -61,7 +63,9 @@ export default function UploadBillingPanel({
   fileIdentity,
   formatSize,
   paid,
+  uploading = false,
   onPaidChange,
+  onPaymentConfirmed,
   onRemoveFile,
   onEntriesChange,
   onPaymentPending,
@@ -254,6 +258,7 @@ export default function UploadBillingPanel({
       onPaymentPending?.(null);
       paidBillableRef.current = billableDurationMs;
       onPaidChange(true);
+      onPaymentConfirmed?.();
     } catch (error) {
       onPaymentPending?.(null);
       setPaymentError(error instanceof Error ? error.message : "결제에 실패했습니다.");
@@ -336,7 +341,11 @@ export default function UploadBillingPanel({
         </label>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          {paid && billingReady ? (
+          {uploading ? (
+            <span className="inline-flex items-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-100">
+              업로드 진행 중...
+            </span>
+          ) : paid && billingReady ? (
             <span className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-200">
               결제 완료
             </span>

@@ -509,6 +509,11 @@ export default function App() {
     }
   }, []);
 
+  const queueAutoUpload = useCallback(() => {
+    setUploadPaid(true);
+    setAutoUploadPending(true);
+  }, [setAutoUploadPending]);
+
   useEffect(() => {
     const paymentId = readPortOnePaymentIdFromUrl();
     if (!paymentId || authStatus !== "authenticated") return;
@@ -526,8 +531,7 @@ export default function App() {
     }
     void completePortOnePayment(pending)
       .then(() => {
-        setUploadPaid(true);
-        setAutoUploadPending(true);
+        queueAutoUpload();
       })
       .catch((err) => {
         showNotice("error", err instanceof Error ? err.message : "결제 확인에 실패했습니다.");
@@ -536,7 +540,7 @@ export default function App() {
         storePendingPayment(null);
         clearUrlQuery();
       });
-  }, [authStatus, setAutoUploadPending, showNotice, storePendingPayment]);
+  }, [authStatus, queueAutoUpload, showNotice, storePendingPayment]);
 
   useEffect(() => {
     if (authStatus !== "authenticated" || selectedFiles.length > 0) return;
@@ -960,6 +964,16 @@ export default function App() {
     uploadProjectMode,
   ]);
 
+  const handlePaymentConfirmed = useCallback(() => {
+    if (autoUploadStartedRef.current) return;
+    autoUploadStartedRef.current = true;
+    setUploadPaid(true);
+    void onUpload().finally(() => {
+      setAutoUploadPending(false);
+      autoUploadStartedRef.current = false;
+    });
+  }, [onUpload, setAutoUploadPending]);
+
   useEffect(() => {
     if (!uploadPaid || !selectedFiles.length || busy || autoUploadStartedRef.current) return;
     if (window.localStorage.getItem(AUTO_UPLOAD_TRIGGER_KEY) !== "1") return;
@@ -1360,7 +1374,9 @@ export default function App() {
                   fileIdentity={fileIdentity}
                   formatSize={formatSize}
                   paid={uploadPaid}
+                  uploading={step === "uploading"}
                   onPaidChange={setUploadPaid}
+                  onPaymentConfirmed={handlePaymentConfirmed}
                   onRemoveFile={removeSelectedFile}
                   onEntriesChange={setUploadBillingEntries}
                   onPaymentPending={(payload) => {
