@@ -31,7 +31,6 @@ type UploadBillingPanelProps = {
   formatSize: (bytes: number) => string;
   paid: boolean;
   onPaidChange: (paid: boolean) => void;
-  onPaidSuccess?: () => void;
   onRemoveFile: (file: File) => void;
   onEntriesChange?: (entries: UploadBillingFile[]) => void;
   onPaymentPending?: (payload: { paymentId: string; amount: number; orderName: string } | null) => void;
@@ -63,7 +62,6 @@ export default function UploadBillingPanel({
   formatSize,
   paid,
   onPaidChange,
-  onPaidSuccess,
   onRemoveFile,
   onEntriesChange,
   onPaymentPending,
@@ -256,7 +254,6 @@ export default function UploadBillingPanel({
       onPaymentPending?.(null);
       paidBillableRef.current = billableDurationMs;
       onPaidChange(true);
-      onPaidSuccess?.();
     } catch (error) {
       onPaymentPending?.(null);
       setPaymentError(error instanceof Error ? error.message : "결제에 실패했습니다.");
@@ -357,15 +354,6 @@ export default function UploadBillingPanel({
               {(quote.totalWithVat ?? 0) > 0 ? `${formatKrw(quote.totalWithVat ?? 0)} 결제하기` : "결제하기"}
             </button>
           )}
-          {paid ? (
-            <button
-              type="button"
-              onClick={() => onPaidChange(false)}
-              className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
-            >
-              결제 취소
-            </button>
-          ) : null}
         </div>
 
         {paymentError ? (

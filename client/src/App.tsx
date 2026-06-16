@@ -47,6 +47,11 @@ import {
 } from "./transcriptEditor";
 import UploadBillingPanel from "./UploadBillingPanel";
 import type { UploadBillingFile } from "./uploadBilling";
+import {
+  clearPendingUploadSnapshot,
+  restorePendingUploadSnapshot,
+  savePendingUploadSnapshot,
+} from "./pendingUploadStore";
 import SegmentPlaybackText from "./SegmentPlaybackText";
 import { buildSegmentTimedWords, segmentContainsActiveWord } from "./playbackHighlight";
 import {
@@ -76,8 +81,8 @@ const ACCEPT = "audio/*,video/mp4,video/webm,.wav,.mp3,.m4a,.flac,.ogg";
 const GUEST_CLIENT_NAME = "의뢰인";
 const INTRO_SIGNUP_URL =
   import.meta.env.VITE_INTRO_URL?.replace(/\/$/, "") || "https://record-voi.netlify.app";
-const CLIENT_BUILD_ID = (import.meta.env.VITE_CLIENT_BUILD_ID as string | undefined)?.trim() || "dev";
 const PENDING_PORTONE_PAYMENT_KEY = "pending_portone_payment";
+const AUTO_UPLOAD_TRIGGER_KEY = "auto_upload_after_payment";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -308,7 +313,6 @@ export default function App() {
   const [addSegmentAfterIndex, setAddSegmentAfterIndex] = useState<number | null>(null);
   const [changeHistoryRefresh, setChangeHistoryRefresh] = useState(0);
   const [inquiryRefresh, setInquiryRefresh] = useState(0);
-  const [jobIdInput, setJobIdInput] = useState("");
   const [archive, setArchive] = useState<JobArchiveItem[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [uploadProjectMode, setUploadProjectMode] = useState<UploadProjectMode>("new");
@@ -340,6 +344,14 @@ export default function App() {
   const segmentEndRef = useRef<number | null>(null);
   const [playbackMs, setPlaybackMs] = useState(0);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const autoUploadStartedRef = useRef(false);
+  const restoredBillingEntriesRef = useRef<
+    Array<{
+      key: string;
+      mode: "full" | "segments";
+      segments: { id: string; fileId: string; start_ms: number; end_ms: number; selected: boolean }[];
+    }>
+  >([]);
 
   const showNotice = useCallback((kind: ActionNoticeKind, message: string, title?: string) => {
     setActionNotice({ kind, message, title });
@@ -382,14 +394,6 @@ export default function App() {
     }
     return newProjectTitle.trim();
   }, [uploadProjectMode, selectedUploadProject, newProjectTitle]);
-
-  const uploadButtonLabel = useMemo(() => {
-    if (!uploadProjectReady) return "프로젝트를 먼저 정해 주세요";
-    if (!selectedFiles.length) return "파일을 선택해 주세요";
-    if (!uploadPaid) return "업로드";
-    if (busy) return "처리 중…";
-    return selectedFiles.length > 1 ? `${selectedFiles.length}개 파일 업로드` : "업로드";
-  }, [uploadProjectReady, selectedFiles.length, uploadPaid, busy]);
 
   const refreshWorkspace = useCallback(async (showLoading = false, suppressError = false) => {
     if (showLoading) setLoadingWorkspace(true);
@@ -481,6 +485,30 @@ export default function App() {
     window.localStorage.setItem(PENDING_PORTONE_PAYMENT_KEY, JSON.stringify(payload));
   }, []);
 
+  const persistPendingUpload = useCallback(async () => {
+    if (!selectedFiles.length) return;
+    await savePendingUploadSnapshot({
+      files: selectedFiles,
+      uploadProjectMode,
+      selectedUploadProjectId,
+      newProjectTitle,
+      billingEntries: uploadBillingEntries.map((entry) => ({
+        key: entry.key,
+        mode: entry.mode,
+        segments: entry.segments,
+      })),
+      savedAt: Date.now(),
+    });
+  }, [newProjectTitle, selectedFiles, selectedUploadProjectId, uploadBillingEntries, uploadProjectMode]);
+
+  const setAutoUploadPending = useCallback((pending: boolean) => {
+    if (pending) {
+      window.localStorage.setItem(AUTO_UPLOAD_TRIGGER_KEY, "1");
+    } else {
+      window.localStorage.removeItem(AUTO_UPLOAD_TRIGGER_KEY);
+    }
+  }, []);
+
   useEffect(() => {
     const paymentId = readPortOnePaymentIdFromUrl();
     if (!paymentId || authStatus !== "authenticated") return;
@@ -499,9 +527,7 @@ export default function App() {
     void completePortOnePayment(pending)
       .then(() => {
         setUploadPaid(true);
-        window.setTimeout(() => {
-          void onUpload();
-        }, 0);
+        setAutoUploadPending(true);
       })
       .catch((err) => {
         showNotice("error", err instanceof Error ? err.message : "결제 확인에 실패했습니다.");
@@ -510,7 +536,39 @@ export default function App() {
         storePendingPayment(null);
         clearUrlQuery();
       });
-  }, [authStatus, showNotice, storePendingPayment]);
+  }, [authStatus, setAutoUploadPending, showNotice, storePendingPayment]);
+
+  useEffect(() => {
+    if (authStatus !== "authenticated" || selectedFiles.length > 0) return;
+    if (window.localStorage.getItem(AUTO_UPLOAD_TRIGGER_KEY) !== "1") return;
+    void restorePendingUploadSnapshot()
+      .then((snapshot) => {
+        if (!snapshot) return;
+        restoredBillingEntriesRef.current = snapshot.billingEntries;
+        setUploadProjectMode(snapshot.uploadProjectMode);
+        setSelectedUploadProjectId(snapshot.selectedUploadProjectId);
+        setNewProjectTitle(snapshot.newProjectTitle);
+        setSelectedFiles(snapshot.files);
+      })
+      .catch(() => undefined);
+  }, [authStatus, selectedFiles.length]);
+
+  useEffect(() => {
+    const restored = restoredBillingEntriesRef.current;
+    if (!restored.length || !uploadBillingEntries.length) return;
+    const restoredMap = new Map(restored.map((entry) => [entry.key, entry]));
+    const merged = uploadBillingEntries.map((entry) => {
+      const saved = restoredMap.get(entry.key);
+      if (!saved) return entry;
+      return {
+        ...entry,
+        mode: saved.mode,
+        segments: saved.segments,
+      };
+    });
+    restoredBillingEntriesRef.current = [];
+    setUploadBillingEntries(merged);
+  }, [uploadBillingEntries]);
 
   const handleLogout = () => {
     clearMemberSession();
@@ -660,6 +718,9 @@ export default function App() {
   }, [job?.job_id]);
 
   const resetUploadUi = (successMessage = "") => {
+    setAutoUploadPending(false);
+    autoUploadStartedRef.current = false;
+    void clearPendingUploadSnapshot();
     setSelectedFiles([]);
     setUploadPaid(false);
     setProgress(0);
@@ -672,6 +733,8 @@ export default function App() {
   };
 
   const removeSelectedFile = (file: File) => {
+    setAutoUploadPending(false);
+    void clearPendingUploadSnapshot();
     setSelectedFiles((prev) => prev.filter((item) => fileIdentity(item) !== fileIdentity(file)));
     setUploadPaid(false);
     if (inputRef.current) inputRef.current.value = "";
@@ -702,6 +765,8 @@ export default function App() {
       const appended = incomingFiles.filter((file) => !existing.has(fileIdentity(file)));
       return [...prev, ...appended];
     });
+    setAutoUploadPending(false);
+    autoUploadStartedRef.current = false;
     setUploadPaid(false);
     setStep("idle");
     setProgress(0);
@@ -728,7 +793,6 @@ export default function App() {
     try {
       const data = await fetchJob(jobId.trim());
       setJob(data);
-      setJobIdInput(data.job_id);
       const loadedSegments = buildEditableSegments(data.transcript_json);
       const loadedLabels = data.transcript_json?.speaker_labels ?? {};
       setSegments(loadedSegments);
@@ -791,7 +855,16 @@ export default function App() {
     }
   };
 
-  const onUpload = async () => {
+  const openDuplicateDialog = useCallback((nextMessage: string) => {
+    resetUploadUi();
+    setDuplicateDialogMessage(nextMessage);
+  }, [resetUploadUi]);
+
+  const closeDuplicateDialog = useCallback(() => {
+    setDuplicateDialogMessage("");
+  }, []);
+
+  const onUpload = useCallback(async () => {
     if (!selectedFiles.length) return;
     const filesToUpload = [...selectedFiles];
     let uploadStarted = false;
@@ -827,6 +900,7 @@ export default function App() {
         setNewProjectTitle("");
       }
 
+      void clearPendingUploadSnapshot();
       for (let index = 0; index < filesToUpload.length; index += 1) {
         uploadStarted = true;
         const file = filesToUpload[index];
@@ -868,7 +942,33 @@ export default function App() {
         setUploadStatus("");
       }
     }
-  };
+  }, [
+    archivedFilenames,
+    createProject,
+    fileIdentity,
+    newProjectTitle,
+    openDuplicateDialog,
+    performUpload,
+    refreshWorkspace,
+    resetUploadUi,
+    selectedFiles,
+    selectedUploadProject,
+    selectedUploadProjectId,
+    showNotice,
+    uploadBillingEntries,
+    uploadProjectLabel,
+    uploadProjectMode,
+  ]);
+
+  useEffect(() => {
+    if (!uploadPaid || !selectedFiles.length || busy || autoUploadStartedRef.current) return;
+    if (window.localStorage.getItem(AUTO_UPLOAD_TRIGGER_KEY) !== "1") return;
+    autoUploadStartedRef.current = true;
+    void onUpload().finally(() => {
+      setAutoUploadPending(false);
+      autoUploadStartedRef.current = false;
+    });
+  }, [busy, onUpload, selectedFiles.length, setAutoUploadPending, uploadPaid]);
 
   const onSaveDraft = async () => {
     if (!job) return;
@@ -1011,7 +1111,6 @@ export default function App() {
         setJob(null);
         setSegments([]);
         setSpeakerLabels({});
-        setJobIdInput("");
         setStep("idle");
       }
       await refreshWorkspace();
@@ -1023,15 +1122,6 @@ export default function App() {
 
   const closeCancelDialog = () => {
     setCancelTarget(null);
-  };
-
-  const openDuplicateDialog = (nextMessage: string) => {
-    resetUploadUi();
-    setDuplicateDialogMessage(nextMessage);
-  };
-
-  const closeDuplicateDialog = () => {
-    setDuplicateDialogMessage("");
   };
 
   const confirmCancelUpload = async () => {
@@ -1252,10 +1342,6 @@ export default function App() {
                 </p>
               ) : null}
 
-              <p className="rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-xs text-slate-500">
-                클라이언트 버전: <span className="font-mono text-slate-300">{CLIENT_BUILD_ID}</span>
-              </p>
-
               {step === "uploading" && (
                 <div>
                   <div className="mb-1 flex justify-between text-sm text-slate-400">
@@ -1275,30 +1361,16 @@ export default function App() {
                   formatSize={formatSize}
                   paid={uploadPaid}
                   onPaidChange={setUploadPaid}
-                  onPaidSuccess={() => {
-                    window.setTimeout(() => {
-                      void onUpload();
-                    }, 0);
-                  }}
                   onRemoveFile={removeSelectedFile}
                   onEntriesChange={setUploadBillingEntries}
-                  onPaymentPending={storePendingPayment}
+                  onPaymentPending={(payload) => {
+                    if (payload) {
+                      void persistPendingUpload();
+                    }
+                    storePendingPayment(payload);
+                  }}
                 />
               ) : null}
-
-              <button
-                type="button"
-                onClick={onUpload}
-                disabled={
-                  !uploadProjectReady ||
-                  !selectedFiles.length ||
-                  !uploadPaid ||
-                  busy
-                }
-                className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-slate-700"
-              >
-                {uploadButtonLabel}
-              </button>
             </div>
           </section>
           ) : null}
@@ -1311,28 +1383,6 @@ export default function App() {
               <p className="mt-1 text-sm text-slate-400">
                 프로젝트(사건)별로 묶여 있습니다. 의뢰인 검토 파일을 누르면 편집 탭으로 이동합니다.
               </p>
-            </div>
-
-            <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-950/80 p-3">
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                작업번호로 불러오기
-              </label>
-              <div className="flex gap-2">
-                <input
-                  value={jobIdInput}
-                  onChange={(e) => setJobIdInput(e.target.value)}
-                  placeholder="job_id 입력"
-                  className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
-                />
-                <button
-                  type="button"
-                  onClick={() => void loadJobById(jobIdInput)}
-                  disabled={busy || !jobIdInput.trim()}
-                  className="rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50"
-                >
-                  열기
-                </button>
-              </div>
             </div>
 
             <div className="space-y-3">
