@@ -74,6 +74,7 @@ export default function UploadBillingPanel({
   const [segmentForms, setSegmentForms] = useState<Record<string, { start: typeof ZERO_HMS; end: typeof ZERO_HMS }>>({});
   const [segmentFormErrors, setSegmentFormErrors] = useState<Record<string, string>>({});
   const [paymentError, setPaymentError] = useState("");
+  const [purchaseAgreementChecked, setPurchaseAgreementChecked] = useState(false);
 
   const billableDurationMs = useMemo(() => totalBillableDurationMs(entries), [entries]);
   const quote = useMemo(() => calculateQuote(billableDurationMs), [billableDurationMs]);
@@ -170,6 +171,10 @@ export default function UploadBillingPanel({
   useEffect(() => {
     setPaymentError("");
   }, [billableDurationMs, quote.totalWithVat]);
+
+  useEffect(() => {
+    setPurchaseAgreementChecked(false);
+  }, [billableDurationMs, entries.length]);
 
   const updateEntry = (key: string, patch: Partial<UploadBillingFile>) => {
     setEntries((prev) => prev.map((entry) => (entry.key === key ? { ...entry, ...patch } : entry)));
@@ -318,6 +323,21 @@ export default function UploadBillingPanel({
           </>
         ) : null}
 
+        <label className="mt-4 flex items-start gap-3 rounded-xl border border-slate-700/80 bg-slate-950/60 px-3 py-3">
+          <input
+            type="checkbox"
+            checked={purchaseAgreementChecked}
+            onChange={(event) => setPurchaseAgreementChecked(event.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-slate-500 bg-slate-900 text-cyan-500 focus:ring-cyan-500"
+          />
+          <span className="text-sm leading-6 text-slate-200">
+            <span className="block font-semibold text-white">구매조건 및 결제진행 동의</span>
+            결제 후 녹취록 작성 작업이 즉시 진행되며, 작업이 시작된 이후에는 단순 취소 및 환불이 어렵습니다. 음질,
+            잡음, 대화자 수, 화자 구분 난이도 등에 따라 추가 요금 또는 일정 변경이나 취소 환불이 발생할 수 있음을
+            확인하고 동의합니다.
+          </span>
+        </label>
+
         <div className="mt-4 flex flex-wrap gap-2">
           {paid && billingReady ? (
             <span className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-200">
@@ -331,7 +351,7 @@ export default function UploadBillingPanel({
             <button
               type="button"
               onClick={handlePay}
-              disabled={!billingReady || (quote.totalWithVat ?? 0) <= 0}
+              disabled={!billingReady || (quote.totalWithVat ?? 0) <= 0 || !purchaseAgreementChecked}
               className="rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
             >
               {(quote.totalWithVat ?? 0) > 0 ? `${formatKrw(quote.totalWithVat ?? 0)} 결제하기` : "결제하기"}
