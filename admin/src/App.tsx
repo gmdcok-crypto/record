@@ -34,7 +34,6 @@ type MenuKey =
   | "transcribers"
   | "members"
   | "progress"
-  | "settlements"
   | "sales"
   | "reports"
   | "analytics";
@@ -195,7 +194,6 @@ const MENU_BASE: Array<Omit<MenuItem, "count">> = [
   { key: "transcribers", label: "속기사 관리" },
   { key: "members", label: "회원 관리" },
   { key: "progress", label: "진행 현황" },
-  { key: "settlements", label: "정산 관리" },
   { key: "sales", label: "매출 관리" },
   { key: "reports", label: "집계" },
   { key: "analytics", label: "분석" },
@@ -758,6 +756,14 @@ function App() {
       paidAt: item.paid_at ? formatDateTime(item.paid_at) : "-",
     }));
   }, [overview]);
+
+  const settlementByTranscriber = useMemo(() => {
+    const map = new Map<string, SettlementItem>();
+    settlements.forEach((item) => {
+      map.set(item.transcriber, item);
+    });
+    return map;
+  }, [settlements]);
 
   const transcriberGradeRates = useMemo<GradeRateItem[]>(
     () =>
@@ -1582,7 +1588,19 @@ function App() {
                   <td className="px-3 py-2 text-[12px] text-slate-400">{person.unitPrice}</td>
                   <td className="px-3 py-2 text-[12px] text-slate-400">{person.qualityScore}</td>
                   <td className="px-3 py-2">
+                    {(() => {
+                      const settlementItem = settlementByTranscriber.get(person.name);
+                      return (
                     <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={!settlementItem}
+                        onClick={() => settlementItem && openSettlementPayModal(settlementItem)}
+                        className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-medium text-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
+                        title={settlementItem ? "정산 처리" : "정산 데이터 없음"}
+                      >
+                        정산
+                      </button>
                       <button
                         type="button"
                         onClick={() => openEditTranscriberModal(person)}
@@ -1606,6 +1624,8 @@ function App() {
                         삭제
                       </button>
                     </div>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))}
@@ -1636,89 +1656,6 @@ function App() {
             </div>
           </div>
         ))}
-      </div>
-    </SectionCard>
-  );
-
-  const renderSettlements = () => (
-    <SectionCard
-      title="정산 관리"
-      subtitle="월별 정산 내역에 입금액을 입력해 바로 정산 처리합니다."
-      action={
-        <button
-          type="button"
-          onClick={() => setActiveMenu("reports")}
-          className="rounded-lg border border-slate-700 bg-slate-800/90 px-3 py-1.5 text-sm font-medium text-slate-200"
-        >
-          정산서 출력
-        </button>
-      }
-    >
-      <div className="mb-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryChip label="정산 건수" value={`${settlements.length}건`} />
-        <SummaryChip
-          label="정산 대기"
-          value={`${settlements.filter((item) => item.status === "정산 대기").length}건`}
-          tone="amber"
-        />
-        <SummaryChip
-          label="부분 정산"
-          value={`${settlements.filter((item) => item.status === "정산 확정").length}건`}
-          tone="cyan"
-        />
-        <SummaryChip
-          label="지급 완료"
-          value={`${settlements.filter((item) => item.status === "지급 완료").length}건`}
-          tone="emerald"
-        />
-      </div>
-      <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/70">
-        {settlements.length === 0 ? (
-          <EmptyState message="정산 데이터가 없습니다." />
-        ) : (
-          <table className="w-full min-w-[980px] border-collapse text-[13px]">
-            <thead>
-              <tr className="border-b border-slate-800 bg-slate-950 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                <th className="px-3 py-2">월</th>
-                <th className="px-3 py-2">속기사</th>
-                <th className="px-3 py-2">건수</th>
-                <th className="px-3 py-2">정산액</th>
-                <th className="px-3 py-2">상태</th>
-                <th className="px-3 py-2">지급일</th>
-                <th className="px-3 py-2">동작</th>
-              </tr>
-            </thead>
-            <tbody>
-              {settlements.map((item) => (
-                <tr key={`${item.month}-${item.transcriber}`} className="border-t border-slate-800 bg-slate-950/40 text-slate-300 hover:bg-slate-900/50">
-                  <td className="px-3 py-2 text-slate-400">{item.month}</td>
-                  <td className="px-3 py-2 font-medium text-white">{item.transcriber}</td>
-                  <td className="px-3 py-2">{item.jobs}건</td>
-                  <td className="px-3 py-2 font-medium text-white">{formatCurrency(item.amount)}</td>
-                  <td className="px-3 py-2">
-                    <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ${statusTone(item.status)}`}>
-                      {item.status}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-[12px] text-slate-400">{item.paidAt}</td>
-                  <td className="px-3 py-2">
-                    {item.status !== "지급 완료" ? (
-                      <button
-                        type="button"
-                        onClick={() => openSettlementPayModal(item)}
-                        className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-medium text-cyan-300"
-                      >
-                        정산
-                      </button>
-                    ) : (
-                      <span className="text-[11px] text-slate-500">처리 완료</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
       </div>
     </SectionCard>
   );
@@ -1863,8 +1800,6 @@ function App() {
         return renderMembers();
       case "progress":
         return renderProgress();
-      case "settlements":
-        return renderSettlements();
       case "sales":
         return renderSales();
       case "reports":
@@ -1938,9 +1873,7 @@ function App() {
                             ? "회원 관리"
                             : activeMenu === "progress"
                               ? "진행 현황"
-                              : activeMenu === "settlements"
-                                ? "정산 관리"
-                                : activeMenu === "sales"
+                            : activeMenu === "sales"
                                   ? "매출 관리"
                                   : activeMenu === "reports"
                                     ? "집계"
