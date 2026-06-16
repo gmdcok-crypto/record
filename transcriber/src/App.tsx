@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   bootstrapTranscriberTokenFromUrl,
+  clearUrlQuery,
   clearTranscriberSession,
   createAdminEventsSource,
   createTranscriberJobInquiry,
@@ -14,6 +15,7 @@ import {
   fetchTranscriptChanges,
   finalTranscriptPdfUrl,
   finalizeTranscriptPdf,
+  readPortOneIdentityVerificationIdFromUrl,
   resolveUrl,
   deliverDraftToClient,
   runAiDraft,
@@ -239,6 +241,7 @@ export default function App() {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
   const [authScreen, setAuthScreen] = useState<AuthScreen>("signup");
+  const [pendingSignupIdentityVerificationId, setPendingSignupIdentityVerificationId] = useState<string | null>(null);
   const [transcriberName, setTranscriberName] = useState<string | null>(null);
   const [transcriberProfile, setTranscriberProfile] = useState<TranscriberAuthProfile | null>(null);
   const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
@@ -343,6 +346,11 @@ export default function App() {
 
   const restoreSession = async () => {
     bootstrapTranscriberTokenFromUrl();
+    const signupIdentityVerificationId = readPortOneIdentityVerificationIdFromUrl();
+    if (signupIdentityVerificationId) {
+      setAuthScreen("signup");
+      setPendingSignupIdentityVerificationId(signupIdentityVerificationId);
+    }
     const transcriber = await fetchTranscriberMe();
     if (transcriber) {
       setTranscriberName(transcriber.name);
@@ -661,7 +669,17 @@ export default function App() {
 
   if (authStatus === "unauthenticated") {
     if (authScreen === "signup") {
-      return <TranscriberSignup onSuccess={handleLoginSuccess} onLogin={() => setAuthScreen("login")} />;
+      return (
+        <TranscriberSignup
+          onSuccess={handleLoginSuccess}
+          onLogin={() => setAuthScreen("login")}
+          initialIdentityVerificationId={pendingSignupIdentityVerificationId}
+          onIdentityVerificationHandled={() => {
+            clearUrlQuery();
+            setPendingSignupIdentityVerificationId(null);
+          }}
+        />
+      );
     }
     return <TranscriberLogin onSuccess={handleLoginSuccess} onSignup={() => setAuthScreen("signup")} />;
   }

@@ -621,6 +621,14 @@ export function bootstrapMemberTokenFromUrl(): boolean {
   return true;
 }
 
+export function readPortOnePaymentIdFromUrl(): string | null {
+  return new URLSearchParams(window.location.search).get("paymentId");
+}
+
+export function clearUrlQuery(): void {
+  window.history.replaceState(null, "", window.location.pathname);
+}
+
 export type MemberProfile = {
   id: number;
   email: string;

@@ -33,6 +33,7 @@ type UploadBillingPanelProps = {
   onPaidChange: (paid: boolean) => void;
   onRemoveFile: (file: File) => void;
   onEntriesChange?: (entries: UploadBillingFile[]) => void;
+  onPaymentPending?: (payload: { paymentId: string; amount: number; orderName: string } | null) => void;
 };
 
 function formatSegmentRange(startMs: number, endMs: number): string {
@@ -45,6 +46,16 @@ function revokeUrls(entries: UploadBillingFile[]) {
   }
 }
 
+function shouldForceMobileRedirect(): boolean {
+  if (typeof window === "undefined" || typeof navigator === "undefined") {
+    return false;
+  }
+  const userAgent = navigator.userAgent || "";
+  const isMobileUserAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+  const isNarrowViewport = window.matchMedia?.("(max-width: 768px)")?.matches ?? false;
+  return isMobileUserAgent || isNarrowViewport;
+}
+
 export default function UploadBillingPanel({
   files,
   fileIdentity,
@@ -53,6 +64,7 @@ export default function UploadBillingPanel({
   onPaidChange,
   onRemoveFile,
   onEntriesChange,
+  onPaymentPending,
 }: UploadBillingPanelProps) {
   const entriesRef = useRef<UploadBillingFile[]>([]);
   const paidBillableRef = useRef<number | null>(null);
@@ -212,6 +224,7 @@ export default function UploadBillingPanel({
         entries.length > 1
           ? `녹취록 업로드 ${entries.length}건`
           : `${entries[0]?.file.name ?? "녹취록 업로드"} 결제`;
+      onPaymentPending?.({ paymentId, amount: totalAmount, orderName });
 
       const response = await PortOne.requestPayment({
         storeId: config.portoneStoreId,
@@ -221,6 +234,8 @@ export default function UploadBillingPanel({
         totalAmount,
         currency: "CURRENCY_KRW",
         payMethod: "CARD",
+        redirectUrl: window.location.href,
+        forceRedirect: shouldForceMobileRedirect(),
       });
 
       if (!response) {
@@ -231,9 +246,11 @@ export default function UploadBillingPanel({
       }
 
       await completePortOnePayment({ paymentId, amount: totalAmount, orderName });
+      onPaymentPending?.(null);
       paidBillableRef.current = billableDurationMs;
       onPaidChange(true);
     } catch (error) {
+      onPaymentPending?.(null);
       setPaymentError(error instanceof Error ? error.message : "결제에 실패했습니다.");
     }
   };

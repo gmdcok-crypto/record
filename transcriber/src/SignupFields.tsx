@@ -107,22 +107,32 @@ export function SignupActions({
   );
 }
 
-export function PhoneVerifyPreview() {
+export function PhoneVerifyPreview({
+  verifiedPhone,
+  verifying,
+  onVerify,
+}: {
+  verifiedPhone?: string;
+  verifying?: boolean;
+  onVerify?: () => void;
+}) {
   return (
     <div className="grid gap-3 rounded-xl border border-dashed border-slate-400/30 bg-slate-900/35 p-3.5">
       <p className="m-0 text-[0.84rem] font-semibold text-slate-400">
         추가정보 · 본인인증
         <span className="ml-1.5 rounded-full bg-sky-400/15 px-2 py-0.5 text-[0.72rem] font-semibold text-sky-300">
-          로그인 후 입력
+          가입 전 필수
         </span>
       </p>
       <SignupSplit>
-        <SignupField value="" placeholder="'-'를 제외하고 입력" disabled />
-        <SignupSideButton disabled>인증번호받기</SignupSideButton>
+        <SignupField value={verifiedPhone ?? ""} placeholder="'-'를 제외하고 입력" disabled />
+        <SignupSideButton disabled={verifying} onClick={onVerify}>
+          {verifying ? "인증 중..." : verifiedPhone ? "재인증" : "본인인증"}
+        </SignupSideButton>
       </SignupSplit>
-      <SignupField value="" placeholder="인증번호 6자리" disabled />
+      <SignupField value={verifiedPhone ? "인증 완료" : ""} placeholder="인증 결과가 여기에 반영됩니다" disabled />
       <p className="m-0 text-[0.78rem] text-slate-500">
-        회원가입 후 로그인하면 개인정보 설정에서 포트원 본인인증과 계좌 정보를 테스트할 수 있습니다.
+        회원가입 전 포트원 본인인증을 완료해 주세요. 가입 후에는 개인정보 설정에서 다시 인증할 수 있습니다.
       </p>
     </div>
   );

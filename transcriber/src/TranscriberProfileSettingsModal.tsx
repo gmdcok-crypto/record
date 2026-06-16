@@ -131,6 +131,7 @@ export default function TranscriberProfileSettingsModal({
         storeId: config.portoneStoreId,
         identityVerificationId,
         channelKey: config.portoneIdentityChannelKey,
+        redirectUrl: window.location.href,
       });
       if (!response) {
         throw new Error("본인인증 결과를 확인하지 못했습니다.");

@@ -175,6 +175,14 @@ export function bootstrapTranscriberTokenFromUrl(): boolean {
   return true;
 }
 
+export function readPortOneIdentityVerificationIdFromUrl(): string | null {
+  return new URLSearchParams(window.location.search).get("identityVerificationId");
+}
+
+export function clearUrlQuery(): void {
+  window.history.replaceState(null, "", window.location.pathname);
+}
+
 export function clearTranscriberSession(): void {
   localStorage.removeItem(TRANSCRIBER_TOKEN_KEY);
 }
@@ -244,6 +252,24 @@ export async function completePortOneIdentityVerification(identityVerificationId
   return (data as { transcriber: TranscriberAuthProfile }).transcriber;
 }
 
+export async function lookupPortOneIdentityVerification(identityVerificationId: string): Promise<{
+  name?: string | null;
+  phone?: string | null;
+  resident_id?: string | null;
+}> {
+  const res = await fetch(`${apiBase()}/api/transcriber/auth/identity-verifications/lookup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ identityVerificationId }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data));
+  }
+  return ((data as { verified_customer?: { name?: string | null; phone?: string | null; resident_id?: string | null } })
+    .verified_customer ?? {});
+}
+
 export async function updateTranscriberProfile(input: TranscriberProfileUpdateInput): Promise<TranscriberAuthProfile> {
   const res = await fetch(`${apiBase()}/api/transcriber/auth/profile`, {
     method: "PATCH",
@@ -290,6 +316,8 @@ export type TranscriberSignupInput = {
   login_id: string;
   password: string;
   name: string;
+  phone?: string;
+  resident_id?: string;
 };
 
 export async function checkTranscriberLoginId(loginId: string): Promise<boolean> {
@@ -313,6 +341,8 @@ export async function signupTranscriber(input: TranscriberSignupInput): Promise<
       login_id: input.login_id.trim(),
       password: input.password,
       name: input.name.trim(),
+      phone: input.phone?.trim() || undefined,
+      resident_id: input.resident_id?.trim() || undefined,
     }),
   });
   const data = await res.json().catch(() => ({}));

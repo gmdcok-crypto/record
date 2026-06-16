@@ -268,6 +268,47 @@ def transcriber_complete_identity_verification(
     }
 
 
+@router.post("/identity-verifications/lookup")
+def lookup_portone_identity_verification(
+    body: PortOneIdentityCompleteRequest,
+) -> dict:
+    verification = _fetch_portone_json(
+        f"/identity-verifications/{body.identity_verification_id}"
+    )
+    if verification.get("status") != "VERIFIED":
+        raise HTTPException(status_code=409, detail="본인인증이 아직 완료되지 않았습니다.")
+
+    verified_customer = verification.get("verifiedCustomer") or {}
+    phone = str(verified_customer.get("phoneNumber") or "").strip() or None
+    birth_date = str(verified_customer.get("birthDate") or "").strip()
+    gender = str(verified_customer.get("gender") or "").strip()
+    resident_id = None
+    if birth_date:
+        compact_birth = birth_date.replace("-", "")
+        if len(compact_birth) == 8:
+            resident_id = compact_birth[2:]
+            if gender:
+                gender_code_map = {"MALE": "1", "FEMALE": "2"}
+                gender_code = gender_code_map.get(gender.upper(), "")
+                if gender_code:
+                    resident_id = f"{resident_id}-{gender_code}"
+
+    return {
+        "ok": True,
+        "identity_verification_id": body.identity_verification_id,
+        "verified_customer": {
+            "name": verified_customer.get("name"),
+            "phone": phone,
+            "resident_id": resident_id,
+            "phoneNumber": verified_customer.get("phoneNumber"),
+            "birthDate": verified_customer.get("birthDate"),
+            "gender": verified_customer.get("gender"),
+            "ci": verified_customer.get("ci"),
+            "di": verified_customer.get("di"),
+        },
+    }
+
+
 @router.post("/profile/license")
 async def transcriber_upload_license(
     db: Annotated[Session, Depends(get_db)],

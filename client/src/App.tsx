@@ -15,7 +15,10 @@ import {
   fetchProjects,
   fetchTranscriptChanges,
   bootstrapMemberTokenFromUrl,
+  clearUrlQuery,
   clearMemberSession,
+  completePortOnePayment,
+  readPortOnePaymentIdFromUrl,
   resolveUrl,
   saveTranscript,
   speakerLabel,
@@ -74,6 +77,7 @@ const GUEST_CLIENT_NAME = "의뢰인";
 const INTRO_SIGNUP_URL =
   import.meta.env.VITE_INTRO_URL?.replace(/\/$/, "") || "https://record-voi.netlify.app";
 const CLIENT_BUILD_ID = (import.meta.env.VITE_CLIENT_BUILD_ID as string | undefined)?.trim() || "dev";
+const PENDING_PORTONE_PAYMENT_KEY = "pending_portone_payment";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -468,6 +472,43 @@ export default function App() {
       void refreshWorkspace(true);
     }, 0);
   };
+
+  const storePendingPayment = useCallback((payload: { paymentId: string; amount: number; orderName: string } | null) => {
+    if (!payload) {
+      window.localStorage.removeItem(PENDING_PORTONE_PAYMENT_KEY);
+      return;
+    }
+    window.localStorage.setItem(PENDING_PORTONE_PAYMENT_KEY, JSON.stringify(payload));
+  }, []);
+
+  useEffect(() => {
+    const paymentId = readPortOnePaymentIdFromUrl();
+    if (!paymentId || authStatus !== "authenticated") return;
+    const raw = window.localStorage.getItem(PENDING_PORTONE_PAYMENT_KEY);
+    if (!raw) return;
+    let pending: { paymentId: string; amount: number; orderName: string } | null = null;
+    try {
+      pending = JSON.parse(raw) as { paymentId: string; amount: number; orderName: string };
+    } catch {
+      pending = null;
+    }
+    if (!pending || pending.paymentId !== paymentId) {
+      clearUrlQuery();
+      return;
+    }
+    void completePortOnePayment(pending)
+      .then(() => {
+        setUploadPaid(true);
+        showNotice("success", "결제가 완료되었습니다. 업로드를 계속 진행해 주세요.");
+      })
+      .catch((err) => {
+        showNotice("error", err instanceof Error ? err.message : "결제 확인에 실패했습니다.");
+      })
+      .finally(() => {
+        storePendingPayment(null);
+        clearUrlQuery();
+      });
+  }, [authStatus, showNotice, storePendingPayment]);
 
   const handleLogout = () => {
     clearMemberSession();
@@ -1234,6 +1275,7 @@ export default function App() {
                   onPaidChange={setUploadPaid}
                   onRemoveFile={removeSelectedFile}
                   onEntriesChange={setUploadBillingEntries}
+                  onPaymentPending={storePendingPayment}
                 />
               ) : null}
 
