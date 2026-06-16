@@ -1176,7 +1176,10 @@ def update_invoice_status(db: Session, invoice: Invoice, status: str) -> Invoice
 
 
 def dashboard_overview(db: Session) -> dict:
-    sync_generated_settlements(db)
+    try:
+        sync_generated_settlements(db)
+    except Exception:
+        db.rollback()
     for attempt in range(2):
         try:
             jobs = db.scalars(select(Job).order_by(Job.updated_at.desc()).limit(50)).all()
@@ -1189,8 +1192,16 @@ def dashboard_overview(db: Session) -> dict:
     else:
         jobs = []
     transcribers = list_transcribers(db)
-    settlements = db.scalars(select(Settlement).order_by(Settlement.created_at.desc()).limit(20)).all()
-    invoices = db.scalars(select(Invoice).order_by(Invoice.issue_date.desc()).limit(20)).all()
+    try:
+        settlements = db.scalars(select(Settlement).order_by(Settlement.created_at.desc()).limit(20)).all()
+    except Exception:
+        db.rollback()
+        settlements = []
+    try:
+        invoices = db.scalars(select(Invoice).order_by(Invoice.issue_date.desc()).limit(20)).all()
+    except Exception:
+        db.rollback()
+        invoices = []
     display_statuses = {job.job_id: _display_status_for_job(db, job) for job in jobs}
 
     total_sales = sum(float(job.final_bill_amount or job.sales_amount or 0) for job in jobs)
@@ -1204,6 +1215,22 @@ def dashboard_overview(db: Session) -> dict:
     from app.services.member_auth import list_members_admin
     from app.services.project_store import list_projects
 
+    try:
+        projects = list_projects(db, include_files=True)
+    except Exception:
+        db.rollback()
+        projects = []
+    try:
+        members = list_members_admin(db)
+    except Exception:
+        db.rollback()
+        members = []
+    try:
+        grade_rates = list_transcriber_grade_rates(db)
+    except Exception:
+        db.rollback()
+        grade_rates = []
+
     return {
         "stats": {
             "total_jobs": len(jobs),
@@ -1214,8 +1241,8 @@ def dashboard_overview(db: Session) -> dict:
             "total_settlements": total_settlements,
             "outstanding": outstanding,
         },
-        "projects": list_projects(db, include_files=True),
-        "members": list_members_admin(db),
+        "projects": projects,
+        "members": members,
         "jobs": [
             {
                 "id": job.job_id,
@@ -1241,7 +1268,7 @@ def dashboard_overview(db: Session) -> dict:
             for job in jobs
         ],
         "transcribers": transcribers,
-        "transcriber_grade_rates": list_transcriber_grade_rates(db),
+        "transcriber_grade_rates": grade_rates,
         "settlements": [
             {
                 "id": row.id,
