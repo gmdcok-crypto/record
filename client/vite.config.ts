@@ -16,9 +16,9 @@ export default defineConfig({
       },
       includeAssets: ["favicon.svg"],
       manifest: {
-        name: "Bluecom Record",
-        short_name: "Record",
-        description: "의뢰인 음성 업로드 테스트",
+        name: "불판녹취",
+        short_name: "불판녹취",
+        description: "의뢰인 음성 업로드와 녹취 진행",
         theme_color: "#1e40af",
         background_color: "#f8fafc",
         display: "standalone",
