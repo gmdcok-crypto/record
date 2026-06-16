@@ -17,7 +17,8 @@ from app.services.job_store import (
     inquiry_summary_for_job,
 )
 
-FINAL_JOB_STATUSES = frozenset({"final_done", "pdf_sent"})
+FINAL_JOB_STATUSES = frozenset({"pdf_sent"})
+DELIVERY_PENDING_JOB_STATUSES = frozenset({"first_done", "final_done"})
 WAITING_JOB_STATUSES = frozenset({"uploaded", "waiting_assignment"})
 WORKING_JOB_STATUSES = frozenset({"assigned", "working", "client_editing", "review_waiting"})
 
@@ -35,7 +36,7 @@ def compute_project_status(display_statuses: list[str]) -> str:
         return "waiting_assignment"
     if any(status in WORKING_JOB_STATUSES for status in display_statuses):
         return "working"
-    if all(status in FINAL_JOB_STATUSES | {"first_done"} for status in display_statuses):
+    if all(status in FINAL_JOB_STATUSES | DELIVERY_PENDING_JOB_STATUSES for status in display_statuses):
         return "client_review"
     return "working"
 
@@ -420,7 +421,7 @@ def assign_project_jobs(
     eligible: list[Job] = []
     for job in jobs:
         display_status = _display_status_for_job(db, job)
-        if display_status in FINAL_JOB_STATUSES:
+        if display_status in FINAL_JOB_STATUSES | {"final_done"}:
             continue
         if reassign:
             eligible.append(job)

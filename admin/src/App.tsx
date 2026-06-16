@@ -42,7 +42,7 @@ type JobStatus =
   | "배정 대기"
   | "속기사 작업 중"
   | "의뢰인 검토"
-  | "속기사검토"
+  | "녹취록 요청"
   | "최종 완료";
 
 type PaymentStatus = "미수" | "부분 입금" | "입금 완료";
@@ -292,7 +292,7 @@ function assignableProjectFiles(project: ProjectItem, reassign: boolean): Projec
   return project.files.filter((file) => {
     if (isFinalFileStatus(file.status)) return false;
     if (reassign) return true;
-    return file.status === "배정 대기" || file.status === "속기사검토";
+    return file.status === "배정 대기" || file.status === "녹취록 요청";
   });
 }
 
@@ -324,7 +324,7 @@ function mapJobStatus(status: string): JobStatus {
     case "client_editing":
       return "의뢰인 검토";
     case "review_waiting":
-      return "속기사검토";
+      return "녹취록 요청";
     case "final_done":
     case "pdf_sent":
       return "최종 완료";
@@ -385,8 +385,8 @@ function activityTitle(job: JobItem): string {
       return `${job.id} 속기사 작업 진행`;
     case "의뢰인 검토":
       return `${job.id} 의뢰인 검토 진행`;
-    case "속기사검토":
-      return `${job.id} 속기사검토 진행`;
+    case "녹취록 요청":
+      return `${job.id} 녹취록 요청 접수`;
     case "최종 완료":
       return `${job.id} 최종본 완료`;
     default:
@@ -406,7 +406,7 @@ function statusTone(status: JobStatus | SettlementStatus | PaymentStatus | Trans
     case "정산 확정":
       return "bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/20";
     case "배정 대기":
-    case "속기사검토":
+    case "녹취록 요청":
     case "정산 대기":
     case "미수":
     case "휴무":
@@ -1282,7 +1282,7 @@ function App() {
           <option value="배정 대기">배정 대기</option>
           <option value="속기사 작업 중">속기사 작업 중</option>
           <option value="의뢰인 검토">의뢰인 검토</option>
-          <option value="속기사검토">속기사검토</option>
+          <option value="녹취록 요청">녹취록 요청</option>
           <option value="최종 완료">최종 완료</option>
         </select>
           <div className="ml-auto flex items-center gap-2 text-[11px] text-slate-500">
@@ -2240,7 +2240,7 @@ function App() {
                       </div>
                       {assignableFiles.length === 0 ? (
                         <p className="mt-3 text-sm text-slate-400">
-                          {reassign ? "재배정 가능한 파일이 없습니다." : "배정 대기 또는 속기사검토 파일이 없습니다."}
+                          {reassign ? "재배정 가능한 파일이 없습니다." : "배정 대기 또는 녹취록 요청 파일이 없습니다."}
                         </p>
                       ) : (
                         <div className="mt-3 max-h-56 space-y-2 overflow-y-auto">

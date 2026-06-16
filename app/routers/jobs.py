@@ -1542,7 +1542,7 @@ def transcriber_deliver_pdf(
     if job.assigned_transcriber_id != current.id:
         raise HTTPException(status_code=403, detail="배정된 작업만 PDF 전달할 수 있습니다.")
     if not job.final_pdf_r2_key:
-        raise HTTPException(status_code=409, detail="먼저 최종본 확정으로 PDF를 저장해 주세요.")
+        raise HTTPException(status_code=409, detail="먼저 현재 내용을 저장해 PDF를 생성해 주세요.")
 
     if body.bundle_project_pdf:
         if not job.project_id:

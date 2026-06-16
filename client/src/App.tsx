@@ -173,9 +173,9 @@ function mapClientJobStatus(status: string): string {
     case "client_editing":
       return "의뢰인 검토";
     case "review_waiting":
-      return "속기사검토";
+      return "녹취록 요청";
     case "final_done":
-      return "완료";
+      return "PDF 준비";
     case "pdf_sent":
       return "PDF 수령";
     case "cancelled":
@@ -701,7 +701,7 @@ export default function App() {
         showNotice("info", "속기사가 작업 중입니다. 의뢰인 검토요청 후 편집 화면에서 확인할 수 있습니다.");
       } else if (workflowStatus === "review_waiting") {
         setActiveTab("archive");
-        showNotice("info", "속기사검토중입니다.");
+        showNotice("info", "녹취록 요청이 접수되었습니다. 속기사가 최종 확인 후 PDF를 전달합니다.");
       }
       const context = resolveEditContext(data.job_id, projects);
       setEditContext(context);
@@ -857,7 +857,7 @@ export default function App() {
     try {
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
       await saveTranscript(job.job_id, currentTranscript, "review_request");
-      await updateJobStatus(job.job_id, "review_waiting", "의뢰인 수정 후 속기사검토 요청");
+      await updateJobStatus(job.job_id, "review_waiting", "의뢰인 녹취록 요청");
       setJob({
         ...job,
         transcript_json: currentTranscript,
@@ -865,7 +865,7 @@ export default function App() {
         workflow_status: "review_waiting",
       });
       setChangeHistoryRefresh((value) => value + 1);
-      showNotice("success", "속기사검토 요청이 DB에 반영되었습니다.");
+      showNotice("success", "녹취록 요청이 접수되었습니다.");
       await refreshWorkspace();
     } catch (err) {
       showNotice("error", err instanceof Error ? err.message : "검수 요청 실패");
@@ -1406,7 +1406,7 @@ export default function App() {
             {submittingReview ? (
               <div className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl bg-slate-950/75 px-6 backdrop-blur-sm">
                 <div className="rounded-2xl border border-slate-800 bg-slate-900/95 px-6 py-5 text-center shadow-2xl shadow-black/30">
-                  <p className="text-sm font-semibold text-white">속기사에게 전달중입니다.</p>
+                  <p className="text-sm font-semibold text-white">녹취록 요청을 접수하는 중입니다.</p>
                 </div>
               </div>
             ) : null}
@@ -1617,7 +1617,7 @@ export default function App() {
                     disabled={busy || pdfReceived}
                     className="rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
                   >
-                    속기사검토 요청
+                    녹취록 요청
                   </button>
                   <button
                     type="button"

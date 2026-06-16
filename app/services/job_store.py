@@ -1014,7 +1014,7 @@ def dashboard_overview(db: Session) -> dict:
             "total_jobs": len(jobs),
             "waiting_assignment": sum(1 for job in jobs if display_statuses[job.job_id] == "waiting_assignment"),
             "working": sum(1 for job in jobs if display_statuses[job.job_id] in {"assigned", "working", "client_editing", "review_waiting"}),
-            "final_done": sum(1 for job in jobs if display_statuses[job.job_id] in {"final_done", "pdf_sent"}),
+            "final_done": sum(1 for job in jobs if display_statuses[job.job_id] == "pdf_sent"),
             "total_sales": total_sales,
             "total_settlements": total_settlements,
             "outstanding": outstanding,

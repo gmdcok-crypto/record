@@ -102,7 +102,7 @@ function mapFileStatusLabel(status: string): string {
     case "client_editing":
       return "의뢰인 검토";
     case "review_waiting":
-      return "속기사검토";
+      return "녹취록 요청";
     case "final_done":
     case "pdf_sent":
       return "PDF 완료";
@@ -632,22 +632,6 @@ export default function App() {
     }
   };
 
-  const onFinalize = async () => {
-    if (!job) return;
-    setSaving(true);
-    try {
-      await saveTranscript(job.job_id, currentTranscript, "finalize");
-      await finalizeTranscriptPdf(job.job_id, currentTranscript);
-      setJob({ ...job, transcript_json: currentTranscript, final_pdf_ready: true, status: "final_done" });
-      setChangeHistoryRefresh((value) => value + 1);
-      showNotice("success", "최종본과 PDF가 함께 저장되었습니다.");
-    } catch (err) {
-      showNotice("error", err instanceof Error ? err.message : "확정 실패");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const onDeliverPdf = async () => {
     if (!job) return;
     setDownloadingPdf(true);
@@ -997,14 +981,6 @@ export default function App() {
                       className="rounded-xl bg-cyan-600 py-3 text-sm font-semibold text-white transition hover:bg-cyan-500 disabled:opacity-50"
                     >
                       의뢰인 검토요청
-                    </button>
-                    <button
-                      type="button"
-                      onClick={onFinalize}
-                      disabled={busy}
-                      className="rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
-                    >
-                      최종본 확정
                     </button>
                     <button
                       type="button"

@@ -119,7 +119,7 @@ function mapFileStatusLabel(status: string): string {
     case "client_editing":
       return "의뢰인 검토";
     case "review_waiting":
-      return "속기사검토";
+      return "녹취록 요청";
     case "final_done":
     case "pdf_sent":
       return "PDF 완료";
