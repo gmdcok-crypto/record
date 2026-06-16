@@ -128,6 +128,10 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
   }, []);
 
   useEffect(() => {
+    document.title = "불판녹취";
+  }, []);
+
+  useEffect(() => {
     setLoading(true);
     setError("");
     fetchSharedTranscript(token)

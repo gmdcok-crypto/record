@@ -355,6 +355,10 @@ export default function App() {
     setActionNotice({ kind, message, title });
   }, []);
 
+  useEffect(() => {
+    document.title = "불판녹취";
+  }, []);
+
   const busy = step === "uploading" || loadingJob || saving || downloadingPdf;
   const archivedFilenames = useMemo(
     () => new Set(archive.map((item) => normalizeUploadFilename(item.filename))),
