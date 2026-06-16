@@ -772,6 +772,7 @@ def _settlement_status_for_amounts(total_paid_amount: float, final_amount: float
 
 def sync_generated_settlements(db: Session) -> None:
     _ensure_transcriber_grade_rates_table(db)
+    _ensure_settlement_payment_storage(db)
 
     completed_jobs = db.scalars(
         select(Job).where(
@@ -1094,6 +1095,7 @@ def update_transcriber(
 
 def delete_transcriber(db: Session, transcriber: Transcriber) -> None:
     transcriber_id = transcriber.id
+    _ensure_settlement_payment_storage(db)
 
     settlement_items = db.scalars(select(SettlementItem).where(SettlementItem.transcriber_id == transcriber_id)).all()
     for item in settlement_items:
@@ -1142,6 +1144,7 @@ def delete_job_if_unassigned(db: Session, job: Job) -> None:
 
 
 def get_settlement_record(db: Session, settlement_id: int) -> Settlement | None:
+    _ensure_settlement_payment_storage(db)
     return db.scalar(select(Settlement).where(Settlement.id == settlement_id))
 
 
