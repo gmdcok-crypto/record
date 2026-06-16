@@ -31,6 +31,7 @@ type UploadBillingPanelProps = {
   formatSize: (bytes: number) => string;
   paid: boolean;
   onPaidChange: (paid: boolean) => void;
+  onPaidSuccess?: () => void;
   onRemoveFile: (file: File) => void;
   onEntriesChange?: (entries: UploadBillingFile[]) => void;
   onPaymentPending?: (payload: { paymentId: string; amount: number; orderName: string } | null) => void;
@@ -62,6 +63,7 @@ export default function UploadBillingPanel({
   formatSize,
   paid,
   onPaidChange,
+  onPaidSuccess,
   onRemoveFile,
   onEntriesChange,
   onPaymentPending,
@@ -249,6 +251,7 @@ export default function UploadBillingPanel({
       onPaymentPending?.(null);
       paidBillableRef.current = billableDurationMs;
       onPaidChange(true);
+      onPaidSuccess?.();
     } catch (error) {
       onPaymentPending?.(null);
       setPaymentError(error instanceof Error ? error.message : "결제에 실패했습니다.");
@@ -318,7 +321,7 @@ export default function UploadBillingPanel({
         <div className="mt-4 flex flex-wrap gap-2">
           {paid && billingReady ? (
             <span className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-200">
-              결제 완료 · 업로드 가능
+              결제 완료
             </span>
           ) : paid && !billingReady ? (
             <span className="inline-flex items-center rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200">
@@ -347,10 +350,6 @@ export default function UploadBillingPanel({
 
         {paymentError ? (
           <p className="mt-3 text-xs text-rose-300">{paymentError}</p>
-        ) : null}
-
-        {!paid && billingReady ? (
-          <p className="mt-3 text-xs text-slate-500">결제 완료 후 업로드 버튼이 활성화됩니다.</p>
         ) : null}
       </div>
     </div>

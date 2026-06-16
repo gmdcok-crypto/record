@@ -386,7 +386,7 @@ export default function App() {
   const uploadButtonLabel = useMemo(() => {
     if (!uploadProjectReady) return "프로젝트를 먼저 정해 주세요";
     if (!selectedFiles.length) return "파일을 선택해 주세요";
-    if (!uploadPaid) return "결제 후 업로드 가능";
+    if (!uploadPaid) return "업로드";
     if (busy) return "처리 중…";
     return selectedFiles.length > 1 ? `${selectedFiles.length}개 파일 업로드` : "업로드";
   }, [uploadProjectReady, selectedFiles.length, uploadPaid, busy]);
@@ -499,7 +499,9 @@ export default function App() {
     void completePortOnePayment(pending)
       .then(() => {
         setUploadPaid(true);
-        showNotice("success", "결제가 완료되었습니다. 업로드를 계속 진행해 주세요.");
+        window.setTimeout(() => {
+          void onUpload();
+        }, 0);
       })
       .catch((err) => {
         showNotice("error", err instanceof Error ? err.message : "결제 확인에 실패했습니다.");
@@ -1117,7 +1119,7 @@ export default function App() {
               <p className="text-sm font-semibold text-blue-300">파일 업로드</p>
               <h2 className="mt-1 text-xl font-bold text-white">새 녹취 의뢰</h2>
               <p className="mt-2 text-sm text-slate-400">
-                프로젝트를 정한 뒤 파일을 선택하고, 파일별로 전체 또는 구간을 설정해 견적·결제 후 업로드할 수 있습니다.
+                프로젝트를 정한 뒤 파일을 선택하고 파일별 업로드 구간을 설정할 수 있습니다.
               </p>
             </div>
 
@@ -1273,6 +1275,11 @@ export default function App() {
                   formatSize={formatSize}
                   paid={uploadPaid}
                   onPaidChange={setUploadPaid}
+                  onPaidSuccess={() => {
+                    window.setTimeout(() => {
+                      void onUpload();
+                    }, 0);
+                  }}
                   onRemoveFile={removeSelectedFile}
                   onEntriesChange={setUploadBillingEntries}
                   onPaymentPending={storePendingPayment}
