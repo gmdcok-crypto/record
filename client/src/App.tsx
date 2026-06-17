@@ -659,6 +659,9 @@ export default function App() {
     if (!memberProfile) return;
     setEnablingPush(true);
     try {
+      if (Notification.permission === "default") {
+        showNotice("info", "브라우저 상단 또는 주소창 옆의 알림 허용 창을 확인해 주세요.");
+      }
       const result = await enableWebPush(memberProfile);
       const permission = await getNotificationPermissionState();
       setPushPermission(permission);
