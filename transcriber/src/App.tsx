@@ -382,7 +382,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    const title = "불판녹취";
+    const title = "불판속기사";
     document.title = title;
     document.querySelector('meta[property="og:title"]')?.setAttribute("content", title);
     document.querySelector('meta[property="og:site_name"]')?.setAttribute("content", title);

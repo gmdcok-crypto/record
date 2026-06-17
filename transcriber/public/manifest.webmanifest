@@ -1,6 +1,6 @@
 {
-  "name": "불판녹취",
-  "short_name": "불판녹취",
+  "name": "불판속기사",
+  "short_name": "불판속기사",
   "description": "속기사 녹취 작업",
   "start_url": "/",
   "display": "standalone",
