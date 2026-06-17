@@ -79,6 +79,10 @@ class PortOnePaymentPrepareRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+def _api_public_base() -> str:
+    return settings.public_api_url.strip().rstrip("/") or "https://record-production.up.railway.app"
+
+
 def _resolve_return_url(request: Request, return_to: str) -> str:
     target = (return_to or "/").strip() or "/"
     if target.startswith("http://") or target.startswith("https://"):
@@ -255,9 +259,11 @@ def prepare_portone_payment(
         amount=body.amount,
         order_name=body.order_name,
     )
-    return_to = _resolve_return_url(request, body.return_to)
+    return_to = (body.return_to or "").strip() or settings.public_client_url.rstrip("/") + "/"
+    if not return_to.startswith("http://") and not return_to.startswith("https://"):
+        return_to = _resolve_return_url(request, return_to)
     redirect_url = _append_query(
-        f"{str(request.base_url).rstrip('/')}/api/member/auth/payments/redirect",
+        f"{_api_public_base()}/api/member/auth/payments/redirect",
         {"state": state, "return_to": return_to},
     )
     return {"redirectUrl": redirect_url}
@@ -299,7 +305,7 @@ def portone_payment_redirect(
         raise HTTPException(status_code=502, detail="결제 확인 처리에 실패했습니다.") from exc
 
     destination = _append_query(
-        _resolve_return_url(request, return_to),
+        return_to if return_to.startswith("http://") or return_to.startswith("https://") else _resolve_return_url(request, return_to),
         {"paymentId": payment_id, "payment_confirmed": "1"},
     )
     return RedirectResponse(url=destination, status_code=302)

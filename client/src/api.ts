@@ -1,6 +1,8 @@
 import { shouldPreferBackendUpload } from "./uploadEnvironment";
 
 const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
+const DEFAULT_RAILWAY_API_URL =
+  import.meta.env.VITE_RAILWAY_API_URL?.replace(/\/$/, "") || "https://record-production.up.railway.app";
 
 export type TranscriptToken = {
   text: string;
@@ -106,7 +108,13 @@ export type HealthResponse = {
 
 function apiBase(): string {
   if (API_URL) return API_URL;
-  // Netlify client proxies /api/* to Railway via public/_redirects.
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    // Netlify static host: call Railway directly (large uploads fail through Netlify proxy).
+    if (host.endsWith(".netlify.app") || host.endsWith(".github.io")) {
+      return DEFAULT_RAILWAY_API_URL;
+    }
+  }
   return window.location.origin;
 }
 
@@ -140,7 +148,7 @@ function parseFilenameFromDisposition(header: string | null, fallback: string): 
 function normalizeNetworkError(error: unknown, fallback = "서버 연결 오류"): Error {
   if (error instanceof Error) {
     if (/failed to fetch|networkerror|load failed/i.test(error.message)) {
-      return new Error(fallback);
+      return new Error(`${fallback} (${apiBase()})`);
     }
     return error;
   }
