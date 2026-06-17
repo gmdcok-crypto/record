@@ -1,0 +1,5 @@
+# Monorepo: client PWA lives under client/
+[build]
+  base = "client"
+  command = "npm run build"
+  publish = "dist"

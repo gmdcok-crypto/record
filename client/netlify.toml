@@ -5,6 +5,12 @@
 # Small JSON API calls can be proxied, but the client now calls Railway directly
 # for uploads and payment flows to avoid Netlify timeout/body-size limits.
 [[redirects]]
+  from = "/health"
+  to = "https://record-production.up.railway.app/health"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/api/*"
   to = "https://record-production.up.railway.app/api/:splat"
   status = 200

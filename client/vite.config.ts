@@ -11,7 +11,7 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       workbox: {
-        navigateFallbackDenylist: [/^\/admin/, /^\/api/, /^\/health/],
+        navigateFallbackDenylist: [/^\/admin/, /^\/api/],
         importScripts: ["/push-sw.js"],
         runtimeCaching: [
           {
@@ -29,6 +29,7 @@ export default defineConfig({
         background_color: "#f8fafc",
         display: "standalone",
         start_url: "/",
+        id: "/bulpen-user/",
         icons: [
           {
             src: "favicon.svg",
