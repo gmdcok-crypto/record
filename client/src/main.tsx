@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
 import App from "./App";
+import InAppBrowserBanner from "./InAppBrowserBanner";
 import SharedTranscriptPage from "./SharedTranscriptPage";
 import "./index.css";
 
@@ -22,6 +23,7 @@ registerSW({
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
+    <InAppBrowserBanner />
     {shareMatch ? <SharedTranscriptPage token={decodeURIComponent(shareMatch[1])} /> : <App />}
   </StrictMode>,
 );
