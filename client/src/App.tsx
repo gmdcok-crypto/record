@@ -56,6 +56,15 @@ import {
   restorePendingUploadSnapshot,
   savePendingUploadSnapshot,
 } from "./pendingUploadStore";
+import PostPaymentFlowPanel from "./PostPaymentFlowPanel";
+import {
+  formatStepError,
+  initialFlowTrace,
+  readPaymentReturnFlags,
+  type PostPaymentStepId,
+  type PostPaymentStepTrace,
+  upsertFlowTrace,
+} from "./postPaymentFlow";
 import SegmentPlaybackText from "./SegmentPlaybackText";
 import { buildSegmentTimedWords, segmentContainsActiveWord } from "./playbackHighlight";
 import {
@@ -338,6 +347,8 @@ export default function App() {
   const autoUploadStartedRef = useRef(false);
   const paymentFlowHandledRef = useRef<string | null>(null);
   const [billingRestoreByKey, setBillingRestoreByKey] = useState<Record<string, BillingRestoreHint>>({});
+  const [flowTrace, setFlowTrace] = useState<PostPaymentStepTrace[]>([]);
+  const [flowPanelVisible, setFlowPanelVisible] = useState(false);
   const restoredBillingEntriesRef = useRef<
     Array<{
       key: string;
@@ -350,6 +361,24 @@ export default function App() {
   const showNotice = useCallback((kind: ActionNoticeKind, message: string, title?: string) => {
     setActionNotice({ kind, message, title });
   }, []);
+
+  const beginFlowPanel = useCallback(() => {
+    setFlowPanelVisible(true);
+    setFlowTrace(initialFlowTrace());
+  }, []);
+
+  const traceFlow = useCallback((stepId: PostPaymentStepId, status: PostPaymentStepTrace["status"], detail?: string) => {
+    setFlowPanelVisible(true);
+    setFlowTrace((prev) => upsertFlowTrace(prev.length ? prev : initialFlowTrace(), stepId, status, detail));
+  }, []);
+
+  const showStepError = useCallback(
+    (stepId: PostPaymentStepId, message: string, title?: string) => {
+      traceFlow(stepId, "error", message);
+      showNotice("error", formatStepError(stepId, message), title ?? "업로드 실패");
+    },
+    [showNotice, traceFlow],
+  );
 
   useEffect(() => {
     document.title = "불판녹취";
@@ -447,7 +476,21 @@ export default function App() {
   const restoreSession = async () => {
     bootstrapMemberTokenFromUrl();
     const token = localStorage.getItem(MEMBER_TOKEN_KEY);
+    const paymentReturn = readPaymentReturnFlags();
+    if (paymentReturn.paymentId) {
+      beginFlowPanel();
+      traceFlow("portone_checkout", "ok");
+      traceFlow(
+        "server_redirect",
+        paymentReturn.paymentConfirmed ? "ok" : "running",
+        paymentReturn.paymentConfirmed ? "payment_confirmed=1" : "결제 확인 파라미터 대기",
+      );
+      traceFlow("restore_session", "running");
+    }
     if (!token) {
+      if (paymentReturn.paymentId) {
+        traceFlow("restore_session", "error", "로그인 토큰이 없습니다. 다시 로그인해 주세요.");
+      }
       setMemberName(null);
       setMemberProfile(null);
       setLoadingWorkspace(false);
@@ -456,13 +499,13 @@ export default function App() {
     }
 
     const member = await fetchMemberMe();
-    const paymentReturn = Boolean(readPortOnePaymentIdFromUrl());
     if (member) {
       setMemberName(member.name);
       setMemberProfile(member);
       setAuthStatus("authenticated");
       setActiveTab("upload");
-      if (!paymentReturn) {
+      traceFlow("restore_session", "ok", member.email);
+      if (!paymentReturn.paymentId) {
         setLoadingWorkspace(true);
         window.setTimeout(() => {
           void refreshWorkspace(true);
@@ -471,10 +514,10 @@ export default function App() {
       return member;
     }
 
-    // Profile fetch failed but token remains — keep session so post-payment upload can proceed.
     setAuthStatus("authenticated");
     setActiveTab("upload");
-    if (!paymentReturn) {
+    traceFlow("restore_session", "ok", "토큰 유지 (프로필 조회 일시 실패)");
+    if (!paymentReturn.paymentId) {
       setLoadingWorkspace(true);
       window.setTimeout(() => {
         void refreshWorkspace(true).finally(() => setLoadingWorkspace(false));
@@ -494,10 +537,10 @@ export default function App() {
     }, 0);
   };
 
-  const restorePendingUploadState = useCallback(async (): Promise<boolean> => {
+  const restorePendingUploadState = useCallback(async (): Promise<number> => {
     try {
       const snapshot = await restorePendingUploadSnapshot();
-      if (!snapshot) return false;
+      if (!snapshot) return 0;
       restoredBillingEntriesRef.current = snapshot.billingEntries;
       setBillingRestoreByKey(
         Object.fromEntries(
@@ -515,11 +558,12 @@ export default function App() {
       setSelectedUploadProjectId(snapshot.selectedUploadProjectId);
       setNewProjectTitle(snapshot.newProjectTitle);
       setSelectedFiles(snapshot.files);
-      return snapshot.files.length > 0;
-    } catch {
-      return false;
+      return snapshot.files.length;
+    } catch (err) {
+      traceFlow("restore_files", "error", err instanceof Error ? err.message : "복원 실패");
+      return 0;
     }
-  }, []);
+  }, [traceFlow]);
 
   const storePendingPayment = useCallback((payload: { paymentId: string; amount: number; orderName: string } | null) => {
     if (!payload) {
@@ -577,13 +621,22 @@ export default function App() {
     const paymentConfirmed = readPaymentConfirmedFromUrl();
 
     const finishPostPayment = async () => {
+      traceFlow("payment_return", "running");
       queueAutoUpload();
-      const restored = await restorePendingUploadState();
-      if (!restored) {
-        showNotice(
-          "error",
+      traceFlow("restore_files", "running");
+      const restoredCount = await restorePendingUploadState();
+      if (!restoredCount) {
+        traceFlow("restore_files", "error", "IndexedDB에서 파일을 읽지 못했습니다.");
+        showStepError(
+          "restore_files",
           "업로드할 파일 정보를 불러오지 못했습니다. 결제가 완료되었다면 같은 파일을 다시 선택해 업로드를 눌러 주세요.",
         );
+      } else {
+        traceFlow("restore_files", "ok", `${restoredCount}개 파일`);
+      }
+      traceFlow("payment_return", "ok");
+      if (readPaymentConfirmedFromUrl()) {
+        traceFlow("server_redirect", "ok", "payment_confirmed=1");
       }
     };
 
@@ -609,14 +662,15 @@ export default function App() {
     void (async () => {
       try {
         await completePortOnePayment(pending);
+        traceFlow("server_redirect", "ok", "결제 확인 API 완료");
       } catch (err) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "결제 확인에 실패했지만 업로드를 계속 시도합니다.";
+        traceFlow("server_redirect", "error", message);
         if (!cancelled) {
-          showNotice(
-            "error",
-            err instanceof Error
-              ? `${err.message}\n결제는 완료되었을 수 있습니다. 업로드를 계속 시도합니다.`
-              : "결제 확인에 실패했지만 업로드를 계속 시도합니다.",
-          );
+          showNotice("error", formatStepError("server_redirect", `${message}\n업로드를 계속 시도합니다.`));
         }
       }
 
@@ -627,7 +681,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [authStatus, queueAutoUpload, restorePendingUploadState, showNotice, storePendingPayment]);
+  }, [authStatus, queueAutoUpload, restorePendingUploadState, showNotice, showStepError, storePendingPayment, traceFlow]);
 
   useEffect(() => {
     if (authStatus !== "authenticated" || selectedFiles.length > 0) return;
@@ -972,10 +1026,11 @@ export default function App() {
       return result;
     } catch (err) {
       const failureMessage = err instanceof Error ? err.message : "업로드 실패";
+      traceFlow("upload_voice", "error", failureMessage);
       if (failureMessage.includes("이미 업로드된 파일입니다")) {
         openDuplicateDialog(failureMessage);
       } else {
-        showNotice("error", failureMessage);
+        showNotice("error", formatStepError("upload_voice", failureMessage));
       }
       setStep("error");
       setUploadStatus("");
@@ -1012,20 +1067,30 @@ export default function App() {
       const usedUploadMethods = new Set<string>();
       if (uploadProjectMode === "existing") {
         if (!selectedUploadProjectId) {
-          showNotice("error", "업로드할 프로젝트를 선택해 주세요.");
+          showStepError("create_project", "업로드할 프로젝트를 선택해 주세요.");
           return;
         }
         targetProjectId = selectedUploadProjectId;
         uploadedProjectTitle = selectedUploadProject?.title || uploadProjectLabel || "프로젝트";
+        traceFlow("create_project", "ok", "기존 프로젝트 사용");
       } else {
         const title = newProjectTitle.trim();
         if (!title) {
-          showNotice("error", "프로젝트 이름을 먼저 입력해 주세요.");
+          showStepError("create_project", "프로젝트 이름을 먼저 입력해 주세요.");
           return;
         }
-        const created = await createProject(title);
+        traceFlow("create_project", "running", title);
+        let created;
+        try {
+          created = await createProject(title);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "프로젝트 생성 실패";
+          showStepError("create_project", message);
+          return;
+        }
         targetProjectId = created.project_id;
         uploadedProjectTitle = created.title;
+        traceFlow("create_project", "ok", created.project_id);
         setSelectedUploadProjectId(created.project_id);
         setUploadProjectMode("existing");
         setNewProjectTitle("");
@@ -1043,16 +1108,28 @@ export default function App() {
                 selected: segment.selected,
               }))
             : [];
+        setStep("uploading");
+        traceFlow("upload_voice", "running", `${index + 1}/${filesToUpload.length}: ${file.name}`);
         setUploadStatus(`"${uploadedProjectTitle}" 업로드 중 ${index + 1}/${filesToUpload.length}: ${file.name}`);
-        const uploadResult = await performUpload(file, targetProjectId, selectedSegments);
+        let uploadResult;
+        try {
+          uploadResult = await performUpload(file, targetProjectId, selectedSegments);
+        } catch {
+          return;
+        }
+        traceFlow("upload_voice", "ok", file.name);
         if (uploadResult?.upload_method) {
           usedUploadMethods.add(uploadResult.upload_method);
         }
       }
+      traceFlow("refresh_workspace", "running");
       try {
         await refreshWorkspace();
-      } catch {
-        showNotice("info", "파일 업로드는 완료되었지만 보관함 새로고침은 잠시 후 다시 시도합니다.");
+        traceFlow("refresh_workspace", "ok");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "보관함 새로고침 실패";
+        traceFlow("refresh_workspace", "error", message);
+        showNotice("info", formatStepError("refresh_workspace", `파일 업로드는 완료되었지만 보관함 새로고침은 잠시 후 다시 시도합니다.\n${message}`));
       }
       const uploadMethodLabel =
         usedUploadMethods.size === 0
@@ -1086,6 +1163,8 @@ export default function App() {
     selectedUploadProject,
     selectedUploadProjectId,
     showNotice,
+    showStepError,
+    traceFlow,
     uploadBillingEntries,
     uploadProjectLabel,
     uploadProjectMode,
@@ -1104,8 +1183,15 @@ export default function App() {
   useEffect(() => {
     if (!uploadPaid || !selectedFiles.length || busy || autoUploadStartedRef.current) return;
     if (window.localStorage.getItem(AUTO_UPLOAD_TRIGGER_KEY) !== "1") return;
-    if (restoredBillingEntriesRef.current.length > 0 && uploadBillingEntries.length === 0) return;
-    if (uploadProjectMode === "existing" && loadingWorkspace && !selectedUploadProjectId) return;
+    if (restoredBillingEntriesRef.current.length > 0 && uploadBillingEntries.length === 0) {
+      traceFlow("wait_billing", "running", "견적·구간 정보 복원 대기");
+      return;
+    }
+    traceFlow("wait_billing", "ok");
+    if (uploadProjectMode === "existing" && loadingWorkspace && !selectedUploadProjectId) {
+      traceFlow("create_project", "running", "프로젝트 목록 로딩 대기");
+      return;
+    }
     autoUploadStartedRef.current = true;
     void onUpload().finally(() => {
       setAutoUploadPending(false);
@@ -1118,6 +1204,7 @@ export default function App() {
     selectedFiles.length,
     selectedUploadProjectId,
     setAutoUploadPending,
+    traceFlow,
     uploadBillingEntries.length,
     uploadPaid,
     uploadProjectMode,
@@ -1480,6 +1567,8 @@ export default function App() {
                 </div>
               )}
 
+              <PostPaymentFlowPanel trace={flowTrace} visible={flowPanelVisible} />
+
               {selectedFiles.length > 0 ? (
                 <UploadBillingPanel
                   files={selectedFiles}
@@ -1493,9 +1582,19 @@ export default function App() {
                   onPaymentConfirmed={handlePaymentConfirmed}
                   onRemoveFile={removeSelectedFile}
                   onEntriesChange={setUploadBillingEntries}
+                  onFlowStep={traceFlow}
                   onPaymentPending={async (payload) => {
                     if (payload) {
-                      await persistPendingUpload();
+                      beginFlowPanel();
+                      traceFlow("save_snapshot", "running");
+                      try {
+                        await persistPendingUpload();
+                        traceFlow("save_snapshot", "ok");
+                      } catch (err) {
+                        const message = err instanceof Error ? err.message : "파일 저장 실패";
+                        traceFlow("save_snapshot", "error", message);
+                        throw err;
+                      }
                       storePendingPayment(payload);
                       return;
                     }

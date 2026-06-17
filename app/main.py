@@ -6,10 +6,8 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
 
 from app.config import settings
 from app.db import SessionLocal, create_tables, get_engine, init_db
@@ -39,13 +37,6 @@ class NoCacheHtmlStaticFiles(StaticFiles):
             response.headers["Pragma"] = "no-cache"
             response.headers["Expires"] = "0"
         return response
-
-
-class EarlyHealthMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        if request.url.path == "/health":
-            return JSONResponse({"status": "ok"})
-        return await call_next(request)
 
 
 def _bootstrap_database() -> None:
@@ -97,7 +88,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(EarlyHealthMiddleware)
 
 app.include_router(transcribe.router)
 app.include_router(upload.router)

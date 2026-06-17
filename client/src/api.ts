@@ -108,9 +108,14 @@ export type HealthResponse = {
 
 function apiBase(): string {
   if (API_URL) return API_URL;
+  // Same-origin (Netlify /api/* proxy → Railway): avoids browser CORS blocks.
+  return window.location.origin;
+}
+
+function uploadApiBase(): string {
+  if (API_URL) return API_URL;
   if (typeof window !== "undefined") {
     const host = window.location.hostname;
-    // Netlify static host: call Railway directly (large uploads fail through Netlify proxy).
     if (host.endsWith(".netlify.app") || host.endsWith(".github.io")) {
       return DEFAULT_RAILWAY_API_URL;
     }
@@ -276,7 +281,7 @@ export async function uploadVoice(
 
       const token = localStorage.getItem(MEMBER_TOKEN_KEY);
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", `${apiBase()}/api/upload/voice`);
+      xhr.open("POST", `${uploadApiBase()}/api/upload/voice`);
       xhr.setRequestHeader("X-Upload-Request-Id", requestId);
       if (token) {
         xhr.setRequestHeader("Authorization", `Bearer ${token}`);
@@ -306,8 +311,9 @@ export async function uploadVoice(
         }
       };
 
-      xhr.onerror = () => reject(normalizeNetworkError(new Error("Failed to fetch"), "음성 업로드 중 서버 연결에 실패했습니다."));
-      xhr.ontimeout = () => reject(new Error(`음성 업로드 시간이 초과되었습니다. (${apiBase()})`));
+      xhr.onerror = () =>
+        reject(normalizeNetworkError(new Error("Failed to fetch"), `음성 업로드 중 서버 연결에 실패했습니다. (${uploadApiBase()})`));
+      xhr.ontimeout = () => reject(new Error(`음성 업로드 시간이 초과되었습니다. (${uploadApiBase()})`));
       xhr.timeout = 0;
       xhr.send(form);
     });
