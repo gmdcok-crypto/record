@@ -241,7 +241,7 @@ export default function UploadBillingPanel({
           paymentId,
           amount: totalAmount,
           orderName,
-          returnTo: window.location.pathname || "/",
+          returnTo: buildPaymentRedirectUrl(),
         });
         redirectUrl = prepared.redirectUrl;
       }

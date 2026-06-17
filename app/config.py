@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     maintenance_reset_token: str = ""
     purge_db_on_startup: str = ""
     jwt_secret: str = ""
-    public_client_url: str = "https://record-user.netlify.app"
+    public_client_url: str = "https://bulpen-user.netlify.app"
     public_admin_url: str = ""
     public_transcriber_url: str = ""
     channel_talk_plugin_key: str = Field(default="", validation_alias="VITE_CHANNEL_TALK_PLUGIN_KEY")

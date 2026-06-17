@@ -106,6 +106,7 @@ export type HealthResponse = {
 
 function apiBase(): string {
   if (API_URL) return API_URL;
+  // Netlify client proxies /api/* to Railway via public/_redirects.
   return window.location.origin;
 }
 
