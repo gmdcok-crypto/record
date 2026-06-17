@@ -30,3 +30,7 @@ admin/node_modules/
 admin/dist/
 admin/.env
 admin/tsconfig.tsbuildinfo
+transcriber/node_modules/
+transcriber/dist/
+transcriber/.env
+transcriber/tsconfig.tsbuildinfo
