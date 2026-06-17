@@ -35,7 +35,7 @@ type UploadBillingPanelProps = {
   onPaymentConfirmed?: () => void;
   onRemoveFile: (file: File) => void;
   onEntriesChange?: (entries: UploadBillingFile[]) => void;
-  onPaymentPending?: (payload: { paymentId: string; amount: number; orderName: string } | null) => void;
+  onPaymentPending?: (payload: { paymentId: string; amount: number; orderName: string } | null) => void | Promise<void>;
 };
 
 function formatSegmentRange(startMs: number, endMs: number): string {
@@ -233,7 +233,7 @@ export default function UploadBillingPanel({
         entries.length > 1
           ? `녹취록 업로드 ${entries.length}건`
           : `${entries[0]?.file.name ?? "녹취록 업로드"} 결제`;
-      onPaymentPending?.({ paymentId, amount: totalAmount, orderName });
+      await Promise.resolve(onPaymentPending?.({ paymentId, amount: totalAmount, orderName }));
 
       const response = await PortOne.requestPayment({
         storeId: config.portoneStoreId,

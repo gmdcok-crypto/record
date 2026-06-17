@@ -225,15 +225,20 @@ export async function fetchProjects(includeFiles = true): Promise<ProjectSummary
 }
 
 export async function createProject(title: string, memo?: string): Promise<ProjectSummary> {
-  const res = await fetchWithRetry(
-    `${apiBase()}/api/projects`,
-    {
-      method: "POST",
-      headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ title, memo }),
-    },
-    1,
-  );
+  let res: Response;
+  try {
+    res = await fetchWithRetry(
+      `${apiBase()}/api/projects`,
+      {
+        method: "POST",
+        headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ title, memo }),
+      },
+      2,
+    );
+  } catch (error) {
+    throw normalizeNetworkError(error, "프로젝트 생성 중 서버 연결에 실패했습니다.");
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(parseErrorDetail(data));
@@ -302,20 +307,25 @@ export async function uploadVoice(
   const authHeaders = memberAuthHeaders();
   const contentType = file.type || "application/octet-stream";
   try {
-    const presignRes = await fetchWithRetry(
-      `${apiBase()}/api/upload/presign`,
-      {
-        method: "POST",
-        headers: { ...authHeaders, "Content-Type": "application/json", "X-Upload-Request-Id": requestId },
-        body: JSON.stringify({
-          filename: file.name,
-          content_type: contentType,
-          project_id: projectId ?? null,
-          selected_segments: selectedSegments ?? [],
-        }),
-      },
-      1,
-    );
+    let presignRes: Response;
+    try {
+      presignRes = await fetchWithRetry(
+        `${apiBase()}/api/upload/presign`,
+        {
+          method: "POST",
+          headers: { ...authHeaders, "Content-Type": "application/json", "X-Upload-Request-Id": requestId },
+          body: JSON.stringify({
+            filename: file.name,
+            content_type: contentType,
+            project_id: projectId ?? null,
+            selected_segments: selectedSegments ?? [],
+          }),
+        },
+        2,
+      );
+    } catch (error) {
+      throw normalizeNetworkError(error, "업로드 준비 중 서버 연결에 실패했습니다.");
+    }
     const presignData = (await presignRes.json().catch(() => ({}))) as Partial<PresignedUploadResponse>;
     if (
       !presignRes.ok ||
@@ -353,22 +363,27 @@ export async function uploadVoice(
       xhr.send(file);
     });
 
-    const completeRes = await fetchWithRetry(
-      `${apiBase()}/api/upload/voice/complete`,
-      {
-        method: "POST",
-        headers: { ...authHeaders, "Content-Type": "application/json", "X-Upload-Request-Id": requestId },
-        body: JSON.stringify({
-          job_id: presignData.job_id,
-          object_key: presignData.object_key,
-          filename: file.name,
-          content_type: contentType,
-          project_id: projectId ?? null,
-          selected_segments: selectedSegments ?? [],
-        }),
-      },
-      1,
-    );
+    let completeRes: Response;
+    try {
+      completeRes = await fetchWithRetry(
+        `${apiBase()}/api/upload/voice/complete`,
+        {
+          method: "POST",
+          headers: { ...authHeaders, "Content-Type": "application/json", "X-Upload-Request-Id": requestId },
+          body: JSON.stringify({
+            job_id: presignData.job_id,
+            object_key: presignData.object_key,
+            filename: file.name,
+            content_type: contentType,
+            project_id: projectId ?? null,
+            selected_segments: selectedSegments ?? [],
+          }),
+        },
+        2,
+      );
+    } catch (error) {
+      throw normalizeNetworkError(error, "업로드 완료 처리 중 서버 연결에 실패했습니다.");
+    }
     const completeData = (await completeRes.json().catch(() => ({}))) as UploadResponse;
     if (!completeRes.ok) {
       throw new Error(parseErrorDetail(completeData));
@@ -735,7 +750,7 @@ export async function completePortOnePayment(input: {
         headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(input),
       },
-      2,
+      3,
     );
   } catch (error) {
     throw normalizeNetworkError(error, "결제 확인 중 서버 연결에 실패했습니다. 잠시 후 다시 시도해 주세요.");

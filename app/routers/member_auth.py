@@ -164,9 +164,14 @@ def complete_portone_payment(
     if total_amount != body.amount:
         raise HTTPException(status_code=409, detail="결제 금액 검증에 실패했습니다.")
 
-    order_name = str(payment.get("orderName") or "")
-    if order_name and order_name != body.order_name:
-        raise HTTPException(status_code=409, detail="결제 주문명 검증에 실패했습니다.")
+    order_name = str(payment.get("orderName") or "").strip()
+    if order_name and body.order_name.strip() and order_name != body.order_name.strip():
+        logger.warning(
+            "portone order name mismatch payment_id=%s expected=%r actual=%r",
+            body.payment_id,
+            body.order_name,
+            order_name,
+        )
 
     pay_method = str(payment.get("method") or payment.get("payMethod") or "").strip() or None
     paid_at_raw = payment.get("paidAt") or payment.get("updatedAt")
@@ -177,15 +182,18 @@ def complete_portone_payment(
         except ValueError:
             paid_at = None
 
-    record_payment_record(
-        db,
-        payment_id=body.payment_id,
-        member=current,
-        order_name=order_name or body.order_name,
-        amount=total_amount,
-        pay_method=pay_method,
-        paid_at=paid_at,
-    )
+    try:
+        record_payment_record(
+            db,
+            payment_id=body.payment_id,
+            member=current,
+            order_name=order_name or body.order_name,
+            amount=total_amount,
+            pay_method=pay_method,
+            paid_at=paid_at,
+        )
+    except Exception:
+        logger.exception("payment record save failed payment_id=%s member_id=%s", body.payment_id, current.id)
 
     return {
         "ok": True,

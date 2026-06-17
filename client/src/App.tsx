@@ -469,6 +469,21 @@ export default function App() {
     }, 0);
   };
 
+  const restorePendingUploadState = useCallback(async (): Promise<boolean> => {
+    try {
+      const snapshot = await restorePendingUploadSnapshot();
+      if (!snapshot) return false;
+      restoredBillingEntriesRef.current = snapshot.billingEntries;
+      setUploadProjectMode(snapshot.uploadProjectMode);
+      setSelectedUploadProjectId(snapshot.selectedUploadProjectId);
+      setNewProjectTitle(snapshot.newProjectTitle);
+      setSelectedFiles(snapshot.files);
+      return snapshot.files.length > 0;
+    } catch {
+      return false;
+    }
+  }, []);
+
   const storePendingPayment = useCallback((payload: { paymentId: string; amount: number; orderName: string } | null) => {
     if (!payload) {
       window.localStorage.removeItem(PENDING_PORTONE_PAYMENT_KEY);
@@ -521,33 +536,48 @@ export default function App() {
       clearUrlQuery();
       return;
     }
-    void completePortOnePayment(pending)
-      .then(() => {
-        queueAutoUpload();
-      })
-      .catch((err) => {
-        showNotice("error", err instanceof Error ? err.message : "결제 확인에 실패했습니다.");
-      })
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        await completePortOnePayment(pending);
+      } catch (err) {
+        if (!cancelled) {
+          showNotice(
+            "error",
+            err instanceof Error
+              ? `${err.message}\n결제는 완료되었을 수 있습니다. 업로드를 계속 시도합니다.`
+              : "결제 확인에 실패했지만 업로드를 계속 시도합니다.",
+          );
+        }
+      }
+
+      if (cancelled) return;
+
+      queueAutoUpload();
+      const restored = await restorePendingUploadState();
+      if (!restored) {
+        showNotice(
+          "error",
+          "업로드할 파일 정보를 불러오지 못했습니다. 결제가 완료되었다면 같은 파일을 다시 선택해 업로드를 눌러 주세요.",
+        );
+      }
+    })()
       .finally(() => {
         storePendingPayment(null);
         clearUrlQuery();
       });
-  }, [authStatus, queueAutoUpload, showNotice, storePendingPayment]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authStatus, queueAutoUpload, restorePendingUploadState, showNotice, storePendingPayment]);
 
   useEffect(() => {
     if (authStatus !== "authenticated" || selectedFiles.length > 0) return;
     if (window.localStorage.getItem(AUTO_UPLOAD_TRIGGER_KEY) !== "1") return;
-    void restorePendingUploadSnapshot()
-      .then((snapshot) => {
-        if (!snapshot) return;
-        restoredBillingEntriesRef.current = snapshot.billingEntries;
-        setUploadProjectMode(snapshot.uploadProjectMode);
-        setSelectedUploadProjectId(snapshot.selectedUploadProjectId);
-        setNewProjectTitle(snapshot.newProjectTitle);
-        setSelectedFiles(snapshot.files);
-      })
-      .catch(() => undefined);
-  }, [authStatus, selectedFiles.length]);
+    void restorePendingUploadState().catch(() => undefined);
+  }, [authStatus, restorePendingUploadState, selectedFiles.length]);
 
   useEffect(() => {
     const restored = restoredBillingEntriesRef.current;
@@ -1010,12 +1040,13 @@ export default function App() {
   useEffect(() => {
     if (!uploadPaid || !selectedFiles.length || busy || autoUploadStartedRef.current) return;
     if (window.localStorage.getItem(AUTO_UPLOAD_TRIGGER_KEY) !== "1") return;
+    if (restoredBillingEntriesRef.current.length > 0 && uploadBillingEntries.length === 0) return;
     autoUploadStartedRef.current = true;
     void onUpload().finally(() => {
       setAutoUploadPending(false);
       autoUploadStartedRef.current = false;
     });
-  }, [busy, onUpload, selectedFiles.length, setAutoUploadPending, uploadPaid]);
+  }, [busy, onUpload, selectedFiles.length, setAutoUploadPending, uploadBillingEntries.length, uploadPaid]);
 
   const onSaveDraft = async () => {
     if (!job) return;
@@ -1385,11 +1416,13 @@ export default function App() {
                   onPaymentConfirmed={handlePaymentConfirmed}
                   onRemoveFile={removeSelectedFile}
                   onEntriesChange={setUploadBillingEntries}
-                  onPaymentPending={(payload) => {
+                  onPaymentPending={async (payload) => {
                     if (payload) {
-                      void persistPendingUpload();
+                      await persistPendingUpload();
+                      storePendingPayment(payload);
+                      return;
                     }
-                    storePendingPayment(payload);
+                    storePendingPayment(null);
                   }}
                 />
               ) : null}
