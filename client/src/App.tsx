@@ -49,7 +49,7 @@ import {
   mergeSpeakerIds,
   nextSpeakerId,
 } from "./transcriptEditor";
-import UploadBillingPanel from "./UploadBillingPanel";
+import UploadBillingPanel, { type BillingRestoreHint } from "./UploadBillingPanel";
 import type { UploadBillingFile } from "./uploadBilling";
 import {
   clearPendingUploadSnapshot,
@@ -336,11 +336,14 @@ export default function App() {
   const [playbackMs, setPlaybackMs] = useState(0);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const autoUploadStartedRef = useRef(false);
+  const paymentFlowHandledRef = useRef<string | null>(null);
+  const [billingRestoreByKey, setBillingRestoreByKey] = useState<Record<string, BillingRestoreHint>>({});
   const restoredBillingEntriesRef = useRef<
     Array<{
       key: string;
       mode: "full" | "segments";
       segments: { id: string; fileId: string; start_ms: number; end_ms: number; selected: boolean }[];
+      durationMs?: number | null;
     }>
   >([]);
 
@@ -353,6 +356,7 @@ export default function App() {
   }, []);
 
   const busy = step === "uploading" || loadingJob || saving || downloadingPdf;
+  const autoUploadPending = window.localStorage.getItem(AUTO_UPLOAD_TRIGGER_KEY) === "1";
   const archivedFilenames = useMemo(
     () => new Set(archive.map((item) => normalizeUploadFilename(item.filename))),
     [archive],
@@ -495,6 +499,18 @@ export default function App() {
       const snapshot = await restorePendingUploadSnapshot();
       if (!snapshot) return false;
       restoredBillingEntriesRef.current = snapshot.billingEntries;
+      setBillingRestoreByKey(
+        Object.fromEntries(
+          snapshot.billingEntries.map((entry) => [
+            entry.key,
+            {
+              mode: entry.mode,
+              segments: entry.segments,
+              durationMs: entry.durationMs ?? null,
+            },
+          ]),
+        ),
+      );
       setUploadProjectMode(snapshot.uploadProjectMode);
       setSelectedUploadProjectId(snapshot.selectedUploadProjectId);
       setNewProjectTitle(snapshot.newProjectTitle);
@@ -513,6 +529,14 @@ export default function App() {
     window.localStorage.setItem(PENDING_PORTONE_PAYMENT_KEY, JSON.stringify(payload));
   }, []);
 
+  const finalizePaymentReturn = useCallback(() => {
+    storePendingPayment(null);
+    if (readPortOnePaymentIdFromUrl()) {
+      clearUrlQuery();
+    }
+    paymentFlowHandledRef.current = null;
+  }, [storePendingPayment]);
+
   const persistPendingUpload = useCallback(async () => {
     if (!selectedFiles.length) return;
     await savePendingUploadSnapshot({
@@ -524,6 +548,7 @@ export default function App() {
         key: entry.key,
         mode: entry.mode,
         segments: entry.segments,
+        durationMs: entry.durationMs,
       })),
       savedAt: Date.now(),
     });
@@ -547,6 +572,8 @@ export default function App() {
     if (!paymentId) return;
     if (authStatus === "loading") return;
     if (authStatus === "unauthenticated" && !hasMemberSession()) return;
+    if (paymentFlowHandledRef.current === paymentId) return;
+    paymentFlowHandledRef.current = paymentId;
     const paymentConfirmed = readPaymentConfirmedFromUrl();
 
     const finishPostPayment = async () => {
@@ -561,10 +588,7 @@ export default function App() {
     };
 
     if (paymentConfirmed) {
-      void finishPostPayment().finally(() => {
-        storePendingPayment(null);
-        clearUrlQuery();
-      });
+      void finishPostPayment();
       return;
     }
 
@@ -598,11 +622,7 @@ export default function App() {
 
       if (cancelled) return;
       await finishPostPayment();
-    })()
-      .finally(() => {
-        storePendingPayment(null);
-        clearUrlQuery();
-      });
+    })();
 
     return () => {
       cancelled = true;
@@ -626,6 +646,9 @@ export default function App() {
         ...entry,
         mode: saved.mode,
         segments: saved.segments,
+        ...(saved.durationMs != null && entry.durationMs == null
+          ? { durationMs: saved.durationMs, loading: false, error: "" }
+          : {}),
       };
     });
     restoredBillingEntriesRef.current = [];
@@ -696,6 +719,7 @@ export default function App() {
 
     const checkFrontendVersion = async () => {
       if (frontendReloadingRef.current || busy) return;
+      if (window.localStorage.getItem(AUTO_UPLOAD_TRIGGER_KEY) === "1") return;
       const nextVersion = await fetchClientFrontendVersion();
       if (cancelled || !nextVersion) return;
 
@@ -824,6 +848,7 @@ export default function App() {
     setAutoUploadPending(false);
     autoUploadStartedRef.current = false;
     void clearPendingUploadSnapshot();
+    setBillingRestoreByKey({});
     setSelectedFiles([]);
     setUploadPaid(false);
     setProgress(0);
@@ -969,6 +994,9 @@ export default function App() {
 
   const onUpload = useCallback(async () => {
     if (!selectedFiles.length) return;
+    if (readPortOnePaymentIdFromUrl() || window.localStorage.getItem(AUTO_UPLOAD_TRIGGER_KEY) === "1") {
+      finalizePaymentReturn();
+    }
     const filesToUpload = [...selectedFiles];
     let uploadStarted = false;
 
@@ -1003,7 +1031,6 @@ export default function App() {
         setNewProjectTitle("");
       }
 
-      void clearPendingUploadSnapshot();
       for (let index = 0; index < filesToUpload.length; index += 1) {
         uploadStarted = true;
         const file = filesToUpload[index];
@@ -1049,6 +1076,7 @@ export default function App() {
     archivedFilenames,
     createProject,
     fileIdentity,
+    finalizePaymentReturn,
     newProjectTitle,
     openDuplicateDialog,
     performUpload,
@@ -1459,6 +1487,8 @@ export default function App() {
                   formatSize={formatSize}
                   paid={uploadPaid}
                   uploading={step === "uploading"}
+                  holdPaidState={autoUploadPending || uploadPaid}
+                  billingRestoreByKey={billingRestoreByKey}
                   onPaidChange={setUploadPaid}
                   onPaymentConfirmed={handlePaymentConfirmed}
                   onRemoveFile={removeSelectedFile}

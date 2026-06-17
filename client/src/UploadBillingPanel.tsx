@@ -30,12 +30,20 @@ import {
   type UploadBillingMode,
 } from "./uploadBilling";
 
+export type BillingRestoreHint = {
+  mode: UploadBillingMode;
+  segments: QuoteSegment[];
+  durationMs?: number | null;
+};
+
 type UploadBillingPanelProps = {
   files: File[];
   fileIdentity: (file: File) => string;
   formatSize: (bytes: number) => string;
   paid: boolean;
   uploading?: boolean;
+  holdPaidState?: boolean;
+  billingRestoreByKey?: Record<string, BillingRestoreHint>;
   onPaidChange: (paid: boolean) => void;
   onPaymentConfirmed?: () => void;
   onRemoveFile: (file: File) => void;
@@ -59,6 +67,8 @@ export default function UploadBillingPanel({
   formatSize,
   paid,
   uploading = false,
+  holdPaidState = false,
+  billingRestoreByKey,
   onPaidChange,
   onPaymentConfirmed,
   onRemoveFile,
@@ -96,16 +106,21 @@ export default function UploadBillingPanel({
       const keptKeys = new Set(kept.map((entry) => entry.key));
       const added = files
         .filter((file) => !keptKeys.has(fileIdentity(file)))
-        .map((file) => ({
-          key: fileIdentity(file),
-          file,
-          url: URL.createObjectURL(file),
-          durationMs: null,
-          loading: true,
-          error: "",
-          mode: "full" as UploadBillingMode,
-          segments: [] as QuoteSegment[],
-        }));
+        .map((file) => {
+          const key = fileIdentity(file);
+          const restored = billingRestoreByKey?.[key];
+          const durationMs = restored?.durationMs ?? null;
+          return {
+            key,
+            file,
+            url: URL.createObjectURL(file),
+            durationMs,
+            loading: durationMs == null,
+            error: "",
+            mode: restored?.mode ?? ("full" as UploadBillingMode),
+            segments: restored?.segments ?? ([] as QuoteSegment[]),
+          };
+        });
 
       const removed = prev.filter((entry) => !incomingKeys.has(entry.key));
       for (const entry of removed) {
@@ -114,7 +129,7 @@ export default function UploadBillingPanel({
 
       return [...kept, ...added];
     });
-  }, [files, fileIdentity]);
+  }, [billingRestoreByKey, files, fileIdentity]);
 
   const loadingKeysRef = useRef(new Set<string>());
 
@@ -149,7 +164,7 @@ export default function UploadBillingPanel({
       return;
     }
     if (!billingReady) {
-      onPaidChange(false);
+      if (!holdPaidState) onPaidChange(false);
       return;
     }
     if (paidBillableRef.current === null) {
@@ -157,9 +172,9 @@ export default function UploadBillingPanel({
       return;
     }
     if (billableDurationMs !== paidBillableRef.current) {
-      onPaidChange(false);
+      if (!holdPaidState) onPaidChange(false);
     }
-  }, [billingReady, billableDurationMs, paid, onPaidChange]);
+  }, [billingReady, billableDurationMs, holdPaidState, paid, onPaidChange]);
 
   useEffect(() => {
     onEntriesChange?.(entries);
@@ -363,6 +378,10 @@ export default function UploadBillingPanel({
           ) : paid && billingReady ? (
             <span className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-200">
               결제 완료
+            </span>
+          ) : paid && !billingReady && holdPaidState ? (
+            <span className="inline-flex items-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-100">
+              결제 완료 · 업로드 준비 중…
             </span>
           ) : paid && !billingReady ? (
             <span className="inline-flex items-center rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200">

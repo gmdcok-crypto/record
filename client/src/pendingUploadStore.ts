@@ -15,6 +15,7 @@ export type PendingUploadSnapshot = {
     key: string;
     mode: UploadBillingMode;
     segments: QuoteSegment[];
+    durationMs?: number | null;
   }>;
   savedAt: number;
 };
