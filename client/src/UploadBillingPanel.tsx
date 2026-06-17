@@ -30,8 +30,6 @@ import {
   type UploadBillingMode,
 } from "./uploadBilling";
 
-import type { PostPaymentStepId, PostPaymentStepStatus } from "./postPaymentFlow";
-
 export type BillingRestoreHint = {
   mode: UploadBillingMode;
   segments: QuoteSegment[];
@@ -50,7 +48,6 @@ type UploadBillingPanelProps = {
   onPaymentConfirmed?: () => void;
   onRemoveFile: (file: File) => void;
   onEntriesChange?: (entries: UploadBillingFile[]) => void;
-  onFlowStep?: (stepId: PostPaymentStepId, status: PostPaymentStepStatus, detail?: string) => void;
   onPaymentPending?: (payload: { paymentId: string; amount: number; orderName: string } | null) => void | Promise<void>;
 };
 
@@ -76,7 +73,6 @@ export default function UploadBillingPanel({
   onPaymentConfirmed,
   onRemoveFile,
   onEntriesChange,
-  onFlowStep,
   onPaymentPending,
 }: UploadBillingPanelProps) {
   const entriesRef = useRef<UploadBillingFile[]>([]);
@@ -256,7 +252,6 @@ export default function UploadBillingPanel({
       const useServerRedirect = shouldForceMobilePaymentRedirect();
       let redirectUrl = buildPaymentRedirectUrl();
       if (useServerRedirect) {
-        onFlowStep?.("prepare_payment", "running");
         try {
           const prepared = await preparePortOnePayment({
             paymentId,
@@ -265,18 +260,12 @@ export default function UploadBillingPanel({
             returnTo: buildPaymentRedirectUrl(),
           });
           redirectUrl = prepared.redirectUrl;
-          onFlowStep?.("prepare_payment", "ok");
         } catch (err) {
           const message = err instanceof Error ? err.message : "결제 준비 실패";
-          onFlowStep?.("prepare_payment", "error", message);
-          throw err;
+          throw err instanceof Error ? err : new Error(message);
         }
-      } else {
-        onFlowStep?.("prepare_payment", "skipped", "데스크톱 결제");
-        onFlowStep?.("server_redirect", "skipped", "데스크톱 결제");
       }
 
-      onFlowStep?.("portone_checkout", "running");
       const response = await PortOne.requestPayment({
         storeId: config.portoneStoreId,
         channelKey: config.portonePaymentChannelKey,
@@ -290,27 +279,20 @@ export default function UploadBillingPanel({
       });
 
       if (useServerRedirect) {
-        onFlowStep?.("portone_checkout", "ok", "결제 페이지로 이동");
         return;
       }
 
       if (!response) {
-        onFlowStep?.("portone_checkout", "error", "결제 결과 없음");
         throw new Error("결제 결과를 확인하지 못했습니다.");
       }
       if (response.code !== undefined) {
-        onFlowStep?.("portone_checkout", "error", response.message || "결제 취소");
         throw new Error(response.message || "결제가 취소되었습니다.");
       }
-      onFlowStep?.("portone_checkout", "ok");
 
-      onFlowStep?.("server_redirect", "running", "결제 확인 API");
       try {
         await completePortOnePayment({ paymentId, amount: totalAmount, orderName });
-        onFlowStep?.("server_redirect", "ok");
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "결제 확인 실패";
-        onFlowStep?.("server_redirect", "ok", `${message} (업로드 계속)`);
+      } catch {
+        // PortOne checkout succeeded; continue upload even if server confirmation fails.
       }
       onPaymentPending?.(null);
       paidBillableRef.current = billableDurationMs;
