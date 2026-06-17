@@ -119,7 +119,7 @@ export function PhoneVerifyPreview({
   return (
     <div className="grid gap-3 rounded-xl border border-dashed border-slate-400/30 bg-slate-900/35 p-3.5">
       <p className="m-0 text-[0.84rem] font-semibold text-slate-400">
-        추가정보 · 본인인증
+        본인인증
         <span className="ml-1.5 rounded-full bg-sky-400/15 px-2 py-0.5 text-[0.72rem] font-semibold text-sky-300">
           가입 전 필수
         </span>

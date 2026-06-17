@@ -226,7 +226,7 @@ export default function App() {
   const [playbackMs, setPlaybackMs] = useState(0);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
-  const [authScreen, setAuthScreen] = useState<AuthScreen>("signup");
+  const [authScreen, setAuthScreen] = useState<AuthScreen>("login");
   const [pendingSignupIdentityVerificationId, setPendingSignupIdentityVerificationId] = useState<string | null>(null);
   const [transcriberName, setTranscriberName] = useState<string | null>(null);
   const [transcriberProfile, setTranscriberProfile] = useState<TranscriberAuthProfile | null>(null);
