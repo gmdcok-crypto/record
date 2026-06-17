@@ -65,6 +65,7 @@ import {
   type PostPaymentStepTrace,
   upsertFlowTrace,
 } from "./postPaymentFlow";
+import { shouldForceMobilePaymentRedirect } from "./uploadEnvironment";
 import SegmentPlaybackText from "./SegmentPlaybackText";
 import { buildSegmentTimedWords, segmentContainsActiveWord } from "./playbackHighlight";
 import {
@@ -641,6 +642,14 @@ export default function App() {
     };
 
     if (paymentConfirmed) {
+      void finishPostPayment();
+      return;
+    }
+
+    // Mobile: PortOne already charged; server redirect verifies when it runs.
+    // If we only have paymentId in the URL, skip duplicate client confirmation.
+    if (shouldForceMobilePaymentRedirect()) {
+      traceFlow("server_redirect", "ok", "모바일 결제 복귀 (클라이언트 재확인 생략)");
       void finishPostPayment();
       return;
     }

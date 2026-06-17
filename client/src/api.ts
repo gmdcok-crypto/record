@@ -137,12 +137,22 @@ export function createAdminEventsSource(): EventSource {
   return new EventSource(`${apiBase()}/api/jobs/admin/events`);
 }
 
-function parseErrorDetail(body: unknown): string {
+function parseErrorDetail(body: unknown, status?: number, rawText?: string): string {
   if (typeof body === "object" && body !== null && "detail" in body) {
     const detail = (body as { detail: unknown }).detail;
     if (typeof detail === "string") return detail;
     if (Array.isArray(detail)) return detail.map(String).join(", ");
   }
+  if (typeof body === "object" && body !== null && "message" in body) {
+    const message = (body as { message: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  const trimmed = rawText?.trim();
+  if (trimmed && !trimmed.startsWith("<!")) {
+    return trimmed.length > 240 ? `${trimmed.slice(0, 240)}…` : trimmed;
+  }
+  if (status === 401) return "로그인이 만료되었습니다. 다시 로그인한 뒤 시도해 주세요.";
+  if (status) return `요청 처리 중 오류가 발생했습니다 (HTTP ${status})`;
   return "요청 처리 중 오류가 발생했습니다";
 }
 
@@ -823,9 +833,17 @@ export async function completePortOnePayment(input: {
   } catch (error) {
     throw normalizeNetworkError(error, "결제 확인 중 서버 연결에 실패했습니다. 잠시 후 다시 시도해 주세요.");
   }
-  const data = await res.json().catch(() => ({}));
+  const rawText = await res.text().catch(() => "");
+  let data: unknown = {};
+  if (rawText) {
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      data = {};
+    }
+  }
   if (!res.ok) {
-    throw new Error(parseErrorDetail(data));
+    throw new Error(parseErrorDetail(data, res.status, rawText));
   }
 }
 
