@@ -924,7 +924,7 @@ export default function App() {
         setActiveTab("archive");
         showNotice("info", "속기사 검토 중입니다. 검토가 완료되면 PDF가 전달됩니다.");
       } else if (workflowStatus === "review_waiting") {
-        setActiveTab("edit");
+        setActiveTab("archive");
         showNotice("info", "녹취록 요청이 접수되었습니다. 속기사가 최종 확인 후 PDF를 전달합니다.");
       }
       const context = resolveEditContext(data.job_id, projects);
@@ -942,6 +942,10 @@ export default function App() {
       showNotice("info", "속기사 검토 중입니다. 검토가 완료되면 PDF가 전달됩니다.");
       return;
     }
+    if (workflowStatus === "review_waiting") {
+      showNotice("info", "녹취록 요청이 접수되었습니다. 속기사가 최종 확인 후 PDF를 전달합니다.");
+      return;
+    }
     if (workflowStatus === "assigned" || workflowStatus === "working") {
       showNotice("info", "속기사가 작업 중입니다. 의뢰인 검토 단계가 되면 편집 화면에서 확인할 수 있습니다.");
       return;
@@ -955,8 +959,7 @@ export default function App() {
         pdfDeliveryMode: project?.pdf_delivery_mode,
       });
     }
-    const shouldOpenEdit =
-      workflowStatus === "review_waiting" || isEditableArchiveStatus(workflowStatus);
+    const shouldOpenEdit = isEditableArchiveStatus(workflowStatus);
     void loadJobById(item.job_id, { switchToEdit: shouldOpenEdit });
   };
 
@@ -1170,14 +1173,14 @@ export default function App() {
     setSaving(true);
     try {
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-      await saveTranscript(job.job_id, currentTranscript, "review_request");
+      await saveTranscript(job.job_id, currentTranscript, "draft");
       await updateJobStatus(job.job_id, "review_waiting", "의뢰인 녹취록 요청");
-      setJob({
-        ...job,
-        transcript_json: currentTranscript,
-        status: "review_waiting",
-        workflow_status: "review_waiting",
-      });
+      setJob(null);
+      setSegments([]);
+      setSpeakerLabels({});
+      setExtraSpeakerIds([]);
+      setEditContext(null);
+      setActiveTab("archive");
       setChangeHistoryRefresh((value) => value + 1);
       showNotice("success", "녹취록 요청이 접수되었습니다.");
       await refreshWorkspace();
