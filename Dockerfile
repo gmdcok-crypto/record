@@ -4,6 +4,8 @@
 
 FROM node:20-alpine AS client-build
 WORKDIR /app/client
+ARG VITE_API_URL=
+ENV VITE_API_URL=$VITE_API_URL
 COPY client/package.json client/package-lock.json ./
 RUN npm ci --prefer-offline --no-audit --no-fund
 COPY client/ ./

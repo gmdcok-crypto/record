@@ -19,6 +19,7 @@ import {
   clearMemberSession,
   completePortOnePayment,
   readPortOnePaymentIdFromUrl,
+  readPaymentConfirmedFromUrl,
   resolveUrl,
   saveTranscript,
   speakerLabel,
@@ -524,6 +525,27 @@ export default function App() {
   useEffect(() => {
     const paymentId = readPortOnePaymentIdFromUrl();
     if (!paymentId || authStatus !== "authenticated") return;
+    const paymentConfirmed = readPaymentConfirmedFromUrl();
+
+    const finishPostPayment = async () => {
+      queueAutoUpload();
+      const restored = await restorePendingUploadState();
+      if (!restored) {
+        showNotice(
+          "error",
+          "업로드할 파일 정보를 불러오지 못했습니다. 결제가 완료되었다면 같은 파일을 다시 선택해 업로드를 눌러 주세요.",
+        );
+      }
+    };
+
+    if (paymentConfirmed) {
+      void finishPostPayment().finally(() => {
+        storePendingPayment(null);
+        clearUrlQuery();
+      });
+      return;
+    }
+
     const raw = window.localStorage.getItem(PENDING_PORTONE_PAYMENT_KEY);
     if (!raw) return;
     let pending: { paymentId: string; amount: number; orderName: string } | null = null;
@@ -553,15 +575,7 @@ export default function App() {
       }
 
       if (cancelled) return;
-
-      queueAutoUpload();
-      const restored = await restorePendingUploadState();
-      if (!restored) {
-        showNotice(
-          "error",
-          "업로드할 파일 정보를 불러오지 못했습니다. 결제가 완료되었다면 같은 파일을 다시 선택해 업로드를 눌러 주세요.",
-        );
-      }
+      await finishPostPayment();
     })()
       .finally(() => {
         storePendingPayment(null);

@@ -13,6 +13,12 @@ export default defineConfig({
       workbox: {
         navigateFallbackDenylist: [/^\/admin/, /^\/api/, /^\/health/],
         importScripts: ["/push-sw.js"],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.pathname.startsWith("/api/"),
+            handler: "NetworkOnly",
+          },
+        ],
       },
       includeAssets: ["favicon.svg"],
       manifest: {

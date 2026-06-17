@@ -4,9 +4,12 @@ import time
 from datetime import datetime
 from typing import Annotated
 from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import jwt
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
@@ -14,11 +17,12 @@ from app.config import settings
 from app.db import get_db
 from app.dependencies.member_auth import get_current_member
 from app.models.admin_models import Member
-from app.services.jwt_tokens import create_member_access_token
+from app.services.jwt_tokens import create_member_access_token, create_payment_prepare_token, decode_payment_prepare_token
 from app.services.job_store import record_payment_record
 from app.services.member_auth import (
     MemberAuthError,
     get_member_by_email,
+    get_member_by_id,
     register_member,
     serialize_member,
     validate_email,
@@ -64,6 +68,95 @@ class PortOnePaymentCompleteRequest(BaseModel):
     order_name: str = Field(alias="orderName", min_length=1)
 
     model_config = {"populate_by_name": True}
+
+
+class PortOnePaymentPrepareRequest(BaseModel):
+    payment_id: str = Field(alias="paymentId", min_length=1)
+    amount: int = Field(ge=0)
+    order_name: str = Field(alias="orderName", min_length=1)
+    return_to: str = Field(alias="returnTo", default="/")
+
+    model_config = {"populate_by_name": True}
+
+
+def _resolve_return_url(request: Request, return_to: str) -> str:
+    target = (return_to or "/").strip() or "/"
+    if target.startswith("http://") or target.startswith("https://"):
+        return target
+    base = str(request.base_url).rstrip("/")
+    if not target.startswith("/"):
+        target = f"/{target}"
+    return f"{base}{target}"
+
+
+def _append_query(url: str, params: dict[str, str]) -> str:
+    parts = urlsplit(url)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query.update(params)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+
+def _finalize_portone_payment(
+    db: Session,
+    *,
+    member: Member,
+    payment_id: str,
+    expected_amount: int,
+    expected_order_name: str,
+) -> dict:
+    payment = _fetch_portone_json(f"/payments/{payment_id}")
+    if payment.get("status") != "PAID":
+        raise HTTPException(status_code=409, detail="결제가 아직 완료되지 않았습니다.")
+
+    total_amount = int(((payment.get("amount") or {}).get("total")) or 0)
+    if total_amount <= 0:
+        total_amount = expected_amount
+    elif total_amount != expected_amount:
+        logger.warning(
+            "portone amount mismatch payment_id=%s expected=%s actual=%s",
+            payment_id,
+            expected_amount,
+            total_amount,
+        )
+
+    order_name = str(payment.get("orderName") or "").strip() or expected_order_name.strip() or payment_id
+    if expected_order_name.strip() and order_name != expected_order_name.strip():
+        logger.warning(
+            "portone order name mismatch payment_id=%s expected=%r actual=%r",
+            payment_id,
+            expected_order_name,
+            order_name,
+        )
+
+    pay_method = str(payment.get("method") or payment.get("payMethod") or "").strip() or None
+    paid_at_raw = payment.get("paidAt") or payment.get("updatedAt")
+    paid_at = None
+    if isinstance(paid_at_raw, str) and paid_at_raw.strip():
+        try:
+            paid_at = datetime.fromisoformat(paid_at_raw.replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            paid_at = None
+
+    try:
+        record_payment_record(
+            db,
+            payment_id=payment_id,
+            member=member,
+            order_name=order_name,
+            amount=total_amount,
+            pay_method=pay_method,
+            paid_at=paid_at,
+        )
+    except Exception:
+        logger.exception("payment record save failed payment_id=%s member_id=%s", payment_id, member.id)
+
+    return {
+        "ok": True,
+        "payment_id": payment_id,
+        "amount": total_amount,
+        "order_name": order_name,
+        "member_id": member.id,
+    }
 
 
 def _auth_error_to_http(exc: MemberAuthError) -> HTTPException:
@@ -150,58 +243,81 @@ def member_me(current: Annotated[Member, Depends(get_current_member)]) -> dict:
     return {"member": serialize_member(current)}
 
 
+@router.post("/payments/prepare")
+def prepare_portone_payment(
+    body: PortOnePaymentPrepareRequest,
+    request: Request,
+    current: Annotated[Member, Depends(get_current_member)],
+) -> dict:
+    state = create_payment_prepare_token(
+        member_id=current.id,
+        payment_id=body.payment_id,
+        amount=body.amount,
+        order_name=body.order_name,
+    )
+    return_to = _resolve_return_url(request, body.return_to)
+    redirect_url = _append_query(
+        f"{str(request.base_url).rstrip('/')}/api/member/auth/payments/redirect",
+        {"state": state, "return_to": return_to},
+    )
+    return {"redirectUrl": redirect_url}
+
+
+@router.get("/payments/redirect")
+def portone_payment_redirect(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    state: str = Query(..., min_length=10),
+    return_to: str = Query(..., min_length=1),
+    payment_id: str = Query(alias="paymentId", min_length=1),
+) -> RedirectResponse:
+    try:
+        payload = decode_payment_prepare_token(state)
+    except jwt.InvalidTokenError as exc:
+        raise HTTPException(status_code=400, detail="결제 세션이 만료되었거나 유효하지 않습니다.") from exc
+
+    if str(payload.get("payment_id") or "") != payment_id:
+        raise HTTPException(status_code=400, detail="결제 정보가 일치하지 않습니다.")
+
+    member_id = int(payload["sub"])
+    member = get_member_by_id(db, member_id)
+    if member is None or not member.is_active:
+        raise HTTPException(status_code=401, detail="회원 정보를 확인할 수 없습니다.")
+
+    try:
+        _finalize_portone_payment(
+            db,
+            member=member,
+            payment_id=payment_id,
+            expected_amount=int(payload.get("amount") or 0),
+            expected_order_name=str(payload.get("order_name") or ""),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("payment redirect finalize failed payment_id=%s", payment_id)
+        raise HTTPException(status_code=502, detail="결제 확인 처리에 실패했습니다.") from exc
+
+    destination = _append_query(
+        _resolve_return_url(request, return_to),
+        {"paymentId": payment_id, "payment_confirmed": "1"},
+    )
+    return RedirectResponse(url=destination, status_code=302)
+
+
 @router.post("/payments/complete")
 def complete_portone_payment(
     body: PortOnePaymentCompleteRequest,
     db: Annotated[Session, Depends(get_db)],
     current: Annotated[Member, Depends(get_current_member)],
 ) -> dict:
-    payment = _fetch_portone_json(f"/payments/{body.payment_id}")
-    if payment.get("status") != "PAID":
-        raise HTTPException(status_code=409, detail="결제가 아직 완료되지 않았습니다.")
-
-    total_amount = int(((payment.get("amount") or {}).get("total")) or 0)
-    if total_amount != body.amount:
-        raise HTTPException(status_code=409, detail="결제 금액 검증에 실패했습니다.")
-
-    order_name = str(payment.get("orderName") or "").strip()
-    if order_name and body.order_name.strip() and order_name != body.order_name.strip():
-        logger.warning(
-            "portone order name mismatch payment_id=%s expected=%r actual=%r",
-            body.payment_id,
-            body.order_name,
-            order_name,
-        )
-
-    pay_method = str(payment.get("method") or payment.get("payMethod") or "").strip() or None
-    paid_at_raw = payment.get("paidAt") or payment.get("updatedAt")
-    paid_at = None
-    if isinstance(paid_at_raw, str) and paid_at_raw.strip():
-        try:
-            paid_at = datetime.fromisoformat(paid_at_raw.replace("Z", "+00:00")).replace(tzinfo=None)
-        except ValueError:
-            paid_at = None
-
-    try:
-        record_payment_record(
-            db,
-            payment_id=body.payment_id,
-            member=current,
-            order_name=order_name or body.order_name,
-            amount=total_amount,
-            pay_method=pay_method,
-            paid_at=paid_at,
-        )
-    except Exception:
-        logger.exception("payment record save failed payment_id=%s member_id=%s", body.payment_id, current.id)
-
-    return {
-        "ok": True,
-        "payment_id": body.payment_id,
-        "amount": total_amount,
-        "order_name": order_name or body.order_name,
-        "member_id": current.id,
-    }
+    return _finalize_portone_payment(
+        db,
+        member=current,
+        payment_id=body.payment_id,
+        expected_amount=body.amount,
+        expected_order_name=body.order_name,
+    )
 
 
 @router.post("/push-subscriptions")

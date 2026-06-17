@@ -64,3 +64,36 @@ def decode_member_access_token(token: str) -> dict[str, Any]:
     if payload.get("role") != "member":
         raise jwt.InvalidTokenError("Invalid token role")
     return payload
+
+
+def create_payment_prepare_token(
+    *,
+    member_id: int,
+    payment_id: str,
+    amount: int,
+    order_name: str,
+) -> str:
+    if not settings.jwt_configured:
+        raise RuntimeError("JWT is not configured")
+
+    now = datetime.now(timezone.utc)
+    payload: dict[str, Any] = {
+        "sub": str(member_id),
+        "role": "payment_prepare",
+        "payment_id": payment_id,
+        "amount": amount,
+        "order_name": order_name,
+        "iat": now,
+        "exp": now + timedelta(minutes=30),
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)
+
+
+def decode_payment_prepare_token(token: str) -> dict[str, Any]:
+    if not settings.jwt_configured:
+        raise RuntimeError("JWT is not configured")
+
+    payload = jwt.decode(token, settings.jwt_secret, algorithms=[ALGORITHM])
+    if payload.get("role") != "payment_prepare":
+        raise jwt.InvalidTokenError("Invalid token role")
+    return payload

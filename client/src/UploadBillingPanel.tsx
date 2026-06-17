@@ -2,7 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as PortOne from "@portone/browser-sdk/v2";
 
 import TimeHmsSelect from "./TimeHmsSelect";
-import { completePortOnePayment, fetchPortOnePublicConfig } from "./api";
+import { completePortOnePayment, fetchPortOnePublicConfig, preparePortOnePayment } from "./api";
+import { isKakaoInAppBrowser } from "./inAppBrowser";
+import {
+  buildPaymentRedirectUrl,
+  shouldForceMobilePaymentRedirect,
+} from "./uploadEnvironment";
 import {
   ZERO_HMS,
   calculateQuote,
@@ -46,16 +51,6 @@ function revokeUrls(entries: UploadBillingFile[]) {
   for (const entry of entries) {
     URL.revokeObjectURL(entry.url);
   }
-}
-
-function shouldForceMobileRedirect(): boolean {
-  if (typeof window === "undefined" || typeof navigator === "undefined") {
-    return false;
-  }
-  const userAgent = navigator.userAgent || "";
-  const isMobileUserAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
-  const isNarrowViewport = window.matchMedia?.("(max-width: 768px)")?.matches ?? false;
-  return isMobileUserAgent || isNarrowViewport;
 }
 
 export default function UploadBillingPanel({
@@ -219,6 +214,10 @@ export default function UploadBillingPanel({
     if (!billingReady || !quote.tier) return;
     setPaymentError("");
     try {
+      if (isKakaoInAppBrowser()) {
+        throw new Error("카카오톡 브라우저에서는 결제 후 업로드가 실패할 수 있습니다. 상단 '크롬에서 열기' 또는 'Safari에서 열기' 후 다시 시도해 주세요.");
+      }
+
       const config = await fetchPortOnePublicConfig();
       if (!config.portonePaymentEnabled || !config.portoneStoreId || !config.portonePaymentChannelKey) {
         throw new Error("포트원 결제 설정이 아직 완료되지 않았습니다.");
@@ -235,6 +234,18 @@ export default function UploadBillingPanel({
           : `${entries[0]?.file.name ?? "녹취록 업로드"} 결제`;
       await Promise.resolve(onPaymentPending?.({ paymentId, amount: totalAmount, orderName }));
 
+      const useServerRedirect = shouldForceMobilePaymentRedirect();
+      let redirectUrl = buildPaymentRedirectUrl();
+      if (useServerRedirect) {
+        const prepared = await preparePortOnePayment({
+          paymentId,
+          amount: totalAmount,
+          orderName,
+          returnTo: window.location.pathname || "/",
+        });
+        redirectUrl = prepared.redirectUrl;
+      }
+
       const response = await PortOne.requestPayment({
         storeId: config.portoneStoreId,
         channelKey: config.portonePaymentChannelKey,
@@ -243,9 +254,13 @@ export default function UploadBillingPanel({
         totalAmount,
         currency: "CURRENCY_KRW",
         payMethod: "CARD",
-        redirectUrl: window.location.href,
-        forceRedirect: shouldForceMobileRedirect(),
+        redirectUrl,
+        forceRedirect: useServerRedirect,
       });
+
+      if (useServerRedirect) {
+        return;
+      }
 
       if (!response) {
         throw new Error("결제 결과를 확인하지 못했습니다.");

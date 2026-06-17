@@ -1,5 +1,6 @@
+import { shouldPreferBackendUpload } from "./uploadEnvironment";
+
 const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
-const DEFAULT_REMOTE_API_URL = "https://record-production.up.railway.app";
 
 export type TranscriptToken = {
   text: string;
@@ -105,11 +106,7 @@ export type HealthResponse = {
 
 function apiBase(): string {
   if (API_URL) return API_URL;
-  const { origin, hostname } = window.location;
-  if (hostname === "localhost" || hostname === "127.0.0.1") {
-    return origin;
-  }
-  return DEFAULT_REMOTE_API_URL;
+  return window.location.origin;
 }
 
 export function createAdminEventsSource(): EventSource {
@@ -306,6 +303,11 @@ export async function uploadVoice(
 
   const authHeaders = memberAuthHeaders();
   const contentType = file.type || "application/octet-stream";
+
+  if (shouldPreferBackendUpload()) {
+    return uploadViaBackend();
+  }
+
   try {
     let presignRes: Response;
     try {
@@ -640,6 +642,10 @@ export function readPortOnePaymentIdFromUrl(): string | null {
   return new URLSearchParams(window.location.search).get("paymentId");
 }
 
+export function readPaymentConfirmedFromUrl(): boolean {
+  return new URLSearchParams(window.location.search).get("payment_confirmed") === "1";
+}
+
 export function clearUrlQuery(): void {
   window.history.replaceState(null, "", window.location.pathname);
 }
@@ -734,6 +740,33 @@ export async function fetchClientFrontendVersion(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+export async function preparePortOnePayment(input: {
+  paymentId: string;
+  amount: number;
+  orderName: string;
+  returnTo: string;
+}): Promise<{ redirectUrl: string }> {
+  let res: Response;
+  try {
+    res = await fetchWithRetry(
+      `${apiBase()}/api/member/auth/payments/prepare`,
+      {
+        method: "POST",
+        headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+      2,
+    );
+  } catch (error) {
+    throw normalizeNetworkError(error, "결제 준비 중 서버 연결에 실패했습니다.");
+  }
+  const data = (await res.json().catch(() => ({}))) as Partial<{ redirectUrl?: string; detail?: unknown }>;
+  if (!res.ok || !data.redirectUrl) {
+    throw new Error(parseErrorDetail(data));
+  }
+  return { redirectUrl: data.redirectUrl };
 }
 
 export async function completePortOnePayment(input: {
