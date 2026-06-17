@@ -120,6 +120,8 @@ function mapFileStatusLabel(status: string): string {
       return "의뢰인 검토";
     case "review_waiting":
       return "녹취록 요청";
+    case "transcriber_review":
+      return "속기사검토";
     case "final_done":
     case "pdf_sent":
       return "PDF 완료";
@@ -135,6 +137,7 @@ function fileStatusStyle(status: string): string {
       return "bg-emerald-500/15 text-emerald-300";
     case "first_done":
     case "review_waiting":
+    case "transcriber_review":
     case "client_editing":
       return "bg-violet-500/15 text-violet-300";
     case "assigned":

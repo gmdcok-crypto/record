@@ -20,7 +20,7 @@ from app.services.job_store import (
 FINAL_JOB_STATUSES = frozenset({"pdf_sent"})
 DELIVERY_PENDING_JOB_STATUSES = frozenset({"first_done", "final_done"})
 WAITING_JOB_STATUSES = frozenset({"uploaded", "waiting_assignment"})
-WORKING_JOB_STATUSES = frozenset({"assigned", "working", "client_editing", "review_waiting"})
+WORKING_JOB_STATUSES = frozenset({"assigned", "working", "client_editing", "review_waiting", "transcriber_review"})
 
 
 class ProjectAccessError(ValueError):
@@ -425,7 +425,7 @@ def assign_project_jobs(
             continue
         if reassign:
             eligible.append(job)
-        elif display_status in WAITING_JOB_STATUSES | {"review_waiting"}:
+        elif display_status in WAITING_JOB_STATUSES | {"review_waiting", "transcriber_review"}:
             eligible.append(job)
 
     if not eligible:

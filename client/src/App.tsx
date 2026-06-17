@@ -176,6 +176,8 @@ function mapClientJobStatus(status: string): string {
       return "의뢰인 검토";
     case "review_waiting":
       return "녹취록 요청";
+    case "transcriber_review":
+      return "속기사검토";
     case "final_done":
       return "PDF 준비";
     case "pdf_sent":
@@ -191,6 +193,7 @@ function archiveStatusStyle(status: string): string {
   switch (status) {
     case "first_done":
     case "review_waiting":
+    case "transcriber_review":
       return "bg-violet-500/15 text-violet-300";
     case "client_editing":
       return "bg-cyan-500/15 text-cyan-300";
@@ -324,6 +327,7 @@ export default function App() {
   const [loadingJob, setLoadingJob] = useState(false);
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [submittingTranscriptRequest, setSubmittingTranscriptRequest] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [creatingShare, setCreatingShare] = useState(false);
   const [duplicateDialogMessage, setDuplicateDialogMessage] = useState("");
@@ -365,7 +369,7 @@ export default function App() {
     document.title = "불판녹취";
   }, []);
 
-  const busy = step === "uploading" || loadingJob || saving || downloadingPdf;
+  const busy = step === "uploading" || loadingJob || saving || downloadingPdf || submittingReview || submittingTranscriptRequest;
   const autoUploadPending = window.localStorage.getItem(AUTO_UPLOAD_TRIGGER_KEY) === "1";
   const archivedFilenames = useMemo(
     () => new Set(archive.map((item) => normalizeUploadFilename(item.filename))),
@@ -909,8 +913,11 @@ export default function App() {
       } else if (workflowStatus === "assigned" || workflowStatus === "working") {
         setActiveTab("archive");
         showNotice("info", "속기사가 작업 중입니다. 의뢰인 검토요청 후 편집 화면에서 확인할 수 있습니다.");
-      } else if (workflowStatus === "review_waiting") {
+      } else if (workflowStatus === "transcriber_review") {
         setActiveTab("archive");
+        showNotice("info", "속기사 검토 중입니다. 검토가 완료되면 PDF가 전달됩니다.");
+      } else if (workflowStatus === "review_waiting") {
+        setActiveTab("edit");
         showNotice("info", "녹취록 요청이 접수되었습니다. 속기사가 최종 확인 후 PDF를 전달합니다.");
       }
       const context = resolveEditContext(data.job_id, projects);
@@ -923,6 +930,15 @@ export default function App() {
   };
 
   const openArchiveJob = (item: JobArchiveItem, projectTitle?: string) => {
+    const workflowStatus = item.workflow_status ?? item.status;
+    if (workflowStatus === "transcriber_review") {
+      showNotice("info", "속기사 검토 중입니다. 검토가 완료되면 PDF가 전달됩니다.");
+      return;
+    }
+    if (workflowStatus === "assigned" || workflowStatus === "working") {
+      showNotice("info", "속기사가 작업 중입니다. 의뢰인 검토 단계가 되면 편집 화면에서 확인할 수 있습니다.");
+      return;
+    }
     if (projectTitle) {
       const project = projects.find((entry) => entry.title === projectTitle && entry.files?.some((file) => file.job_id === item.job_id));
       setEditContext({
@@ -932,8 +948,9 @@ export default function App() {
         pdfDeliveryMode: project?.pdf_delivery_mode,
       });
     }
-    setActiveTab("edit");
-    void loadJobById(item.job_id, { switchToEdit: true });
+    const shouldOpenEdit =
+      workflowStatus === "review_waiting" || isEditableArchiveStatus(workflowStatus);
+    void loadJobById(item.job_id, { switchToEdit: shouldOpenEdit });
   };
 
   const performUpload = async (fileToUpload: File, projectId?: string, selectedSegments?: { start_ms: number; end_ms: number; selected?: boolean }[]) => {
@@ -1140,9 +1157,9 @@ export default function App() {
     }
   };
 
-  const onSubmitForReview = async () => {
+  const onSubmitTranscriptRequest = async () => {
     if (!job) return;
-    setSubmittingReview(true);
+    setSubmittingTranscriptRequest(true);
     setSaving(true);
     try {
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
@@ -1158,7 +1175,32 @@ export default function App() {
       showNotice("success", "녹취록 요청이 접수되었습니다.");
       await refreshWorkspace();
     } catch (err) {
-      showNotice("error", err instanceof Error ? err.message : "검수 요청 실패");
+      showNotice("error", err instanceof Error ? err.message : "녹취록 요청 실패");
+    } finally {
+      setSaving(false);
+      setSubmittingTranscriptRequest(false);
+    }
+  };
+
+  const onRequestTranscriberReview = async () => {
+    if (!job) return;
+    setSubmittingReview(true);
+    setSaving(true);
+    try {
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+      await saveTranscript(job.job_id, currentTranscript, "review_request");
+      await updateJobStatus(job.job_id, "transcriber_review", "의뢰인 검토요청");
+      setJob(null);
+      setSegments([]);
+      setSpeakerLabels({});
+      setExtraSpeakerIds([]);
+      setEditContext(null);
+      setActiveTab("archive");
+      setChangeHistoryRefresh((value) => value + 1);
+      showNotice("success", "검토 요청이 접수되었습니다. 속기사가 확인 후 PDF를 전달합니다.");
+      await refreshWorkspace();
+    } catch (err) {
+      showNotice("error", err instanceof Error ? err.message : "검토 요청 실패");
     } finally {
       setSaving(false);
       setSubmittingReview(false);
@@ -1622,10 +1664,17 @@ export default function App() {
                 </div>
               </div>
             ) : null}
-            {submittingReview ? (
+            {submittingTranscriptRequest ? (
               <div className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl bg-slate-950/75 px-6 backdrop-blur-sm">
                 <div className="rounded-2xl border border-slate-800 bg-slate-900/95 px-6 py-5 text-center shadow-2xl shadow-black/30">
                   <p className="text-sm font-semibold text-white">녹취록 요청을 접수하는 중입니다.</p>
+                </div>
+              </div>
+            ) : null}
+            {submittingReview ? (
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl bg-slate-950/75 px-6 backdrop-blur-sm">
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/95 px-6 py-5 text-center shadow-2xl shadow-black/30">
+                  <p className="text-sm font-semibold text-white">검토 요청을 접수하는 중입니다.</p>
                 </div>
               </div>
             ) : null}
@@ -1672,6 +1721,18 @@ export default function App() {
                     PDF가 전달된 문서입니다.
                     <br />
                     아래에서 내용을 확인하고 PDF를 다운로드할 수 있습니다.
+                  </>
+                ) : currentWorkflowStatus === "transcriber_review" ? (
+                  <>
+                    속기사 검토 중입니다.
+                    <br />
+                    검토가 완료되면 보관함에서 PDF 수령 상태로 확인할 수 있습니다.
+                  </>
+                ) : currentWorkflowStatus === "review_waiting" ? (
+                  <>
+                    녹취록 요청이 접수되었습니다.
+                    <br />
+                    속기사가 최종 확인 후 PDF를 전달합니다.
                   </>
                 ) : (
                   <>현재 상태에서는 편집할 수 없습니다. 보관함에서 의뢰인 검토 파일을 선택해 주세요.</>
@@ -1821,7 +1882,7 @@ export default function App() {
                   </div>
                 ) : null}
 
-                <div className="grid gap-3 sm:grid-cols-5">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <button
                     type="button"
                     onClick={onSaveDraft}
@@ -1832,11 +1893,19 @@ export default function App() {
                   </button>
                   <button
                     type="button"
-                    onClick={onSubmitForReview}
+                    onClick={onSubmitTranscriptRequest}
                     disabled={busy || pdfReceived}
                     className="rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
                   >
                     녹취록 요청
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onRequestTranscriberReview}
+                    disabled={busy || pdfReceived}
+                    className="rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+                  >
+                    검토요청
                   </button>
                   <button
                     type="button"

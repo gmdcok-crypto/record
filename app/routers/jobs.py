@@ -383,7 +383,7 @@ def _notify_admin_inquiry(
 
 
 def _maybe_notify_admin_review_request(db: Session, job: Job, *, note: str | None = None) -> None:
-    if job.status != "review_waiting":
+    if job.status not in {"review_waiting", "transcriber_review"}:
         return
     admin = _default_admin_user(db)
     if admin is None:
@@ -1150,7 +1150,7 @@ def transcriber_deliver_draft(
         raise HTTPException(status_code=404, detail="Job not found")
     if job.assigned_transcriber_id != current.id:
         raise HTTPException(status_code=403, detail="배정된 작업만 초벌을 전달할 수 있습니다.")
-    if job.status not in TRANSCRIBER_DRAFT_STATUSES | {"review_waiting", "first_done", "client_editing"}:
+    if job.status not in TRANSCRIBER_DRAFT_STATUSES | {"review_waiting", "transcriber_review", "first_done", "client_editing"}:
         raise HTTPException(status_code=409, detail="현재 상태에서는 초벌을 전달할 수 없습니다.")
 
     voice_key = get_voice_object_key(job_id)
@@ -1228,7 +1228,7 @@ def admin_deliver_draft(
     job = get_job_record(db, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.status not in TRANSCRIBER_DRAFT_STATUSES | {"review_waiting", "first_done", "client_editing"}:
+    if job.status not in TRANSCRIBER_DRAFT_STATUSES | {"review_waiting", "transcriber_review", "first_done", "client_editing"}:
         raise HTTPException(status_code=409, detail="현재 상태에서는 초벌을 전달할 수 없습니다.")
 
     voice_key = get_voice_object_key(job_id)

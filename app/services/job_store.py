@@ -28,10 +28,10 @@ DEFAULT_ADMIN_NAME = "운영관리자"
 DEFAULT_TRANSCRIBER_CODE = "TR-001"
 DEFAULT_CLIENT_CODE = "CLIENT-DEFAULT"
 DEFAULT_CLIENT_NAME = "일반 의뢰인"
-ACTIVE_JOB_STATUSES = {"assigned", "working", "first_done", "client_editing", "review_waiting"}
+ACTIVE_JOB_STATUSES = {"assigned", "working", "first_done", "client_editing", "review_waiting", "transcriber_review"}
 TRANSCRIBER_VISIBLE_JOB_STATUSES = ACTIVE_JOB_STATUSES | {"final_done", "pdf_sent"}
 CLIENT_VISIBLE_TRANSCRIPT_STATUSES = frozenset(
-    {"first_done", "client_editing", "review_waiting", "final_done", "pdf_sent"}
+    {"first_done", "client_editing", "review_waiting", "transcriber_review", "final_done", "pdf_sent"}
 )
 TRANSCRIBER_DRAFT_STATUSES = frozenset({"assigned", "working"})
 THREAD_CLIENT_ADMIN = "client_admin"
@@ -370,7 +370,7 @@ def assign_job(
 
     job.assigned_transcriber_id = transcriber.id
     job.assigned_at = assigned_at
-    if job.status in {"uploaded", "waiting_assignment", "review_waiting"}:
+    if job.status in {"uploaded", "waiting_assignment", "review_waiting", "transcriber_review"}:
         job.status = "assigned"
 
     db.add(
@@ -1340,7 +1340,7 @@ def dashboard_overview(db: Session) -> dict:
         "stats": {
             "total_jobs": len(jobs),
             "waiting_assignment": sum(1 for job in jobs if display_statuses[job.job_id] == "waiting_assignment"),
-            "working": sum(1 for job in jobs if display_statuses[job.job_id] in {"assigned", "working", "client_editing", "review_waiting"}),
+            "working": sum(1 for job in jobs if display_statuses[job.job_id] in {"assigned", "working", "client_editing", "review_waiting", "transcriber_review"}),
             "final_done": sum(1 for job in jobs if display_statuses[job.job_id] == "pdf_sent"),
             "total_sales": total_sales,
             "total_settlements": total_settlements,
@@ -1403,6 +1403,7 @@ def _progress_for_status(status: str) -> int:
         "first_done": 70,
         "client_editing": 82,
         "review_waiting": 90,
+        "transcriber_review": 90,
         "final_done": 98,
         "pdf_sent": 100,
         "cancelled": 0,

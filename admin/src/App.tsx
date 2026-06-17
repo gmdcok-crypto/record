@@ -43,6 +43,7 @@ type JobStatus =
   | "속기사 작업 중"
   | "의뢰인 검토"
   | "녹취록 요청"
+  | "속기사검토"
   | "최종 완료";
 
 type PaymentStatus = "미수" | "부분 입금" | "입금 완료";
@@ -265,7 +266,7 @@ function assignableProjectFiles(project: ProjectItem, reassign: boolean): Projec
   return project.files.filter((file) => {
     if (isFinalFileStatus(file.status)) return false;
     if (reassign) return true;
-    return file.status === "배정 대기" || file.status === "녹취록 요청";
+    return file.status === "배정 대기" || file.status === "녹취록 요청" || file.status === "속기사검토";
   });
 }
 
@@ -298,6 +299,8 @@ function mapJobStatus(status: string): JobStatus {
       return "의뢰인 검토";
     case "review_waiting":
       return "녹취록 요청";
+    case "transcriber_review":
+      return "속기사검토";
     case "final_done":
     case "pdf_sent":
       return "최종 완료";
@@ -355,6 +358,8 @@ function activityTitle(job: JobItem): string {
       return `${job.id} 의뢰인 검토 진행`;
     case "녹취록 요청":
       return `${job.id} 녹취록 요청 접수`;
+    case "속기사검토":
+      return `${job.id} 속기사 검토 요청 접수`;
     case "최종 완료":
       return `${job.id} 최종본 완료`;
     default:
@@ -375,6 +380,7 @@ function statusTone(status: JobStatus | SettlementStatus | PaymentStatus | Trans
       return "bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/20";
     case "배정 대기":
     case "녹취록 요청":
+    case "속기사검토":
     case "정산 대기":
     case "미수":
     case "휴무":
@@ -585,7 +591,10 @@ function App() {
           notifyAdminEvent("의뢰인 문의 도착", "의뢰인이 관리자에게 새 문의를 남겼습니다.");
         }
         if (payload.type === "job_updated" && payload.payload?.status === "review_waiting") {
-          notifyAdminEvent("의뢰인 검토 요청", "의뢰인이 속기사 검토 요청을 보냈습니다.");
+          notifyAdminEvent("녹취록 요청", "의뢰인이 녹취록 요청을 보냈습니다.");
+        }
+        if (payload.type === "job_updated" && payload.payload?.status === "transcriber_review") {
+          notifyAdminEvent("속기사 검토 요청", "의뢰인이 속기사 검토를 요청했습니다.");
         }
       } catch {
         // ignore malformed SSE payloads
@@ -1248,6 +1257,7 @@ function App() {
           <option value="속기사 작업 중">속기사 작업 중</option>
           <option value="의뢰인 검토">의뢰인 검토</option>
           <option value="녹취록 요청">녹취록 요청</option>
+          <option value="속기사검토">속기사검토</option>
           <option value="최종 완료">최종 완료</option>
         </select>
           <div className="ml-auto flex items-center gap-2 text-[11px] text-slate-500">

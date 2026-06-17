@@ -280,7 +280,8 @@ def send_client_status_web_push(db: Session, *, member: Member, job: Job, note: 
         "working": "작업이 시작되었습니다.",
         "first_done": "초벌본 검토가 가능합니다.",
         "client_editing": "의뢰인 수정본이 저장되었습니다.",
-        "review_waiting": "속기사 재검토가 진행 중입니다.",
+        "review_waiting": "녹취록 요청이 접수되었습니다.",
+        "transcriber_review": "속기사 검토가 진행 중입니다.",
         "final_done": "최종본이 확정되었습니다.",
         "pdf_sent": "PDF가 전달되었습니다.",
     }.get(job.status)
