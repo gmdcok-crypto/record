@@ -38,6 +38,7 @@ import AddSegmentModal, { type AddSegmentDraft } from "./AddSegmentModal";
 import ManagerInquiryPanel from "./ManagerInquiryPanel";
 import SpeakerSettingsModal from "./SpeakerSettingsModal";
 import TranscriptChangeHistory from "./TranscriptChangeHistory";
+import { formatKstDateTime } from "./formatKstDateTime";
 import {
   createManualSegmentId,
   deriveExtraSpeakerIds,
@@ -58,21 +59,6 @@ type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 type AuthScreen = "signup" | "login";
 type EditableSegment = TranscriptSegment & { id: string };
 const FRONTEND_VERSION_POLL_MS = 60_000;
-
-function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "-";
-  try {
-    return new Date(value).toLocaleString("ko-KR", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return value;
-  }
-}
 
 function projectKey(project: TranscriberProject): string {
   return project.project_id || `solo-${project.files[0]?.job_id || project.title}`;
@@ -743,7 +729,7 @@ export default function App() {
                       <p className="truncate text-sm font-semibold text-white">{project.title}</p>
                       <p className="mt-1 truncate text-xs text-slate-400">{project.client.name}</p>
                       <p className="mt-1 truncate text-[10px] text-slate-500">
-                        배정 {formatDateTime(project.files.find((file) => file.assigned_at)?.assigned_at)}
+                        배정 {formatKstDateTime(project.files.find((file) => file.assigned_at)?.assigned_at)}
                       </p>
                       <div className="mt-2 flex items-center justify-between gap-2">
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${projectStatusStyle(project.status)}`}>
@@ -781,8 +767,8 @@ export default function App() {
                       } disabled:cursor-not-allowed disabled:opacity-60`}
                     >
                       <p className="truncate text-sm font-medium text-white">{file.filename}</p>
-                      <p className="mt-1 text-[10px] text-slate-500">{formatDateTime(file.due_at)}</p>
-                      <p className="mt-1 text-[10px] text-slate-500">배정 {formatDateTime(file.assigned_at)}</p>
+                      <p className="mt-1 text-[10px] text-slate-500">{formatKstDateTime(file.due_at)}</p>
+                      <p className="mt-1 text-[10px] text-slate-500">배정 {formatKstDateTime(file.assigned_at)}</p>
                       <div className="mt-2 flex items-center gap-2">
                         {renderTranscriberInquiryBadge(file.transcriber_inquiry_status)}
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${fileStatusStyle(fileWorkflowStatus(file))}`}>
@@ -826,7 +812,7 @@ export default function App() {
                     </p>
                     {currentProject ? (
                       <p className="mt-2 text-xs text-slate-500">
-                        {currentProject.client.name} · 마감 {formatDateTime(currentProject.due_at)} ·{" "}
+                        {currentProject.client.name} · 마감 {formatKstDateTime(currentProject.due_at)} ·{" "}
                         <span className={`rounded-full px-2 py-0.5 font-semibold ${fileStatusStyle(jobWorkflowStatus(job))}`}>
                           {mapFileStatusLabel(jobWorkflowStatus(job))}
                         </span>

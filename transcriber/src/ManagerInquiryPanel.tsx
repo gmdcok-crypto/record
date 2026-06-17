@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import type { JobInquiryMessage } from "./api";
+import { formatKstDateTime } from "./formatKstDateTime";
 
 type Props = {
   title?: string;
@@ -89,7 +90,7 @@ export default function ManagerInquiryPanel({
             <div className="flex items-center justify-between gap-3 text-[11px]">
               <span className="font-semibold">{message.sender_name}</span>
               <span className="text-slate-400">
-                {message.created_at ? new Date(message.created_at).toLocaleString("ko-KR") : "-"}
+                {message.created_at ? formatKstDateTime(message.created_at) : "-"}
               </span>
             </div>
             <p className="mt-2 whitespace-pre-wrap text-sm leading-6">{message.message}</p>

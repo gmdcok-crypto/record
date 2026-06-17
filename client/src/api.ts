@@ -726,11 +726,20 @@ export async function completePortOnePayment(input: {
   amount: number;
   orderName: string;
 }): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/member/auth/payments/complete`, {
-    method: "POST",
-    headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
+  let res: Response;
+  try {
+    res = await fetchWithRetry(
+      `${apiBase()}/api/member/auth/payments/complete`,
+      {
+        method: "POST",
+        headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+      2,
+    );
+  } catch (error) {
+    throw normalizeNetworkError(error, "결제 확인 중 서버 연결에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(parseErrorDetail(data));

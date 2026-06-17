@@ -26,6 +26,7 @@ import {
   getAdminNotificationPermissionState,
   hasRegisteredAdminPushSubscription,
 } from "./webPush";
+import { formatKstDateTime, formatKstDateTimeCompact } from "./formatKstDateTime";
 
 type MenuKey =
   | "dashboard"
@@ -212,35 +213,6 @@ function notifyAdminEvent(title: string, body: string) {
 
 function formatCurrency(value: number): string {
   return `${value.toLocaleString("ko-KR")}원`;
-}
-
-function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "-";
-  try {
-    return new Date(value).toLocaleString("ko-KR", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return value;
-  }
-}
-
-function formatCompactDateTime(value: string | null | undefined): string {
-  if (!value) return "-";
-  try {
-    return new Date(value).toLocaleString("ko-KR", {
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-      } catch {
-    return value;
-  }
 }
 
 function mapProjectStatusLabel(status: string): string {
@@ -657,9 +629,9 @@ function App() {
       client: job.client,
       title: job.title,
       filename: job.filename,
-      uploadedAt: job.uploaded_at ? formatDateTime(job.uploaded_at) : "-",
-      assignedAt: job.assigned_at ? formatDateTime(job.assigned_at) : "-",
-      dueAt: job.due_at ? formatDateTime(job.due_at) : "-",
+      uploadedAt: job.uploaded_at ? formatKstDateTime(job.uploaded_at) : "-",
+      assignedAt: job.assigned_at ? formatKstDateTime(job.assigned_at) : "-",
+      dueAt: job.due_at ? formatKstDateTime(job.due_at) : "-",
       priority: job.priority === "urgent" ? "긴급" : "일반",
       status: mapJobStatus(job.status),
       assignee: job.assignee || "-",
@@ -679,7 +651,7 @@ function App() {
       name: member.name,
       phone: member.phone || "-",
       isActive: member.is_active,
-      createdAt: formatDateTime(member.created_at),
+      createdAt: formatKstDateTime(member.created_at),
       clientId: member.client_id,
       clientCode: member.client_code,
       projectCount: member.project_count,
@@ -693,7 +665,7 @@ function App() {
       id: project.project_id,
       title: project.title,
       client: project.client.name,
-      dueAt: formatDateTime(project.due_at),
+      dueAt: formatKstDateTime(project.due_at),
       statusLabel: mapProjectStatusLabel(project.status),
       rawStatus: project.status,
       fileCount: project.file_count,
@@ -709,8 +681,8 @@ function App() {
           status: mapJobStatus(file.status),
           assignee: file.assignee || job?.assignee || "-",
           assigneeCode: file.assignee_code ?? null,
-          assignedAt: file.assigned_at ? formatDateTime(file.assigned_at) : job?.assignedAt || "-",
-          dueAt: formatDateTime(file.due_at),
+          assignedAt: file.assigned_at ? formatKstDateTime(file.assigned_at) : job?.assignedAt || "-",
+          dueAt: formatKstDateTime(file.due_at),
           salesAmount: job?.salesAmount ?? 0,
           paymentStatus: job?.paymentStatus ?? "미수",
           has_inquiry: file.has_inquiry ?? false,
@@ -751,7 +723,7 @@ function App() {
       amount: item.amount,
       totalPaidAmount: item.total_paid_amount ?? 0,
       status: mapSettlementStatus(item.status),
-      paidAt: item.paid_at ? formatDateTime(item.paid_at) : "-",
+      paidAt: item.paid_at ? formatKstDateTime(item.paid_at) : "-",
     }));
   }, [overview]);
 
@@ -783,7 +755,7 @@ function App() {
       orderName: item.order_name,
       amount: item.amount,
       payMethod: item.pay_method || "-",
-      paidAt: item.paid_at ? formatDateTime(item.paid_at) : "-",
+      paidAt: item.paid_at ? formatKstDateTime(item.paid_at) : "-",
       status: item.status,
     }));
   }, [overview]);
@@ -1064,7 +1036,7 @@ function App() {
 
   const activityFeed = useMemo<ActivityItem[]>(() => {
     return jobs.slice(0, 4).map((job) => ({
-      time: formatCompactDateTime(job.uploadedAt),
+      time: formatKstDateTimeCompact(job.uploadedAt),
       title: activityTitle(job),
     }));
   }, [jobs]);
@@ -1932,7 +1904,7 @@ function App() {
               ) : detailJob ? (
                 <AdminTranscriptEditor
                   job={detailJob}
-                  formatDateTime={formatDateTime}
+                  formatDateTime={formatKstDateTime}
                   mapJobStatus={mapJobStatus}
                   onJobChange={setDetailJob}
                   onReloadOverview={async () => {

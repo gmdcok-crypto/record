@@ -13,6 +13,7 @@ import {
 } from "./api";
 import AddSegmentModal, { type AddSegmentDraft } from "./AddSegmentModal";
 import ActionNoticeModal, { type ActionNotice, type ActionNoticeKind } from "./ActionNoticeModal";
+import { formatKstDateTime } from "./formatKstDateTime";
 import SegmentPlaybackText from "./SegmentPlaybackText";
 import SpeakerSettingsModal from "./SpeakerSettingsModal";
 import TranscriptChangeHistory from "./TranscriptChangeHistory";
@@ -51,21 +52,6 @@ function buildEditableSegments(transcript?: SharedJobResponse["job"]["transcript
         end_ms: null,
       };
     });
-}
-
-function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "-";
-  try {
-    return new Date(value).toLocaleString("ko-KR", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return value;
-  }
 }
 
 function formatSegmentTime(ms: number | null | undefined): string {
@@ -297,7 +283,7 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
           <p className="text-sm font-semibold text-cyan-300">공유 편집 링크</p>
           <h1 className="mt-1 text-2xl font-bold text-white">{data.job.title || "공유된 녹취록"}</h1>
           <p className="mt-2 text-sm text-slate-400">
-            만료 시각: {formatDateTime(data.share.expires_at)} · 링크 접속자도 바로 수정하고 저장할 수 있습니다.
+            만료 시각: {formatKstDateTime(data.share.expires_at)} · 링크 접속자도 바로 수정하고 저장할 수 있습니다.
           </p>
           {data.share.allow_pdf_download && data.share.final_pdf_url ? (
             <div className="mt-4">

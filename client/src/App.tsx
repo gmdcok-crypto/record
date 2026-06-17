@@ -38,6 +38,7 @@ import AddSegmentModal, { type AddSegmentDraft } from "./AddSegmentModal";
 import ManagerInquiryPanel from "./ManagerInquiryPanel";
 import SpeakerSettingsModal from "./SpeakerSettingsModal";
 import TranscriptChangeHistory from "./TranscriptChangeHistory";
+import { formatKstDateTime } from "./formatKstDateTime";
 import {
   createManualSegmentId,
   deriveExtraSpeakerIds,
@@ -89,21 +90,6 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "-";
-  try {
-    return new Date(value).toLocaleString("ko-KR", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return value;
-  }
 }
 
 function buildEditableSegments(transcript?: TranscriptJson | null): EditableSegment[] {
@@ -1107,7 +1093,7 @@ export default function App() {
     setCreatingShare(true);
     try {
       const shared = await createTranscriptShare(job.job_id);
-      const copyText = `${shared.share_url}\n만료: ${formatDateTime(shared.expires_at)}`;
+      const copyText = `${shared.share_url}\n만료: ${formatKstDateTime(shared.expires_at)}`;
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(shared.share_url);
       }
@@ -1444,7 +1430,7 @@ export default function App() {
                           <p className="truncate font-semibold text-slate-100">{project.title}</p>
                           <p className="mt-1 text-sm text-slate-400">
                             진행 {project.completed_count}/{project.file_count} · 마감{" "}
-                            {formatDateTime(project.due_at)}
+                            {formatKstDateTime(project.due_at)}
                           </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
@@ -1488,7 +1474,7 @@ export default function App() {
                                 </div>
                                 <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
                                   <span className="font-mono">{file.job_id}</span>
-                                  <span>{formatDateTime(file.uploaded_at)}</span>
+                                  <span>{formatKstDateTime(file.uploaded_at)}</span>
                                 </div>
                               </div>
                             );

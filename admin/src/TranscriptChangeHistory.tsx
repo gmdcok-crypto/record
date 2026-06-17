@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { TranscriptChangeEntry } from "./api";
+import { formatKstDateTime } from "./formatKstDateTime";
 
 type Props = {
   jobId: string | null;
@@ -105,7 +106,7 @@ export default function TranscriptChangeHistory({ jobId, refreshKey = 0, loadEnt
                   {entry.created_at ? (
                     <>
                       <span>·</span>
-                      <span>{new Date(entry.created_at).toLocaleString("ko-KR")}</span>
+                      <span>{formatKstDateTime(entry.created_at)}</span>
                     </>
                   ) : null}
                 </div>
