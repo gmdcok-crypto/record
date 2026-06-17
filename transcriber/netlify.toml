@@ -1,9 +1,9 @@
 [build]
-  command = "npm run build"
+  command = "npm install --include=dev && npm run build"
   publish = "dist"
 
 [build.environment]
-  NPM_FLAGS = "--include=dev"
+  NPM_CONFIG_PRODUCTION = "false"
 
 [[redirects]]
   from = "/health"
