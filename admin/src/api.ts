@@ -227,7 +227,17 @@ export type AdminOverview = {
   sales: AdminOverviewSale[];
 };
 
+function isNetlifyLikeHost(hostname: string): boolean {
+  return hostname.endsWith(".netlify.app") || hostname.endsWith(".github.io");
+}
+
 function apiBase(): string {
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (isNetlifyLikeHost(host)) {
+      return window.location.origin;
+    }
+  }
   const configured = import.meta.env.VITE_API_URL?.replace(/\/$/, "");
   if (configured) return configured;
   const { origin, hostname } = window.location;

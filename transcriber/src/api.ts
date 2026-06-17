@@ -146,7 +146,17 @@ export type PortOnePublicConfig = {
 
 export const TRANSCRIBER_TOKEN_KEY = "transcriber_access_token";
 
+function isNetlifyLikeHost(hostname: string): boolean {
+  return hostname.endsWith(".netlify.app") || hostname.endsWith(".github.io");
+}
+
 function apiBase(): string {
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (isNetlifyLikeHost(host)) {
+      return window.location.origin;
+    }
+  }
   return API_URL || window.location.origin;
 }
 

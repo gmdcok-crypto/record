@@ -1,2 +1,4 @@
+/health https://record-production.up.railway.app/health 200
+/api/* https://record-production.up.railway.app/api/:splat 200
 /transcriber/* /transcriber/index.html 200
 /* /index.html 200
