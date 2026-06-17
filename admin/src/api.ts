@@ -163,12 +163,12 @@ export type AdminOverviewSettlement = {
 
 export type AdminOverviewSale = {
   id: number;
-  month: string;
-  client: string;
-  billed: number;
-  collected: number;
-  outstanding: number;
-  margin: string;
+  payment_id: string;
+  member_name: string;
+  order_name: string;
+  amount: number;
+  pay_method: string | null;
+  paid_at: string | null;
   status: string;
 };
 

@@ -15,6 +15,7 @@ from app.models.admin_models import (
     JobAssignment,
     JobStatusLog,
     Member,
+    PaymentRecord,
     Settlement,
     SettlementItem,
     SettlementPayment,
@@ -737,6 +738,47 @@ def _ensure_settlement_payment_storage(db: Session) -> None:
             )
 
 
+def _ensure_payment_records_table(db: Session) -> None:
+    bind = db.get_bind()
+    db.rollback()
+    with bind.begin() as conn:
+        table_exists = conn.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'payment_records'
+                LIMIT 1
+                """
+            )
+        ).first()
+        if not table_exists:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE payment_records (
+                      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                      payment_id VARCHAR(120) NOT NULL,
+                      member_id BIGINT NULL,
+                      member_name VARCHAR(100) NOT NULL,
+                      order_name VARCHAR(255) NOT NULL,
+                      amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+                      pay_method VARCHAR(50) NULL,
+                      paid_at DATETIME NULL,
+                      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                      UNIQUE KEY uk_payment_records_payment_id (payment_id),
+                      KEY idx_payment_records_member_id (member_id),
+                      KEY idx_payment_records_paid_at (paid_at),
+                      CONSTRAINT fk_payment_records_member
+                        FOREIGN KEY (member_id) REFERENCES members(id)
+                        ON UPDATE CASCADE ON DELETE SET NULL
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    """
+                )
+            )
+
+
 def _round_settlement_minutes(duration_seconds: int | None) -> int:
     seconds = int(duration_seconds or 0)
     if seconds <= 0:
@@ -954,6 +996,69 @@ def record_settlement_payment(db: Session, settlement: Settlement, amount: float
                 raise
             _ensure_settlement_payment_storage(db)
     raise RuntimeError("Failed to record settlement payment")
+
+
+def record_payment_record(
+    db: Session,
+    *,
+    payment_id: str,
+    member: Member,
+    order_name: str,
+    amount: float,
+    pay_method: str | None,
+    paid_at: datetime | None,
+) -> PaymentRecord:
+    for attempt in range(2):
+        try:
+            record = db.scalar(select(PaymentRecord).where(PaymentRecord.payment_id == payment_id))
+            if record is None:
+                record = PaymentRecord(payment_id=payment_id)
+                db.add(record)
+
+            record.member_id = member.id
+            record.member_name = member.name
+            record.order_name = order_name.strip() or payment_id
+            record.amount = amount
+            record.pay_method = (pay_method or "").strip() or None
+            record.paid_at = paid_at
+            db.commit()
+            db.refresh(record)
+            return record
+        except (OperationalError, ProgrammingError) as exc:
+            db.rollback()
+            message = str(exc).lower()
+            if attempt == 1 or "payment_records" not in message:
+                raise
+            _ensure_payment_records_table(db)
+    raise RuntimeError("Failed to record payment record")
+
+
+def list_payment_records(db: Session) -> list[dict]:
+    for attempt in range(2):
+        try:
+            rows = db.scalars(select(PaymentRecord).order_by(PaymentRecord.paid_at.desc(), PaymentRecord.id.desc())).all()
+            break
+        except (OperationalError, ProgrammingError) as exc:
+            db.rollback()
+            message = str(exc).lower()
+            if attempt == 1 or "payment_records" not in message:
+                raise
+            _ensure_payment_records_table(db)
+    else:
+        rows = []
+    return [
+        {
+            "id": row.id,
+            "payment_id": row.payment_id,
+            "member_name": row.member_name,
+            "order_name": row.order_name,
+            "amount": float(row.amount or 0),
+            "pay_method": row.pay_method,
+            "paid_at": row.paid_at.isoformat() if row.paid_at else None,
+            "status": "paid",
+        }
+        for row in rows
+    ]
 
 
 def get_transcriber_by_code(db: Session, transcriber_code: str = DEFAULT_TRANSCRIBER_CODE) -> Transcriber | None:
@@ -1198,10 +1303,10 @@ def dashboard_overview(db: Session) -> dict:
         db.rollback()
         settlements = []
     try:
-        invoices = db.scalars(select(Invoice).order_by(Invoice.issue_date.desc()).limit(20)).all()
+        payment_records = list_payment_records(db)
     except Exception:
         db.rollback()
-        invoices = []
+        payment_records = []
     display_statuses = {job.job_id: _display_status_for_job(db, job) for job in jobs}
 
     total_sales = sum(float(job.final_bill_amount or job.sales_amount or 0) for job in jobs)
@@ -1285,19 +1390,7 @@ def dashboard_overview(db: Session) -> dict:
             }
             for row in settlements
         ],
-        "sales": [
-            {
-                "id": row.id,
-                "month": f"{row.issue_date:%Y-%m}",
-                "client": db.scalar(select(Client.name).where(Client.id == row.client_id)) or DEFAULT_CLIENT_NAME,
-                "billed": float(row.total_amount or 0),
-                "collected": float(row.total_amount or 0) if row.invoice_status == "paid" else 0,
-                "outstanding": 0 if row.invoice_status == "paid" else float(row.total_amount or 0),
-                "margin": "40%",
-                "status": row.invoice_status,
-            }
-            for row in invoices
-        ],
+        "sales": payment_records,
     }
 
 

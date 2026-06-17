@@ -14,6 +14,7 @@ from app.db import get_db
 from app.dependencies.member_auth import get_current_member
 from app.models.admin_models import Member
 from app.services.jwt_tokens import create_member_access_token
+from app.services.job_store import record_payment_record
 from app.services.member_auth import (
     MemberAuthError,
     get_member_by_email,
@@ -151,6 +152,7 @@ def member_me(current: Annotated[Member, Depends(get_current_member)]) -> dict:
 @router.post("/payments/complete")
 def complete_portone_payment(
     body: PortOnePaymentCompleteRequest,
+    db: Annotated[Session, Depends(get_db)],
     current: Annotated[Member, Depends(get_current_member)],
 ) -> dict:
     payment = _fetch_portone_json(f"/payments/{body.payment_id}")
@@ -164,6 +166,25 @@ def complete_portone_payment(
     order_name = str(payment.get("orderName") or "")
     if order_name and order_name != body.order_name:
         raise HTTPException(status_code=409, detail="결제 주문명 검증에 실패했습니다.")
+
+    pay_method = str(payment.get("method") or payment.get("payMethod") or "").strip() or None
+    paid_at_raw = payment.get("paidAt") or payment.get("updatedAt")
+    paid_at = None
+    if isinstance(paid_at_raw, str) and paid_at_raw.strip():
+        try:
+            paid_at = datetime.fromisoformat(paid_at_raw.replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            paid_at = None
+
+    record_payment_record(
+        db,
+        payment_id=body.payment_id,
+        member=current,
+        order_name=order_name or body.order_name,
+        amount=total_amount,
+        pay_method=pay_method,
+        paid_at=paid_at,
+    )
 
     return {
         "ok": True,

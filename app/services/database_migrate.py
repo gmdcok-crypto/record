@@ -26,6 +26,7 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_transcriber_license.sql",
     SCRIPTS_DIR / "migrate_transcriber_grade_rates.sql",
     SCRIPTS_DIR / "migrate_settlement_payments.sql",
+    SCRIPTS_DIR / "migrate_payment_records.sql",
     SCRIPTS_DIR / "migrate_member_push_subscriptions.sql",
     SCRIPTS_DIR / "migrate_admin_push_subscriptions.sql",
 ]
@@ -230,6 +231,46 @@ def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) ->
                             ON UPDATE CASCADE ON DELETE CASCADE,
                           KEY idx_settlement_payments_settlement_id (settlement_id),
                           KEY idx_settlement_payments_paid_at (paid_at)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                        """
+                    )
+                )
+        logger.info("Railway-safe migration applied: %s", sql_path.name)
+        return True
+
+    if sql_path.name == "migrate_payment_records.sql":
+        with engine.begin() as conn:
+            table_exists = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM information_schema.TABLES
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'payment_records'
+                    LIMIT 1
+                    """
+                )
+            ).first()
+            if not table_exists:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE payment_records (
+                          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                          payment_id VARCHAR(120) NOT NULL,
+                          member_id BIGINT NULL,
+                          member_name VARCHAR(100) NOT NULL,
+                          order_name VARCHAR(255) NOT NULL,
+                          amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+                          pay_method VARCHAR(50) NULL,
+                          paid_at DATETIME NULL,
+                          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                          UNIQUE KEY uk_payment_records_payment_id (payment_id),
+                          KEY idx_payment_records_member_id (member_id),
+                          KEY idx_payment_records_paid_at (paid_at),
+                          CONSTRAINT fk_payment_records_member
+                            FOREIGN KEY (member_id) REFERENCES members(id)
+                            ON UPDATE CASCADE ON DELETE SET NULL
                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                         """
                     )

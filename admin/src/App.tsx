@@ -15,7 +15,6 @@ import {
   fetchJob,
   saveTranscriberGradeRate,
   recordSettlementPayment,
-  updateInvoiceStatus,
   updateMemberActive,
   updateTranscriber,
   type AdminOverview,
@@ -176,12 +175,12 @@ type GradeRateItem = {
 
 type SalesItem = {
   id: number;
-  month: string;
-  client: string;
-  billed: number;
-  collected: number;
-  outstanding: number;
-  margin: string;
+  paymentId: string;
+  memberName: string;
+  orderName: string;
+  amount: number;
+  payMethod: string;
+  paidAt: string;
   status: string;
 };
 
@@ -372,11 +371,6 @@ function authStatusTone(authStatus: string): string {
   return authStatus === "active"
     ? "bg-emerald-500/15 text-emerald-300"
     : "bg-amber-500/15 text-amber-300";
-}
-
-function marginFromSale(billed: number, collected: number): string {
-  if (!billed) return "0%";
-  return `${Math.round((collected / billed) * 100)}%`;
 }
 
 function activityTitle(job: JobItem): string {
@@ -784,12 +778,12 @@ function App() {
   const sales = useMemo<SalesItem[]>(() => {
     return (overview?.sales ?? []).map((item) => ({
       id: item.id,
-      month: item.month,
-      client: item.client,
-      billed: item.billed,
-      collected: item.collected,
-      outstanding: item.outstanding,
-      margin: item.margin || marginFromSale(item.billed, item.collected),
+      paymentId: item.payment_id,
+      memberName: item.member_name,
+      orderName: item.order_name,
+      amount: item.amount,
+      payMethod: item.pay_method || "-",
+      paidAt: item.paid_at ? formatDateTime(item.paid_at) : "-",
       status: item.status,
     }));
   }, [overview]);
@@ -953,13 +947,6 @@ function App() {
       });
     });
     closeSettlementPayModal();
-  };
-
-  const handleInvoiceConfirm = async (item: SalesItem) => {
-    const nextStatus = item.status === "paid" ? "paid" : "paid";
-    await runAdminAction("매출 상태가 변경되었습니다.", async () => {
-      await updateInvoiceStatus(item.id, nextStatus);
-    });
   };
 
   const openCreateTranscriberModal = () => {
@@ -1669,67 +1656,47 @@ function App() {
   const renderSales = () => (
     <SectionCard
       title="매출 관리"
-      subtitle="청구, 수금, 미수 상태를 동일한 운영 시트에서 확인합니다."
-      action={
-        <button
-          type="button"
-          onClick={() => setActiveMenu("reports")}
-          className="rounded-lg bg-cyan-500 px-3 py-1.5 text-sm font-semibold text-slate-950"
-        >
-          집계 보기
-        </button>
-      }
+      subtitle="결제 완료된 매출 데이터만 모아 봅니다."
     >
       <div className="mb-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryChip label="거래처" value={`${sales.length}곳`} />
+        <SummaryChip label="결제건수" value={`${sales.length}건`} />
         <SummaryChip label="월 매출" value={formatCurrency(dashboardStats.totalSales)} tone="cyan" />
-        <SummaryChip label="미수금" value={formatCurrency(dashboardStats.outstanding)} tone="amber" />
+        <SummaryChip label="결제완료" value={`${sales.filter((item) => item.status === "paid").length}건`} tone="emerald" />
         <SummaryChip
-          label="수금 완료"
-          value={`${sales.filter((item) => item.status === "paid").length}건`}
-          tone="emerald"
+          label="최근 결제"
+          value={sales[0]?.paidAt || "-"}
+          tone="slate"
         />
       </div>
       <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/70">
         {sales.length === 0 ? (
           <EmptyState message="매출 데이터가 없습니다." />
         ) : (
-          <table className="w-full min-w-[1100px] border-collapse text-[13px]">
+          <table className="w-full min-w-[1180px] border-collapse text-[13px]">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-950 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                <th className="px-3 py-2">월</th>
-                <th className="px-3 py-2">거래처</th>
-                <th className="px-3 py-2">청구액</th>
-                <th className="px-3 py-2">수금액</th>
-                <th className="px-3 py-2">미수금</th>
-                <th className="px-3 py-2">마진</th>
+                <th className="px-3 py-2">주문자</th>
+                <th className="px-3 py-2">주문명</th>
+                <th className="px-3 py-2">금액</th>
+                <th className="px-3 py-2">결제수단</th>
+                <th className="px-3 py-2">결제일시</th>
+                <th className="px-3 py-2">payment_id</th>
                 <th className="px-3 py-2">상태</th>
-                <th className="px-3 py-2">동작</th>
               </tr>
             </thead>
             <tbody>
               {sales.map((item) => (
-                <tr key={`${item.month}-${item.client}`} className="border-t border-slate-800 bg-slate-950/40 text-slate-300 hover:bg-slate-900/50">
-                  <td className="px-3 py-2 text-slate-400">{item.month}</td>
-                  <td className="px-3 py-2 font-medium text-white">{item.client}</td>
-                  <td className="px-3 py-2">{formatCurrency(item.billed)}</td>
-                  <td className="px-3 py-2">{formatCurrency(item.collected)}</td>
-                  <td className="px-3 py-2 font-medium text-amber-300">{formatCurrency(item.outstanding)}</td>
-                  <td className="px-3 py-2 text-cyan-300">{item.margin}</td>
+                <tr key={item.paymentId} className="border-t border-slate-800 bg-slate-950/40 text-slate-300 hover:bg-slate-900/50">
+                  <td className="px-3 py-2 font-medium text-white">{item.memberName}</td>
+                  <td className="px-3 py-2">{item.orderName}</td>
+                  <td className="px-3 py-2">{formatCurrency(item.amount)}</td>
+                  <td className="px-3 py-2">{item.payMethod}</td>
+                  <td className="px-3 py-2 text-slate-400">{item.paidAt}</td>
+                  <td className="px-3 py-2 font-mono text-[11px] text-slate-400">{item.paymentId}</td>
                   <td className="px-3 py-2">
-                    <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ${item.status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"}`}>
-                      {item.status === "paid" ? "수금 완료" : "미수 관리"}
+                    <span className="inline-flex rounded-md bg-emerald-500/15 px-2 py-1 text-[11px] font-semibold text-emerald-300">
+                      결제완료
                     </span>
-                  </td>
-                  <td className="px-3 py-2">
-                    <button
-                      type="button"
-                      disabled={item.status === "paid"}
-                      onClick={() => void handleInvoiceConfirm(item)}
-                      className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-medium text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {item.status === "paid" ? "수금 완료" : "수금 완료 처리"}
-                    </button>
                   </td>
                 </tr>
               ))}
@@ -1759,9 +1726,9 @@ function App() {
             <EmptyState message="분석할 매출 데이터가 없습니다." />
           ) : (
             sales.map((item, index) => (
-            <div key={item.client} className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+            <div key={item.paymentId} className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
               <div className="mb-2 flex items-center justify-between text-sm">
-                <span className="text-slate-300">{item.client}</span>
+                <span className="text-slate-300">{item.memberName}</span>
                 <span className="text-[11px] text-slate-500">{33 - index * 7}% 비중</span>
               </div>
               <ProgressBar value={33 - index * 7} />

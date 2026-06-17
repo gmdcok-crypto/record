@@ -276,6 +276,20 @@ class InvoicePayment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class PaymentRecord(Base):
+    __tablename__ = "payment_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    payment_id: Mapped[str] = mapped_column(String(120), unique=True, nullable=False, index=True)
+    member_id: Mapped[int | None] = mapped_column(ForeignKey("members.id"), nullable=True, index=True)
+    member_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    order_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    pay_method: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+
 class Settlement(Base):
     __tablename__ = "settlements"
 
