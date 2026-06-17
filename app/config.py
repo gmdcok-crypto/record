@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     portone_identity_channel_key: str = ""
     portone_webhook_secret: str = ""
     portone_env: str = "live"
+    # Temporary isolation switch: set PAYMENT_RECORDS_ENABLED=true to persist PortOne sales rows.
+    payment_records_enabled: bool = False
     # 0 = never expire (no exp claim). Set e.g. 10080 for 7 days.
     jwt_expire_minutes: int = 0
 

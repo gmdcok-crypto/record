@@ -133,26 +133,33 @@ def _finalize_portone_payment(
         )
 
     pay_method = str(payment.get("method") or payment.get("payMethod") or "").strip() or None
-    paid_at_raw = payment.get("paidAt") or payment.get("updatedAt")
-    paid_at = None
-    if isinstance(paid_at_raw, str) and paid_at_raw.strip():
-        try:
-            paid_at = datetime.fromisoformat(paid_at_raw.replace("Z", "+00:00")).replace(tzinfo=None)
-        except ValueError:
-            paid_at = None
 
-    try:
-        record_payment_record(
-            db,
-            payment_id=payment_id,
-            member=member,
-            order_name=order_name,
-            amount=total_amount,
-            pay_method=pay_method,
-            paid_at=paid_at,
+    if settings.payment_records_enabled:
+        paid_at_raw = payment.get("paidAt") or payment.get("updatedAt")
+        paid_at = None
+        if isinstance(paid_at_raw, str) and paid_at_raw.strip():
+            try:
+                paid_at = datetime.fromisoformat(paid_at_raw.replace("Z", "+00:00")).replace(tzinfo=None)
+            except ValueError:
+                paid_at = None
+        try:
+            record_payment_record(
+                db,
+                payment_id=payment_id,
+                member=member,
+                order_name=order_name,
+                amount=total_amount,
+                pay_method=pay_method,
+                paid_at=paid_at,
+            )
+        except Exception:
+            logger.exception("payment record save failed payment_id=%s member_id=%s", payment_id, member.id)
+    else:
+        logger.info(
+            "payment record save skipped (PAYMENT_RECORDS_ENABLED=false) payment_id=%s member_id=%s",
+            payment_id,
+            member.id,
         )
-    except Exception:
-        logger.exception("payment record save failed payment_id=%s member_id=%s", payment_id, member.id)
 
     return {
         "ok": True,
