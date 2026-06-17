@@ -366,7 +366,13 @@ export default function App() {
   );
 
   useEffect(() => {
-    document.title = "불판녹취";
+    const title = "불판녹취";
+    document.title = title;
+    document.querySelector('meta[property="og:title"]')?.setAttribute("content", title);
+    document.querySelector('meta[property="og:site_name"]')?.setAttribute("content", title);
+    document.querySelector('meta[name="twitter:title"]')?.setAttribute("content", title);
+    document.querySelector('meta[name="apple-mobile-web-app-title"]')?.setAttribute("content", title);
+    document.querySelector('meta[name="application-name"]')?.setAttribute("content", title);
   }, []);
 
   const busy = step === "uploading" || loadingJob || saving || downloadingPdf || submittingReview || submittingTranscriptRequest;

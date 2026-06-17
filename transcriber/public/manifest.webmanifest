@@ -1,0 +1,17 @@
+{
+  "name": "불판녹취",
+  "short_name": "불판녹취",
+  "description": "속기사 녹취 작업",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
