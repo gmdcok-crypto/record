@@ -481,8 +481,8 @@ export default function App() {
       traceFlow("portone_checkout", "ok");
       traceFlow(
         "server_redirect",
-        paymentReturn.paymentConfirmed ? "ok" : "running",
-        paymentReturn.paymentConfirmed ? "payment_confirmed=1" : "결제 확인 파라미터 대기",
+        "ok",
+        paymentReturn.paymentConfirmed ? "payment_confirmed=1" : "결제 ID 복귀",
       );
       traceFlow("restore_session", "running");
     }

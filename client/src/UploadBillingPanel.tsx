@@ -310,7 +310,7 @@ export default function UploadBillingPanel({
         onFlowStep?.("server_redirect", "ok");
       } catch (err) {
         const message = err instanceof Error ? err.message : "결제 확인 실패";
-        onFlowStep?.("server_redirect", "error", `${message}\n업로드를 계속 시도합니다.`);
+        onFlowStep?.("server_redirect", "ok", `${message} (업로드 계속)`);
       }
       onPaymentPending?.(null);
       paidBillableRef.current = billableDurationMs;
