@@ -30,6 +30,7 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_member_push_subscriptions.sql",
     SCRIPTS_DIR / "migrate_admin_push_subscriptions.sql",
     SCRIPTS_DIR / "migrate_transcriber_push_subscriptions.sql",
+    SCRIPTS_DIR / "migrate_job_transcriber_review_status.sql",
 ]
 
 
@@ -236,6 +237,46 @@ def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) ->
                         """
                     )
                 )
+        logger.info("Railway-safe migration applied: %s", sql_path.name)
+        return True
+
+    if sql_path.name == "migrate_job_transcriber_review_status.sql":
+        with engine.begin() as conn:
+            column_type = conn.execute(
+                text(
+                    """
+                    SELECT COLUMN_TYPE
+                    FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'jobs'
+                      AND COLUMN_NAME = 'status'
+                    LIMIT 1
+                    """
+                )
+            ).scalar()
+            if column_type and "transcriber_review" in str(column_type).lower():
+                logger.info("Skipping migration; jobs.status already includes transcriber_review")
+                return True
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE jobs
+                      MODIFY COLUMN status ENUM(
+                        'uploaded',
+                        'waiting_assignment',
+                        'assigned',
+                        'working',
+                        'first_done',
+                        'client_editing',
+                        'review_waiting',
+                        'transcriber_review',
+                        'final_done',
+                        'pdf_sent',
+                        'cancelled'
+                      ) NOT NULL DEFAULT 'uploaded'
+                    """
+                )
+            )
         logger.info("Railway-safe migration applied: %s", sql_path.name)
         return True
 

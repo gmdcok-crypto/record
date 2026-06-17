@@ -130,6 +130,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     'first_done',
     'client_editing',
     'review_waiting',
+    'transcriber_review',
     'final_done',
     'pdf_sent',
     'cancelled'
