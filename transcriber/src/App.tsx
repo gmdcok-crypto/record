@@ -54,9 +54,16 @@ import {
   playSegmentAudio,
   resolveSegmentEndMs,
 } from "./segmentAudio";
+import {
+  enableWebPush,
+  getNotificationPermissionState,
+  hasRegisteredPushSubscription,
+  syncWebPushRegistration,
+} from "./webPush";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 type AuthScreen = "signup" | "login";
+type PushPermissionState = NotificationPermission | "unsupported";
 type EditableSegment = TranscriptSegment & { id: string };
 const FRONTEND_VERSION_POLL_MS = 60_000;
 
@@ -254,10 +261,62 @@ export default function App() {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [bundleProjectPdf, setBundleProjectPdf] = useState(false);
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
+  const [pushPermission, setPushPermission] = useState<PushPermissionState>("default");
+  const [pushRegistered, setPushRegistered] = useState(false);
+  const [enablingPush, setEnablingPush] = useState(false);
 
   const showNotice = useCallback((kind: ActionNoticeKind, message: string, title?: string) => {
     setActionNotice({ kind, message, title });
   }, []);
+
+  const openJobFromNotification = useCallback(
+    (jobId: string) => {
+      const normalizedJobId = jobId.trim();
+      if (!normalizedJobId) return;
+      for (const project of projects) {
+        const file = project.files.find((entry) => entry.job_id === normalizedJobId);
+        if (file) {
+          setSelectedProjectKey(projectKey(project));
+          setSelectedJobId(file.job_id);
+          return;
+        }
+      }
+    },
+    [projects],
+  );
+
+  const refreshPushPermission = useCallback(async () => {
+    const permission = await getNotificationPermissionState();
+    setPushPermission(permission);
+    setPushRegistered(await hasRegisteredPushSubscription());
+  }, []);
+
+  const handleEnablePush = useCallback(async () => {
+    if (!transcriberProfile) return;
+    setEnablingPush(true);
+    try {
+      if (Notification.permission === "default") {
+        showNotice("info", "브라우저 상단 또는 주소창 옆의 알림 허용 창을 확인해 주세요.");
+      }
+      const result = await enableWebPush(transcriberProfile);
+      const permission = await getNotificationPermissionState();
+      setPushPermission(permission);
+      setPushRegistered(await hasRegisteredPushSubscription());
+      if (result === "enabled") {
+        showNotice("success", "웹푸시 알림이 활성화되었습니다.");
+      } else if (result === "denied") {
+        showNotice("error", "브라우저 알림 권한이 차단되어 있습니다.");
+      } else if (result === "disabled") {
+        showNotice("error", "서버 웹푸시 설정이 아직 준비되지 않았습니다.");
+      } else {
+        showNotice("error", "이 브라우저에서는 웹푸시를 지원하지 않습니다.");
+      }
+    } catch (err) {
+      showNotice("error", err instanceof Error ? err.message : "웹푸시 활성화 실패");
+    } finally {
+      setEnablingPush(false);
+    }
+  }, [showNotice, transcriberProfile]);
 
   const currentProject = useMemo(
     () => projects.find((project) => projectKey(project) === selectedProjectKey) ?? null,
@@ -393,9 +452,46 @@ export default function App() {
 
   useEffect(() => {
     void restoreSession();
+    void refreshPushPermission();
     // restoreSession is intentionally run once on mount; it schedules the initial project load itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!transcriberProfile) return;
+    void syncWebPushRegistration()
+      .then((registered) => {
+        if (registered) setPushRegistered(true);
+      })
+      .catch(() => {
+        setPushRegistered(false);
+      });
+  }, [transcriberProfile]);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return undefined;
+
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type !== "WEB_PUSH_NOTIFICATION_CLICK") return;
+      const jobId = event.data?.payload?.jobId;
+      if (typeof jobId === "string" && jobId.trim()) {
+        openJobFromNotification(jobId);
+      }
+    };
+
+    navigator.serviceWorker.addEventListener("message", handler);
+    return () => {
+      navigator.serviceWorker.removeEventListener("message", handler);
+    };
+  }, [openJobFromNotification]);
+
+  useEffect(() => {
+    if (authStatus !== "authenticated" || !projects.length) return;
+    const jobId = new URLSearchParams(window.location.search).get("job_id");
+    if (!jobId) return;
+    openJobFromNotification(jobId);
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [authStatus, openJobFromNotification, projects]);
 
   useEffect(() => {
     let cancelled = false;
@@ -704,13 +800,25 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="shrink-0 rounded-xl border border-white/10 px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white"
-            >
-              로그아웃
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              {(!pushRegistered || pushPermission !== "granted") ? (
+                <button
+                  type="button"
+                  onClick={() => void handleEnablePush()}
+                  disabled={enablingPush}
+                  className="rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-sm font-medium text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
+                >
+                  {enablingPush ? "알림 설정 중..." : "알림 받기"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-xl border border-white/10 px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white"
+              >
+                로그아웃
+              </button>
+            </div>
           </header>
 
           <div className="grid min-h-[calc(100vh-6rem)] gap-4 lg:grid-cols-[220px_240px_minmax(0,1fr)]">

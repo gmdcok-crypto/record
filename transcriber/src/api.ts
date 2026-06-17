@@ -713,3 +713,36 @@ export function collectSpeakerIds(segments: TranscriptSegment[]): string[] {
     return a.localeCompare(b);
   });
 }
+
+export type PushSubscriptionInput = {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+  user_agent?: string;
+};
+
+export async function registerTranscriberPushSubscription(input: PushSubscriptionInput): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/transcriber/auth/push-subscriptions`, {
+    method: "POST",
+    headers: { ...transcriberAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "알림 등록 실패");
+  }
+}
+
+export async function unregisterTranscriberPushSubscription(input: PushSubscriptionInput): Promise<void> {
+  const res = await fetch(`${apiBase()}/api/transcriber/auth/push-subscriptions`, {
+    method: "DELETE",
+    headers: { ...transcriberAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "알림 해제 실패");
+  }
+}

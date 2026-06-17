@@ -94,6 +94,7 @@ from app.services.web_push import (
     send_admin_review_request_web_push,
     send_client_pdf_web_push,
     send_client_status_web_push,
+    send_transcriber_client_request_web_push,
     upsert_admin_push_subscription,
 )
 
@@ -394,6 +395,22 @@ def _maybe_notify_admin_review_request(db: Session, job: Job, *, note: str | Non
             logger.info("Admin review-request web push delivered 0 notifications for job %s", job.job_id)
     except Exception:
         logger.exception("Failed to send admin review-request web push for job %s", job.job_id)
+
+
+def _maybe_notify_transcriber_client_request(db: Session, job: Job, *, note: str | None = None) -> None:
+    if job.status not in {"review_waiting", "transcriber_review"}:
+        return
+    if job.assigned_transcriber_id is None:
+        return
+    transcriber = db.get(Transcriber, job.assigned_transcriber_id)
+    if transcriber is None:
+        return
+    try:
+        delivered = send_transcriber_client_request_web_push(db, transcriber=transcriber, job=job, note=note)
+        if delivered == 0:
+            logger.info("Transcriber client-request web push delivered 0 notifications for job %s", job.job_id)
+    except Exception:
+        logger.exception("Failed to send transcriber client-request web push for job %s", job.job_id)
 
 
 @router.get("")
@@ -1683,6 +1700,7 @@ def submit_shared_review_request(
         job = set_job_status(db, job, "review_waiting", "공유 링크에서 속기사 재검수 요청")
         _notify_client_status_change(db, job, note="속기사 재검토 요청이 접수되었습니다.")
         _maybe_notify_admin_review_request(db, job, note="공유 링크에서 속기사 재검수 요청")
+        _maybe_notify_transcriber_client_request(db, job, note="공유 링크에서 속기사 재검수 요청")
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
@@ -1704,5 +1722,6 @@ def update_job_status(
     job = set_job_status(db, job, body.status, body.note)
     _notify_client_status_change(db, job, note=body.note)
     _maybe_notify_admin_review_request(db, job, note=body.note)
+    _maybe_notify_transcriber_client_request(db, job, note=body.note)
     publish_admin_event("job_updated", {"job_id": job.job_id, "status": job.status})
     return {"job_id": job.job_id, "status": job.status}

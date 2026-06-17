@@ -26,6 +26,7 @@ from app.services.transcriber_auth import (
     update_transcriber_profile,
     validate_login_id,
 )
+from app.services.web_push import deactivate_transcriber_push_subscription, upsert_transcriber_push_subscription
 
 router = APIRouter(prefix="/api/transcriber/auth", tags=["transcriber-auth"])
 logger = logging.getLogger(__name__)
@@ -58,10 +59,16 @@ class TranscriberLoginRequest(BaseModel):
     login_id: str = Field(min_length=1, max_length=8)
     password: str = Field(min_length=8)
 
-    @field_validator("login_id")
-    @classmethod
-    def check_login_id(cls, value: str) -> str:
-        return validate_login_id(value)
+
+class PushSubscriptionKeys(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class PushSubscriptionRequest(BaseModel):
+    endpoint: str
+    keys: PushSubscriptionKeys
+    user_agent: str | None = None
 
 
 class TranscriberProfileUpdateRequest(BaseModel):
@@ -365,3 +372,40 @@ def transcriber_get_license(current: Annotated[Transcriber, Depends(get_current_
         media_type=media_type,
         headers={"Content-Disposition": f'inline; filename="{filename}"'},
     )
+
+
+@router.post("/push-subscriptions")
+def register_transcriber_push_subscription(
+    body: PushSubscriptionRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current: Annotated[Transcriber, Depends(get_current_transcriber)],
+) -> dict:
+    if not body.endpoint.strip() or not body.keys.p256dh.strip() or not body.keys.auth.strip():
+        raise HTTPException(status_code=400, detail="유효한 푸시 구독 정보가 필요합니다.")
+    try:
+        subscription = upsert_transcriber_push_subscription(
+            db,
+            transcriber=current,
+            endpoint=body.endpoint,
+            p256dh_key=body.keys.p256dh,
+            auth_key=body.keys.auth,
+            user_agent=body.user_agent,
+        )
+    except Exception as exc:
+        logger.exception("push subscription register failed for transcriber=%s", current.id)
+        raise HTTPException(status_code=503, detail="웹푸시 구독 저장 중 오류가 발생했습니다.") from exc
+    return {"subscription_id": subscription.id, "registered": True}
+
+
+@router.delete("/push-subscriptions")
+def unregister_transcriber_push_subscription(
+    body: PushSubscriptionRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current: Annotated[Transcriber, Depends(get_current_transcriber)],
+) -> dict:
+    try:
+        deactivate_transcriber_push_subscription(db, endpoint=body.endpoint, transcriber=current)
+    except Exception as exc:
+        logger.exception("push subscription unregister failed for transcriber=%s", current.id)
+        raise HTTPException(status_code=503, detail="웹푸시 구독 해제 중 오류가 발생했습니다.") from exc
+    return {"unregistered": True}

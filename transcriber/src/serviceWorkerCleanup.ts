@@ -4,10 +4,18 @@ export async function clearStaleClientPwaServiceWorkers(): Promise<boolean> {
   let removed = false;
   const registrations = await navigator.serviceWorker.getRegistrations();
   for (const registration of registrations) {
+    const scriptUrl =
+      registration.active?.scriptURL ||
+      registration.installing?.scriptURL ||
+      registration.waiting?.scriptURL ||
+      "";
+    if (scriptUrl.includes("push-sw.js")) {
+      continue;
+    }
     removed = (await registration.unregister()) || removed;
   }
 
-  if ("caches" in window) {
+  if (removed && "caches" in window) {
     const keys = await caches.keys();
     await Promise.all(keys.map((key) => caches.delete(key)));
   }

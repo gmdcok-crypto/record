@@ -11,13 +11,22 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.admin_models import AdminPushSubscription, AdminUser, Job, Member, MemberPushSubscription
+from app.models.admin_models import (
+    AdminPushSubscription,
+    AdminUser,
+    Job,
+    Member,
+    MemberPushSubscription,
+    Transcriber,
+    TranscriberPushSubscription,
+)
 from app.services.database_reset import _run_sql_file
 
 logger = logging.getLogger(__name__)
 SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
 PUSH_SUBSCRIPTIONS_SQL = SCRIPTS_DIR / "migrate_member_push_subscriptions.sql"
 ADMIN_PUSH_SUBSCRIPTIONS_SQL = SCRIPTS_DIR / "migrate_admin_push_subscriptions.sql"
+TRANSCRIBER_PUSH_SUBSCRIPTIONS_SQL = SCRIPTS_DIR / "migrate_transcriber_push_subscriptions.sql"
 
 
 def web_push_enabled() -> bool:
@@ -46,6 +55,12 @@ def _ensure_admin_push_subscription_table(db: Session) -> None:
     bind = db.get_bind()
     db.rollback()
     _run_sql_file(bind, ADMIN_PUSH_SUBSCRIPTIONS_SQL)
+
+
+def _ensure_transcriber_push_subscription_table(db: Session) -> None:
+    bind = db.get_bind()
+    db.rollback()
+    _run_sql_file(bind, TRANSCRIBER_PUSH_SUBSCRIPTIONS_SQL)
 
 
 def upsert_member_push_subscription(
@@ -126,6 +141,47 @@ def upsert_admin_push_subscription(
     raise RuntimeError("Failed to upsert admin push subscription")
 
 
+def upsert_transcriber_push_subscription(
+    db: Session,
+    *,
+    transcriber: Transcriber,
+    endpoint: str,
+    p256dh_key: str,
+    auth_key: str,
+    user_agent: str | None = None,
+) -> TranscriberPushSubscription:
+    normalized_endpoint = endpoint.strip()
+    for attempt in range(2):
+        try:
+            row = db.scalar(
+                select(TranscriberPushSubscription).where(TranscriberPushSubscription.endpoint == normalized_endpoint)
+            )
+            if row is None:
+                row = TranscriberPushSubscription(
+                    transcriber_id=transcriber.id,
+                    endpoint=normalized_endpoint,
+                    p256dh_key=p256dh_key.strip(),
+                    auth_key=auth_key.strip(),
+                    user_agent=(user_agent or "").strip() or None,
+                    is_active=1,
+                )
+                db.add(row)
+            else:
+                row.transcriber_id = transcriber.id
+                row.p256dh_key = p256dh_key.strip()
+                row.auth_key = auth_key.strip()
+                row.user_agent = (user_agent or "").strip() or None
+                row.is_active = 1
+            db.commit()
+            db.refresh(row)
+            return row
+        except (OperationalError, ProgrammingError):
+            if attempt == 1:
+                raise
+            _ensure_transcriber_push_subscription_table(db)
+    raise RuntimeError("Failed to upsert transcriber push subscription")
+
+
 def deactivate_member_push_subscription(db: Session, *, endpoint: str, member: Member | None = None) -> None:
     normalized_endpoint = endpoint.strip()
     for attempt in range(2):
@@ -162,6 +218,28 @@ def deactivate_admin_push_subscription(db: Session, *, endpoint: str, admin_user
             _ensure_admin_push_subscription_table(db)
 
 
+def deactivate_transcriber_push_subscription(
+    db: Session, *, endpoint: str, transcriber: Transcriber | None = None
+) -> None:
+    normalized_endpoint = endpoint.strip()
+    for attempt in range(2):
+        try:
+            row = db.scalar(
+                select(TranscriberPushSubscription).where(TranscriberPushSubscription.endpoint == normalized_endpoint)
+            )
+            if row is None:
+                return
+            if transcriber is not None and row.transcriber_id != transcriber.id:
+                return
+            row.is_active = 0
+            db.commit()
+            return
+        except (OperationalError, ProgrammingError):
+            if attempt == 1:
+                raise
+            _ensure_transcriber_push_subscription_table(db)
+
+
 def list_member_push_subscriptions(db: Session, *, member: Member) -> list[MemberPushSubscription]:
     for attempt in range(2):
         try:
@@ -189,6 +267,21 @@ def list_admin_push_subscriptions(db: Session, *, admin_user: AdminUser) -> list
             if attempt == 1:
                 raise
             _ensure_admin_push_subscription_table(db)
+    return []
+
+
+def list_transcriber_push_subscriptions(db: Session, *, transcriber: Transcriber) -> list[TranscriberPushSubscription]:
+    for attempt in range(2):
+        try:
+            return db.scalars(
+                select(TranscriberPushSubscription)
+                .where(TranscriberPushSubscription.transcriber_id == transcriber.id, TranscriberPushSubscription.is_active == 1)
+                .order_by(TranscriberPushSubscription.updated_at.desc(), TranscriberPushSubscription.id.desc())
+            ).all()
+        except (OperationalError, ProgrammingError):
+            if attempt == 1:
+                raise
+            _ensure_transcriber_push_subscription_table(db)
     return []
 
 
@@ -261,6 +354,32 @@ def send_web_push_to_admin(db: Session, *, admin_user: AdminUser, payload: dict[
     return delivered
 
 
+def send_web_push_to_transcriber(db: Session, *, transcriber: Transcriber, payload: dict[str, Any]) -> int:
+    if not web_push_enabled():
+        return 0
+    delivered = 0
+    for subscription in list_transcriber_push_subscriptions(db, transcriber=transcriber):
+        try:
+            _send_payload_to_subscription(subscription, payload)
+            delivered += 1
+        except WebPushException as exc:
+            logger.warning(
+                "Web push failed for transcriber=%s subscription=%s: %s",
+                transcriber.id,
+                subscription.id,
+                exc,
+            )
+            subscription.is_active = 0
+            db.commit()
+        except Exception:
+            logger.exception(
+                "Unexpected web push failure for transcriber=%s subscription=%s",
+                transcriber.id,
+                subscription.id,
+            )
+    return delivered
+
+
 def _client_job_url(job: Job) -> str:
     base = settings.public_client_url.rstrip("/")
     return f"{base}?job_id={job.job_id}" if base else ""
@@ -272,6 +391,11 @@ def _admin_job_url(job: Job) -> str:
         return ""
     separator = "&" if "?" in base else "?"
     return f"{base}{separator}job_id={job.job_id}"
+
+
+def _transcriber_job_url(job: Job) -> str:
+    base = settings.public_transcriber_url.rstrip("/")
+    return f"{base}?job_id={job.job_id}" if base else ""
 
 
 def send_client_status_web_push(db: Session, *, member: Member, job: Job, note: str | None = None) -> int:
@@ -369,5 +493,39 @@ def send_admin_review_request_web_push(db: Session, *, admin_user: AdminUser, jo
             tag=f"admin-review-{job.job_id}",
             job_id=job.job_id,
             kind="admin_review_request",
+        ),
+    )
+
+
+def send_transcriber_client_request_web_push(
+    db: Session,
+    *,
+    transcriber: Transcriber,
+    job: Job,
+    note: str | None = None,
+) -> int:
+    if job.status == "transcriber_review":
+        title = "검토 요청"
+        body = f"{job.original_filename}: 의뢰인이 검토를 요청했습니다."
+        kind = "transcriber_review_request"
+        tag = f"transcriber-review-{job.job_id}"
+    elif job.status == "review_waiting":
+        title = "녹취록 요청"
+        body = f"{job.original_filename}: 의뢰인이 녹취록을 요청했습니다."
+        kind = "transcriber_transcript_request"
+        tag = f"transcriber-transcript-{job.job_id}"
+    else:
+        return 0
+    extra = f" {note.strip()}" if note and note.strip() else ""
+    return send_web_push_to_transcriber(
+        db,
+        transcriber=transcriber,
+        payload=_payload(
+            title=title,
+            body=f"{body}{extra}",
+            url=_transcriber_job_url(job),
+            tag=tag,
+            job_id=job.job_id,
+            kind=kind,
         ),
     )
