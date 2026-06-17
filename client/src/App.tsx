@@ -12,7 +12,9 @@ import {
   fetchJob,
   fetchClientJobInquiries,
   fetchMemberMe,
+  hasMemberSession,
   fetchProjects,
+  MEMBER_TOKEN_KEY,
   fetchTranscriptChanges,
   bootstrapMemberTokenFromUrl,
   clearUrlQuery,
@@ -440,22 +442,40 @@ export default function App() {
 
   const restoreSession = async () => {
     bootstrapMemberTokenFromUrl();
+    const token = localStorage.getItem(MEMBER_TOKEN_KEY);
+    if (!token) {
+      setMemberName(null);
+      setMemberProfile(null);
+      setLoadingWorkspace(false);
+      setAuthStatus("unauthenticated");
+      return null;
+    }
+
     const member = await fetchMemberMe();
+    const paymentReturn = Boolean(readPortOnePaymentIdFromUrl());
     if (member) {
       setMemberName(member.name);
       setMemberProfile(member);
-      setLoadingWorkspace(true);
       setAuthStatus("authenticated");
       setActiveTab("upload");
-      window.setTimeout(() => {
-        void refreshWorkspace(true);
-      }, 0);
+      if (!paymentReturn) {
+        setLoadingWorkspace(true);
+        window.setTimeout(() => {
+          void refreshWorkspace(true);
+        }, 0);
+      }
       return member;
     }
-    setMemberName(null);
-    setMemberProfile(null);
-    setLoadingWorkspace(false);
-    setAuthStatus("unauthenticated");
+
+    // Profile fetch failed but token remains — keep session so post-payment upload can proceed.
+    setAuthStatus("authenticated");
+    setActiveTab("upload");
+    if (!paymentReturn) {
+      setLoadingWorkspace(true);
+      window.setTimeout(() => {
+        void refreshWorkspace(true).finally(() => setLoadingWorkspace(false));
+      }, 0);
+    }
     return null;
   };
 
@@ -524,7 +544,9 @@ export default function App() {
 
   useEffect(() => {
     const paymentId = readPortOnePaymentIdFromUrl();
-    if (!paymentId || authStatus !== "authenticated") return;
+    if (!paymentId) return;
+    if (authStatus === "loading") return;
+    if (authStatus === "unauthenticated" && !hasMemberSession()) return;
     const paymentConfirmed = readPaymentConfirmedFromUrl();
 
     const finishPostPayment = async () => {
@@ -961,12 +983,12 @@ export default function App() {
       let uploadedProjectTitle = uploadProjectLabel;
       const usedUploadMethods = new Set<string>();
       if (uploadProjectMode === "existing") {
-        if (!selectedUploadProjectId || !selectedUploadProject) {
+        if (!selectedUploadProjectId) {
           showNotice("error", "업로드할 프로젝트를 선택해 주세요.");
           return;
         }
         targetProjectId = selectedUploadProjectId;
-        uploadedProjectTitle = selectedUploadProject.title;
+        uploadedProjectTitle = selectedUploadProject?.title || uploadProjectLabel || "프로젝트";
       } else {
         const title = newProjectTitle.trim();
         if (!title) {
@@ -1055,12 +1077,23 @@ export default function App() {
     if (!uploadPaid || !selectedFiles.length || busy || autoUploadStartedRef.current) return;
     if (window.localStorage.getItem(AUTO_UPLOAD_TRIGGER_KEY) !== "1") return;
     if (restoredBillingEntriesRef.current.length > 0 && uploadBillingEntries.length === 0) return;
+    if (uploadProjectMode === "existing" && loadingWorkspace && !selectedUploadProjectId) return;
     autoUploadStartedRef.current = true;
     void onUpload().finally(() => {
       setAutoUploadPending(false);
       autoUploadStartedRef.current = false;
     });
-  }, [busy, onUpload, selectedFiles.length, setAutoUploadPending, uploadBillingEntries.length, uploadPaid]);
+  }, [
+    busy,
+    loadingWorkspace,
+    onUpload,
+    selectedFiles.length,
+    selectedUploadProjectId,
+    setAutoUploadPending,
+    uploadBillingEntries.length,
+    uploadPaid,
+    uploadProjectMode,
+  ]);
 
   const onSaveDraft = async () => {
     if (!job) return;

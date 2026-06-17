@@ -306,7 +306,9 @@ export async function uploadVoice(
         }
       };
 
-      xhr.onerror = () => reject(new Error("서버 연결 오류"));
+      xhr.onerror = () => reject(normalizeNetworkError(new Error("Failed to fetch"), "음성 업로드 중 서버 연결에 실패했습니다."));
+      xhr.ontimeout = () => reject(new Error(`음성 업로드 시간이 초과되었습니다. (${apiBase()})`));
+      xhr.timeout = 0;
       xhr.send(form);
     });
 
@@ -701,14 +703,22 @@ export function clearMemberSession(): void {
   localStorage.removeItem(MEMBER_TOKEN_KEY);
 }
 
+export function hasMemberSession(): boolean {
+  return Boolean(localStorage.getItem(MEMBER_TOKEN_KEY));
+}
+
 export async function fetchMemberMe(): Promise<MemberProfile | null> {
   const token = localStorage.getItem(MEMBER_TOKEN_KEY);
   if (!token) return null;
 
   try {
-    const res = await fetch(`${apiBase()}/api/member/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await fetchWithRetry(
+      `${apiBase()}/api/member/auth/me`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+      2,
+    );
     if (!res.ok) {
       if (res.status === 401) clearMemberSession();
       return null;
@@ -716,7 +726,7 @@ export async function fetchMemberMe(): Promise<MemberProfile | null> {
     const data = await res.json();
     return data.member as MemberProfile;
   } catch {
-    clearMemberSession();
+    // Keep the token on transient network errors (common after payment redirect).
     return null;
   }
 }
