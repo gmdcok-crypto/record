@@ -100,6 +100,17 @@ def _append_query(url: str, params: dict[str, str]) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 
+def _payment_total_amount(payment: dict, fallback: int = 0) -> int:
+    amount = payment.get("amount")
+    if isinstance(amount, dict):
+        total = amount.get("total")
+        if total is not None:
+            return int(total)
+    if isinstance(amount, (int, float)):
+        return int(amount)
+    return fallback
+
+
 def _finalize_portone_payment(
     db: Session,
     *,
@@ -109,13 +120,12 @@ def _finalize_portone_payment(
     expected_order_name: str,
 ) -> dict:
     payment = _fetch_portone_json(f"/payments/{payment_id}")
-    if payment.get("status") != "PAID":
+    status = str(payment.get("status") or "").upper()
+    if status != "PAID":
         raise HTTPException(status_code=409, detail="결제가 아직 완료되지 않았습니다.")
 
-    total_amount = int(((payment.get("amount") or {}).get("total")) or 0)
-    if total_amount <= 0:
-        total_amount = expected_amount
-    elif total_amount != expected_amount:
+    total_amount = _payment_total_amount(payment, fallback=expected_amount)
+    if total_amount != expected_amount:
         logger.warning(
             "portone amount mismatch payment_id=%s expected=%s actual=%s",
             payment_id,
@@ -324,13 +334,19 @@ def complete_portone_payment(
     db: Annotated[Session, Depends(get_db)],
     current: Annotated[Member, Depends(get_current_member)],
 ) -> dict:
-    return _finalize_portone_payment(
-        db,
-        member=current,
-        payment_id=body.payment_id,
-        expected_amount=body.amount,
-        expected_order_name=body.order_name,
-    )
+    try:
+        return _finalize_portone_payment(
+            db,
+            member=current,
+            payment_id=body.payment_id,
+            expected_amount=body.amount,
+            expected_order_name=body.order_name,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("payment complete failed payment_id=%s member_id=%s", body.payment_id, current.id)
+        raise HTTPException(status_code=502, detail="결제 확인 처리에 실패했습니다.") from exc
 
 
 @router.post("/push-subscriptions")

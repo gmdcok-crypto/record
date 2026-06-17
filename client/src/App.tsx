@@ -19,7 +19,6 @@ import {
   bootstrapMemberTokenFromUrl,
   clearUrlQuery,
   clearMemberSession,
-  completePortOnePayment,
   readPortOnePaymentIdFromUrl,
   readPaymentConfirmedFromUrl,
   resolveUrl,
@@ -65,7 +64,6 @@ import {
   type PostPaymentStepTrace,
   upsertFlowTrace,
 } from "./postPaymentFlow";
-import { shouldForceMobilePaymentRedirect } from "./uploadEnvironment";
 import SegmentPlaybackText from "./SegmentPlaybackText";
 import { buildSegmentTimedWords, segmentContainsActiveWord } from "./playbackHighlight";
 import {
@@ -646,56 +644,10 @@ export default function App() {
       return;
     }
 
-    // Mobile: PortOne already charged; server redirect verifies when it runs.
-    // If we only have paymentId in the URL, skip duplicate client confirmation.
-    if (shouldForceMobilePaymentRedirect()) {
-      traceFlow("server_redirect", "ok", "모바일 결제 복귀 (클라이언트 재확인 생략)");
-      void finishPostPayment();
-      return;
-    }
-
-    const raw = window.localStorage.getItem(PENDING_PORTONE_PAYMENT_KEY);
-    if (!raw) return;
-    let pending: { paymentId: string; amount: number; orderName: string } | null = null;
-    try {
-      pending = JSON.parse(raw) as { paymentId: string; amount: number; orderName: string };
-    } catch {
-      pending = null;
-    }
-    if (!pending || pending.paymentId !== paymentId) {
-      traceFlow(
-        "server_redirect",
-        "error",
-        "결제 복귀 정보가 일치하지 않습니다. 결제가 완료되었다면 업로드를 계속 시도합니다.",
-      );
-      void finishPostPayment();
-      return;
-    }
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        await completePortOnePayment(pending);
-        traceFlow("server_redirect", "ok", "결제 확인 API 완료");
-      } catch (err) {
-        const message =
-          err instanceof Error
-            ? err.message
-            : "결제 확인에 실패했지만 업로드를 계속 시도합니다.";
-        traceFlow("server_redirect", "error", message);
-        if (!cancelled) {
-          showNotice("error", formatStepError("server_redirect", `${message}\n업로드를 계속 시도합니다.`));
-        }
-      }
-
-      if (cancelled) return;
-      await finishPostPayment();
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authStatus, queueAutoUpload, restorePendingUploadState, showNotice, showStepError, storePendingPayment, traceFlow]);
+    // PortOne returned with paymentId in the URL — checkout finished.
+    traceFlow("server_redirect", "ok", "결제 ID 복귀 (클라이언트 재확인 생략)");
+    void finishPostPayment();
+  }, [authStatus, queueAutoUpload, restorePendingUploadState, showStepError, traceFlow]);
 
   useEffect(() => {
     if (authStatus !== "authenticated" || selectedFiles.length > 0) return;
