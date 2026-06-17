@@ -23,6 +23,7 @@ import {
   resolveUrl,
   saveTranscript,
   speakerLabel,
+  submitTranscriberReviewRequest,
   updateJobStatus,
   uploadVoice,
   type JobArchiveItem,
@@ -1194,8 +1195,7 @@ export default function App() {
     setSaving(true);
     try {
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-      await saveTranscript(job.job_id, currentTranscript, "review_request");
-      await updateJobStatus(job.job_id, "transcriber_review", "의뢰인 검토요청");
+      await submitTranscriberReviewRequest(job.job_id, currentTranscript);
       setJob(null);
       setSegments([]);
       setSpeakerLabels({});

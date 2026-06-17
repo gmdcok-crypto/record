@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import DataError, DBAPIError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -295,6 +296,17 @@ def _get_valid_share_or_404(db: Session, token: str):
     if not transcript_share_is_valid(share):
         raise HTTPException(status_code=410, detail="공유 링크가 만료되었거나 비활성화되었습니다.")
     return share
+
+
+def _set_job_status_or_http_error(db: Session, job: Job, next_status: str, note: str | None = None) -> Job:
+    try:
+        return set_job_status(db, job, next_status, note)
+    except (DataError, DBAPIError) as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"작업 상태({next_status})를 저장하지 못했습니다. 서버 DB 설정을 확인해 주세요.",
+        ) from exc
 
 
 def _ensure_member_owns_job(db: Session, member: Member, job: Job) -> None:
@@ -1710,6 +1722,46 @@ def submit_shared_review_request(
     return {"job_id": job.job_id, "status": job.status}
 
 
+@router.post("/{job_id}/transcriber-review-request")
+def submit_transcriber_review_request(
+    job_id: str,
+    body: SaveTranscriptRequest,
+    db: Annotated[Session, Depends(get_db)],
+    member: Annotated[Member, Depends(get_current_member)],
+) -> dict:
+    voice_key = get_voice_object_key(job_id)
+    if not voice_key:
+        raise HTTPException(status_code=404, detail="Voice file not found")
+
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _ensure_member_owns_job(db, member, job)
+
+    try:
+        persist_job_transcript(
+            db,
+            job,
+            job_id,
+            body.transcript_json,
+            member=member,
+            save_kind=body.save_kind or "review_request",
+        )
+        job = _set_job_status_or_http_error(db, job, "transcriber_review", "의뢰인 검토요청")
+        _notify_client_status_change(db, job, note="속기사 검토가 요청되었습니다.")
+        _maybe_notify_admin_review_request(db, job, note="의뢰인 검토요청")
+        _maybe_notify_transcriber_client_request(db, job, note="의뢰인 검토요청")
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"검토 요청 처리 실패: {exc}") from exc
+
+    publish_admin_event("job_updated", {"job_id": job.job_id, "status": job.status})
+    return {"job_id": job.job_id, "status": job.status}
+
+
 @router.post("/{job_id}/status")
 def update_job_status(
     job_id: str,
@@ -1719,7 +1771,7 @@ def update_job_status(
     job = get_job_record(db, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    job = set_job_status(db, job, body.status, body.note)
+    job = _set_job_status_or_http_error(db, job, body.status, body.note)
     _notify_client_status_change(db, job, note=body.note)
     _maybe_notify_admin_review_request(db, job, note=body.note)
     _maybe_notify_transcriber_client_request(db, job, note=body.note)

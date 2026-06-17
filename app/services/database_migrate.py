@@ -254,26 +254,15 @@ def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) ->
                     """
                 )
             ).scalar()
-            if column_type and "transcriber_review" in str(column_type).lower():
-                logger.info("Skipping migration; jobs.status already includes transcriber_review")
+            normalized = str(column_type or "").lower().replace(" ", "")
+            if normalized.startswith("varchar(40)"):
+                logger.info("Skipping migration; jobs.status is already VARCHAR(40)")
                 return True
             conn.execute(
                 text(
                     """
                     ALTER TABLE jobs
-                      MODIFY COLUMN status ENUM(
-                        'uploaded',
-                        'waiting_assignment',
-                        'assigned',
-                        'working',
-                        'first_done',
-                        'client_editing',
-                        'review_waiting',
-                        'transcriber_review',
-                        'final_done',
-                        'pdf_sent',
-                        'cancelled'
-                      ) NOT NULL DEFAULT 'uploaded'
+                      MODIFY COLUMN status VARCHAR(40) NOT NULL DEFAULT 'uploaded'
                     """
                 )
             )

@@ -507,12 +507,23 @@ export type JobInquiryMessage = {
   created_at: string | null;
 };
 
+function jobWriteApiBase(): string {
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (isNetlifyLikeHost(host)) {
+      return DEFAULT_RAILWAY_API_URL;
+    }
+  }
+  if (API_URL) return API_URL;
+  return typeof window !== "undefined" ? window.location.origin : DEFAULT_RAILWAY_API_URL;
+}
+
 export async function saveTranscript(
   jobId: string,
   transcript: TranscriptJson,
   saveKind: string = "draft",
 ): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/transcript`, {
+  const res = await fetchWithRetry(`${jobWriteApiBase()}/api/jobs/${jobId}/transcript`, {
     method: "PUT",
     headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -522,7 +533,7 @@ export async function saveTranscript(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(parseErrorDetail(err));
+    throw new Error(parseErrorDetail(err, res.status));
   }
 }
 
@@ -538,15 +549,33 @@ export async function fetchTranscriptChanges(jobId: string): Promise<TranscriptC
   return data.entries ?? [];
 }
 
-export async function updateJobStatus(jobId: string, status: string, note?: string): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/status`, {
+export async function submitTranscriberReviewRequest(
+  jobId: string,
+  transcript: TranscriptJson,
+): Promise<void> {
+  const res = await fetchWithRetry(`${jobWriteApiBase()}/api/jobs/${jobId}/transcriber-review-request`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      transcript_json: transcript,
+      save_kind: "review_request",
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err, res.status));
+  }
+}
+
+export async function updateJobStatus(jobId: string, status: string, note?: string): Promise<void> {
+  const res = await fetchWithRetry(`${jobWriteApiBase()}/api/jobs/${jobId}/status`, {
+    method: "POST",
+    headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify({ status, note }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(parseErrorDetail(err));
+    throw new Error(parseErrorDetail(err, res.status));
   }
 }
 
