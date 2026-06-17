@@ -20,7 +20,7 @@ export default defineConfig({
           },
         ],
       },
-      includeAssets: ["favicon.svg"],
+      includeAssets: ["icon-192.png", "icon-512.png", "apple-touch-icon.png", "og-image.png"],
       manifest: {
         name: "불판녹취",
         short_name: "불판녹취",
@@ -32,9 +32,15 @@ export default defineConfig({
         id: "/bulpen-user/",
         icons: [
           {
-            src: "favicon.svg",
-            sizes: "any",
-            type: "image/svg+xml",
+            src: "icon-192.png",
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
+            src: "icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
             purpose: "any maskable",
           },
         ],
