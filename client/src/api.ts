@@ -106,20 +106,30 @@ export type HealthResponse = {
   database_configured?: boolean;
 };
 
+function isNetlifyLikeHost(hostname: string): boolean {
+  return hostname.endsWith(".netlify.app") || hostname.endsWith(".github.io");
+}
+
 function apiBase(): string {
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    // Always proxy API through the client origin on Netlify (ignore VITE_API_URL).
+    if (isNetlifyLikeHost(host)) {
+      return window.location.origin;
+    }
+  }
   if (API_URL) return API_URL;
-  // Same-origin (Netlify /api/* proxy → Railway): avoids browser CORS blocks.
   return window.location.origin;
 }
 
 function uploadApiBase(): string {
-  if (API_URL) return API_URL;
   if (typeof window !== "undefined") {
     const host = window.location.hostname;
-    if (host.endsWith(".netlify.app") || host.endsWith(".github.io")) {
+    if (isNetlifyLikeHost(host)) {
       return DEFAULT_RAILWAY_API_URL;
     }
   }
+  if (API_URL) return API_URL;
   return window.location.origin;
 }
 

@@ -654,7 +654,12 @@ export default function App() {
       pending = null;
     }
     if (!pending || pending.paymentId !== paymentId) {
-      clearUrlQuery();
+      traceFlow(
+        "server_redirect",
+        "error",
+        "결제 복귀 정보가 일치하지 않습니다. 결제가 완료되었다면 업로드를 계속 시도합니다.",
+      );
+      void finishPostPayment();
       return;
     }
 

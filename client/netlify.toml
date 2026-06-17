@@ -2,6 +2,8 @@
   command = "npm run build"
   publish = "dist"
 
+# Do NOT set VITE_API_URL on Netlify. The client proxies /api/* to Railway via same-origin.
+
 # Small JSON API calls can be proxied, but the client now calls Railway directly
 # for uploads and payment flows to avoid Netlify timeout/body-size limits.
 [[redirects]]
