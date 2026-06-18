@@ -241,33 +241,7 @@ def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) ->
         return True
 
     if sql_path.name == "migrate_job_transcriber_review_status.sql":
-        with engine.begin() as conn:
-            column_type = conn.execute(
-                text(
-                    """
-                    SELECT COLUMN_TYPE
-                    FROM information_schema.COLUMNS
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'jobs'
-                      AND COLUMN_NAME = 'status'
-                    LIMIT 1
-                    """
-                )
-            ).scalar()
-            normalized = str(column_type or "").lower().replace(" ", "")
-            if normalized.startswith("varchar(40)"):
-                logger.info("Skipping migration; jobs.status is already VARCHAR(40)")
-                return True
-            conn.execute(
-                text(
-                    """
-                    ALTER TABLE jobs
-                      MODIFY COLUMN status VARCHAR(40) NOT NULL DEFAULT 'uploaded'
-                    """
-                )
-            )
-        logger.info("Railway-safe migration applied: %s", sql_path.name)
-        return True
+        return ensure_jobs_status_column(engine)
 
     if sql_path.name == "migrate_payment_records.sql":
         with engine.begin() as conn:
@@ -310,6 +284,39 @@ def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) ->
         return True
 
     return False
+
+
+def ensure_jobs_status_column(engine: Engine) -> bool:
+    try:
+        with engine.begin() as conn:
+            column_type = conn.execute(
+                text(
+                    """
+                    SELECT COLUMN_TYPE
+                    FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'jobs'
+                      AND COLUMN_NAME = 'status'
+                    LIMIT 1
+                    """
+                )
+            ).scalar()
+            normalized = str(column_type or "").lower().replace(" ", "")
+            if "varchar" in normalized:
+                return True
+            conn.execute(
+                text(
+                    """
+                    ALTER TABLE jobs
+                      MODIFY COLUMN status VARCHAR(40) NOT NULL DEFAULT 'uploaded'
+                    """
+                )
+            )
+        logger.info("Converted jobs.status to VARCHAR(40) for transcriber_review support")
+        return True
+    except Exception:
+        logger.exception("Failed to migrate jobs.status column")
+        return False
 
 
 def run_sql_migration(engine: Engine, sql_path: Path) -> None:

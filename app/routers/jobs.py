@@ -19,7 +19,7 @@ from app.models.admin_models import AdminUser, Client, Job, Member, Transcriber
 from app.db import ensure_db_initialized, get_db, get_engine
 from app.services.audio import remux_faststart, should_faststart
 from app.services.admin_events import publish_admin_event, stream_admin_events
-from app.services.database_migrate import run_sql_migration
+from app.services.database_migrate import ensure_jobs_status_column, run_sql_migration
 from app.services.database_reset import purge_all_data, reset_database_schema
 from app.services.project_store import get_project_record, list_project_jobs, list_projects, list_transcriber_projects
 from app.services.job_store import (
@@ -303,6 +303,15 @@ def _set_job_status_or_http_error(db: Session, job: Job, next_status: str, note:
         return set_job_status(db, job, next_status, note)
     except (DataError, DBAPIError) as exc:
         db.rollback()
+        logger.exception("Job status update failed for %s -> %s", job.job_id, next_status)
+        db_engine = get_engine()
+        if db_engine is not None and ensure_jobs_status_column(db_engine):
+            db.refresh(job)
+            try:
+                return set_job_status(db, job, next_status, note)
+            except (DataError, DBAPIError):
+                db.rollback()
+                logger.exception("Job status update retry failed for %s -> %s", job.job_id, next_status)
         raise HTTPException(
             status_code=409,
             detail=f"작업 상태({next_status})를 저장하지 못했습니다. 서버 DB 설정을 확인해 주세요.",
@@ -523,6 +532,23 @@ def admin_migrate_transcriber_profile(request: Request) -> dict:
     sql_path = Path(__file__).resolve().parents[2] / "scripts" / "migrate_transcriber_profile.sql"
     run_sql_migration(db_engine, sql_path)
     return {"migrated": True, "file": sql_path.name}
+
+
+@router.post("/admin/maintenance/migrate-job-status-column")
+def admin_migrate_job_status_column(request: Request) -> dict:
+    token = settings.maintenance_reset_token.strip()
+    if token and request.headers.get("X-Maintenance-Token") != token:
+        raise HTTPException(status_code=403, detail="Invalid maintenance token")
+    try:
+        ensure_db_initialized()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    db_engine = get_engine()
+    if db_engine is None:
+        raise HTTPException(status_code=503, detail="Database is not configured")
+    if not ensure_jobs_status_column(db_engine):
+        raise HTTPException(status_code=502, detail="jobs.status column migration failed")
+    return {"migrated": True, "column": "jobs.status"}
 
 
 def _validate_maintenance_request(request: Request, body: DatabaseResetRequest) -> None:

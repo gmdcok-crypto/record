@@ -1,7 +1,7 @@
 import asyncio
 import hashlib
 import logging
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -10,9 +10,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.db import SessionLocal, create_tables, get_engine, init_db
-from app.services.database_migrate import run_startup_migrations
-from app.services.database_reset import purge_all_data
+from app.db import SessionLocal, ensure_db_initialized
 from app.routers import jobs, member_auth, projects, transcribe, transcriber_auth, upload
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "client" / "dist"
@@ -43,13 +41,7 @@ def _bootstrap_database() -> None:
     if not settings.database_configured:
         return
     try:
-        init_db(settings.resolved_database_url)
-        create_tables()
-        db_engine = get_engine()
-        if db_engine is not None:
-            if settings.purge_db_on_startup.lower() in {"1", "true", "yes"}:
-                purge_all_data(db_engine)
-            run_startup_migrations(db_engine)
+        ensure_db_initialized()
     except Exception:
         logger.exception("Database startup tasks failed")
 
@@ -67,11 +59,8 @@ def _frontend_version(directory: Path) -> str | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    bootstrap_task = asyncio.create_task(asyncio.to_thread(_bootstrap_database))
+    await asyncio.to_thread(_bootstrap_database)
     yield
-    bootstrap_task.cancel()
-    with suppress(asyncio.CancelledError):
-        await bootstrap_task
 
 
 app = FastAPI(
