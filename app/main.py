@@ -44,9 +44,14 @@ def _bootstrap_database() -> None:
         return
     try:
         ensure_db_initialized()
-        db_engine = get_engine()
-        if db_engine is None:
-            return
+    except Exception:
+        logger.exception("Database initialization failed")
+
+    db_engine = get_engine()
+    if db_engine is None:
+        return
+
+    try:
         ensure_jobs_status_column(db_engine)
         if settings.purge_db_on_startup.lower() in {"1", "true", "yes"}:
             purge_all_data(db_engine)

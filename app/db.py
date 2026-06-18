@@ -1,13 +1,16 @@
+import logging
 from collections.abc import Generator
 from threading import Lock
 from typing import Optional
 
 from fastapi import HTTPException
 from sqlalchemy import create_engine
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 engine = None
 SessionLocal: Optional[sessionmaker[Session]] = None
@@ -34,7 +37,11 @@ def create_tables() -> None:
         return
     from app.models import admin_models  # noqa: F401
 
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+    except OperationalError as exc:
+        # Existing Railway/MySQL schemas often use BIGINT ids while create_all may emit INTEGER FKs.
+        logger.warning("Skipping metadata create_all; startup SQL migrations will apply schema: %s", exc)
 
 
 def ensure_db_initialized() -> None:

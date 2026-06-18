@@ -1,6 +1,6 @@
 from datetime import datetime, date
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, func
+from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -217,8 +217,8 @@ class JobInquiryMessage(Base):
 class MemberPushSubscription(Base):
     __tablename__ = "member_push_subscriptions"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    member_id: Mapped[int] = mapped_column(ForeignKey("members.id"), nullable=False, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    member_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("members.id"), nullable=False, index=True)
     endpoint: Mapped[str] = mapped_column(String(500), nullable=False, unique=True)
     p256dh_key: Mapped[str] = mapped_column(String(255), nullable=False)
     auth_key: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -231,8 +231,8 @@ class MemberPushSubscription(Base):
 class AdminPushSubscription(Base):
     __tablename__ = "admin_push_subscriptions"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    admin_user_id: Mapped[int] = mapped_column(ForeignKey("admin_users.id"), nullable=False, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    admin_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("admin_users.id"), nullable=False, index=True)
     endpoint: Mapped[str] = mapped_column(String(500), nullable=False, unique=True)
     p256dh_key: Mapped[str] = mapped_column(String(255), nullable=False)
     auth_key: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -245,8 +245,8 @@ class AdminPushSubscription(Base):
 class TranscriberPushSubscription(Base):
     __tablename__ = "transcriber_push_subscriptions"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    transcriber_id: Mapped[int] = mapped_column(ForeignKey("transcribers.id"), nullable=False, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    transcriber_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("transcribers.id"), nullable=False, index=True)
     endpoint: Mapped[str] = mapped_column(String(500), nullable=False, unique=True)
     p256dh_key: Mapped[str] = mapped_column(String(255), nullable=False)
     auth_key: Mapped[str] = mapped_column(String(255), nullable=False)
