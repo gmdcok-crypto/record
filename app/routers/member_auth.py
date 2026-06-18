@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Annotated
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-from urllib.request import Request, urlopen
+from urllib.request import Request as UrlRequest, urlopen
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -239,7 +239,7 @@ def _fetch_portone_json(path: str) -> dict:
     if not settings.portone_api_secret.strip():
         raise HTTPException(status_code=503, detail="포트원 API 설정이 완료되지 않았습니다.")
 
-    request = Request(
+    request = UrlRequest(
         f"https://api.portone.io{path}",
         headers={
             "Authorization": f"PortOne {settings.portone_api_secret.strip()}",
