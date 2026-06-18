@@ -78,12 +78,7 @@ import {
   playSegmentAudio,
   resolveSegmentEndMs,
 } from "./segmentAudio";
-import { isMobileLikeClient, shouldForceMobilePaymentRedirect } from "./uploadEnvironment";
-import {
-  clearMobilePrePaymentUpload,
-  readMobilePrePaymentUpload,
-  saveMobilePrePaymentUpload,
-} from "./prePaymentUpload";
+import { isMobileLikeClient } from "./uploadEnvironment";
 
 type Step = "idle" | "uploading" | "ready" | "error";
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -1093,30 +1088,17 @@ export default function App() {
     [refreshWorkspace, resetUploadUi, showNotice],
   );
 
-  const uploadFilesBeforePaymentRedirect = useCallback(
-    async (paymentId: string) => {
-      setUploadStatus("결제 화면으로 이동하기 전에 파일을 서버에 저장하는 중...");
-      const result = await uploadSelectedFilesToProject();
-      saveMobilePrePaymentUpload({
-        paymentId,
-        projectTitle: result.projectTitle,
-        fileCount: result.fileCount,
-        completedAt: Date.now(),
-      });
-      await clearPendingUploadSnapshot();
-      return result;
-    },
-    [uploadSelectedFilesToProject],
-  );
-
   const onUpload = useCallback(async () => {
     if (!selectedFiles.length) return;
-    if (readPortOnePaymentIdFromUrl() || window.localStorage.getItem(AUTO_UPLOAD_TRIGGER_KEY) === "1") {
-      finalizePaymentReturn();
-    }
+    const shouldFinalizePaymentReturn =
+      readPortOnePaymentIdFromUrl() != null ||
+      window.localStorage.getItem(AUTO_UPLOAD_TRIGGER_KEY) === "1";
 
     try {
       const result = await uploadSelectedFilesToProject();
+      if (shouldFinalizePaymentReturn) {
+        finalizePaymentReturn();
+      }
       await completeSuccessfulUpload(result);
     } catch (err) {
       const failureMessage = err instanceof Error ? err.message : "업로드 준비 중 오류가 발생했습니다.";
@@ -1152,20 +1134,6 @@ export default function App() {
     paymentFlowHandledRef.current = paymentId;
 
     const finishPostPayment = async () => {
-      const preUpload = readMobilePrePaymentUpload(paymentId);
-      if (preUpload) {
-        paymentFlowHandledRef.current = paymentId;
-        setUploadPaid(true);
-        finalizePaymentReturn();
-        clearMobilePrePaymentUpload();
-        await completeSuccessfulUpload({
-          projectTitle: preUpload.projectTitle,
-          fileCount: preUpload.fileCount,
-          uploadMethodLabel: "",
-        });
-        return;
-      }
-
       queueAutoUpload();
       const retryDelaysMs = [0, 400, 1000, 2000];
       let restoredCount = 0;
@@ -1195,7 +1163,6 @@ export default function App() {
     void finishPostPayment();
   }, [
     authStatus,
-    completeSuccessfulUpload,
     finalizePaymentReturn,
     queueAutoUpload,
     restorePendingUploadState,
@@ -1629,9 +1596,6 @@ export default function App() {
                     if (payload) {
                       try {
                         await persistPendingUpload();
-                        if (shouldForceMobilePaymentRedirect()) {
-                          await uploadFilesBeforePaymentRedirect(payload.paymentId);
-                        }
                       } catch (err) {
                         const message = err instanceof Error ? err.message : "파일 저장 실패";
                         throw new Error(message);

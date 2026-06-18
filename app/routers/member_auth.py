@@ -353,6 +353,53 @@ def _redirect_after_payment(
     return RedirectResponse(url=destination, status_code=302)
 
 
+def _fetch_portone_payment_with_retry(payment_id: str, *, attempts: int = 4, delay_sec: float = 0.6) -> dict:
+    last_payment: dict | None = None
+    last_error: HTTPException | None = None
+    for attempt in range(attempts):
+        try:
+            payment = _fetch_portone_json(f"/payments/{payment_id}")
+            last_payment = payment
+            if _is_portone_payment_paid(payment):
+                return payment
+        except HTTPException as exc:
+            last_error = exc
+            if attempt == attempts - 1:
+                raise
+        if attempt < attempts - 1:
+            time.sleep(delay_sec)
+    if last_payment is not None:
+        return last_payment
+    if last_error is not None:
+        raise last_error
+    return {}
+
+
+def _safe_payment_redirect(
+    request: Request,
+    *,
+    return_to: str,
+    payment_id: str,
+    confirmed: bool,
+    error: str | None = None,
+) -> RedirectResponse:
+    try:
+        return _redirect_after_payment(
+            request,
+            return_to=return_to,
+            payment_id=payment_id,
+            confirmed=confirmed,
+            error=error,
+        )
+    except Exception:
+        logger.exception("payment redirect response build failed payment_id=%s", payment_id)
+        fallback = settings.public_client_url.rstrip("/") + "/"
+        return RedirectResponse(
+            url=f"{fallback}?paymentId={payment_id}{'&payment_confirmed=1' if confirmed else ''}",
+            status_code=302,
+        )
+
+
 @router.get("/payments/redirect")
 def portone_payment_redirect(
     request: Request,
@@ -361,59 +408,57 @@ def portone_payment_redirect(
     return_to: str = Query(..., min_length=1),
     payment_id: str = Query(alias="paymentId", min_length=1),
 ) -> RedirectResponse:
+    paid_payment: dict | None = None
+
+    def redirect_failure(message: str) -> RedirectResponse:
+        if paid_payment is not None:
+            logger.warning(
+                "payment redirect failure ignored because PortOne is PAID payment_id=%s detail=%s",
+                payment_id,
+                message,
+            )
+            return _safe_payment_redirect(
+                request,
+                return_to=return_to,
+                payment_id=payment_id,
+                confirmed=True,
+            )
+        return _safe_payment_redirect(
+            request,
+            return_to=return_to,
+            payment_id=payment_id,
+            confirmed=False,
+            error=message,
+        )
+
     try:
         try:
             payload = decode_payment_prepare_token(state)
-        except jwt.InvalidTokenError:
-            return _redirect_after_payment(
-                request,
-                return_to=return_to,
-                payment_id=payment_id,
-                confirmed=False,
-                error="결제 세션이 만료되었거나 유효하지 않습니다.",
-            )
+        except (jwt.InvalidTokenError, RuntimeError):
+            return redirect_failure("결제 세션이 만료되었거나 유효하지 않습니다.")
 
         if str(payload.get("payment_id") or "") != payment_id:
-            return _redirect_after_payment(
-                request,
-                return_to=return_to,
-                payment_id=payment_id,
-                confirmed=False,
-                error="결제 정보가 일치하지 않습니다.",
-            )
-
-        member_id = int(payload["sub"])
-        member = get_member_by_id(db, member_id)
-        if member is None or not member.is_active:
-            return _redirect_after_payment(
-                request,
-                return_to=return_to,
-                payment_id=payment_id,
-                confirmed=False,
-                error="회원 정보를 확인할 수 없습니다.",
-            )
+            return redirect_failure("결제 정보가 일치하지 않습니다.")
 
         try:
-            payment = _fetch_portone_json(f"/payments/{payment_id}")
+            member_id = int(str(payload.get("sub") or "").strip())
+        except (TypeError, ValueError):
+            return redirect_failure("결제 세션 정보가 올바르지 않습니다.")
+
+        member = get_member_by_id(db, member_id)
+        if member is None or not member.is_active:
+            return redirect_failure("회원 정보를 확인할 수 없습니다.")
+
+        try:
+            payment = _fetch_portone_payment_with_retry(payment_id)
         except HTTPException as exc:
             logger.warning("payment redirect portone fetch failed payment_id=%s detail=%s", payment_id, exc.detail)
-            return _redirect_after_payment(
-                request,
-                return_to=return_to,
-                payment_id=payment_id,
-                confirmed=False,
-                error="결제 확인 중 오류가 발생했습니다.",
-            )
+            return redirect_failure("결제 확인 중 오류가 발생했습니다.")
 
         if not _is_portone_payment_paid(payment):
-            return _redirect_after_payment(
-                request,
-                return_to=return_to,
-                payment_id=payment_id,
-                confirmed=False,
-                error="결제가 아직 완료되지 않았습니다.",
-            )
+            return redirect_failure("결제가 아직 완료되지 않았습니다.")
 
+        paid_payment = payment
         try:
             _finalize_portone_payment(
                 db,
@@ -434,7 +479,7 @@ def portone_payment_redirect(
         except Exception:
             logger.exception("payment redirect finalize failed payment_id=%s (redirect continues)", payment_id)
 
-        return _redirect_after_payment(
+        return _safe_payment_redirect(
             request,
             return_to=return_to,
             payment_id=payment_id,
@@ -442,13 +487,18 @@ def portone_payment_redirect(
         )
     except Exception:
         logger.exception("payment redirect unexpected failure payment_id=%s", payment_id)
-        return _redirect_after_payment(
-            request,
-            return_to=return_to,
-            payment_id=payment_id,
-            confirmed=False,
-            error="결제 복귀 처리 중 오류가 발생했습니다.",
-        )
+        try:
+            payment = _fetch_portone_json(f"/payments/{payment_id}")
+            if _is_portone_payment_paid(payment):
+                return _safe_payment_redirect(
+                    request,
+                    return_to=return_to,
+                    payment_id=payment_id,
+                    confirmed=True,
+                )
+        except Exception:
+            logger.exception("payment redirect recovery fetch failed payment_id=%s", payment_id)
+        return redirect_failure("결제 복귀 처리 중 오류가 발생했습니다.")
 
 
 @router.post("/payments/complete")

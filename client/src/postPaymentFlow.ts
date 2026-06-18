@@ -118,6 +118,6 @@ export function resolvePaymentReturnFlags(): PaymentReturnFlags {
   return {
     paymentId: fromUrl.paymentId,
     paymentConfirmed: fromUrl.paymentConfirmed || stashed.paymentConfirmed,
-    paymentError: fromUrl.paymentError ?? stashed.paymentError,
+    paymentError: fromUrl.paymentConfirmed ? null : (fromUrl.paymentError ?? stashed.paymentError),
   };
 }
