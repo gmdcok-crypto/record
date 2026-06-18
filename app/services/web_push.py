@@ -393,6 +393,14 @@ def _admin_job_url(job: Job) -> str:
     return f"{base}{separator}job_id={job.job_id}"
 
 
+def _admin_members_url() -> str:
+    base = settings.public_admin_url.rstrip("/")
+    if not base:
+        return ""
+    separator = "&" if "?" in base else "?"
+    return f"{base}{separator}menu=members"
+
+
 def _transcriber_job_url(job: Job) -> str:
     base = settings.public_transcriber_url.rstrip("/")
     return f"{base}?job_id={job.job_id}" if base else ""
@@ -493,6 +501,28 @@ def send_admin_review_request_web_push(db: Session, *, admin_user: AdminUser, jo
             tag=f"admin-review-{job.job_id}",
             job_id=job.job_id,
             kind="admin_review_request",
+        ),
+    )
+
+
+def send_admin_member_signup_web_push(
+    db: Session,
+    *,
+    admin_user: AdminUser,
+    member_name: str,
+    member_email: str,
+    member_id: int,
+) -> int:
+    return send_web_push_to_admin(
+        db,
+        admin_user=admin_user,
+        payload=_payload(
+            title="신규 회원 가입",
+            body=f"{member_name} ({member_email}) 님이 가입했습니다.",
+            url=_admin_members_url(),
+            tag=f"admin-member-signup-{member_id}",
+            job_id=None,
+            kind="admin_member_signup",
         ),
     )
 

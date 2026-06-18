@@ -75,6 +75,7 @@ import {
   playSegmentAudio,
   resolveSegmentEndMs,
 } from "./segmentAudio";
+import { isMobileLikeClient } from "./uploadEnvironment";
 
 type Step = "idle" | "uploading" | "ready" | "error";
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -671,7 +672,12 @@ export default function App() {
     setEnablingPush(true);
     try {
       if (Notification.permission === "default") {
-        showNotice("info", "브라우저 상단 또는 주소창 옆의 알림 허용 창을 확인해 주세요.");
+        showNotice(
+          "info",
+          isMobileLikeClient()
+            ? "화면에 나타나는 알림 허용 요청을 눌러 주세요."
+            : "브라우저 상단 또는 주소창 옆의 알림 허용 창을 확인해 주세요.",
+        );
       }
       const result = await enableWebPush(memberProfile);
       const permission = await getNotificationPermissionState();

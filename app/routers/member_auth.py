@@ -11,12 +11,15 @@ import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
 from app.dependencies.member_auth import get_current_member
-from app.models.admin_models import Member
+from app.models.admin_models import AdminUser, Member
+from app.services.admin_events import publish_admin_event
+from app.services.job_store import DEFAULT_ADMIN_EMAIL
 from app.services.jwt_tokens import create_member_access_token, create_payment_prepare_token, decode_payment_prepare_token
 from app.services.job_store import record_payment_record
 from app.services.member_auth import (
@@ -27,7 +30,11 @@ from app.services.member_auth import (
     serialize_member,
     validate_email,
 )
-from app.services.web_push import deactivate_member_push_subscription, upsert_member_push_subscription
+from app.services.web_push import (
+    deactivate_member_push_subscription,
+    send_admin_member_signup_web_push,
+    upsert_member_push_subscription,
+)
 
 router = APIRouter(prefix="/api/member/auth", tags=["member-auth"])
 logger = logging.getLogger(__name__)
@@ -246,6 +253,28 @@ def check_email_available(
     return {"available": not taken, "email": normalized}
 
 
+def _notify_admins_member_signup(db: Session, member: Member) -> None:
+    publish_admin_event(
+        "member_created",
+        {"member_id": member.id, "name": member.name, "email": member.email},
+    )
+    admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
+    if admin is None:
+        return
+    try:
+        delivered = send_admin_member_signup_web_push(
+            db,
+            admin_user=admin,
+            member_name=member.name,
+            member_email=member.email,
+            member_id=member.id,
+        )
+        if delivered == 0:
+            logger.info("Admin member-signup web push delivered 0 for member %s", member.id)
+    except Exception:
+        logger.exception("Failed to send admin member-signup web push for member %s", member.id)
+
+
 @router.post("/signup", response_model=MemberAuthTokenResponse)
 def member_signup(body: MemberSignupRequest, db: Annotated[Session, Depends(get_db)]) -> MemberAuthTokenResponse:
     if not settings.jwt_configured:
@@ -262,6 +291,7 @@ def member_signup(body: MemberSignupRequest, db: Annotated[Session, Depends(get_
     except MemberAuthError as exc:
         raise _auth_error_to_http(exc) from exc
 
+    _notify_admins_member_signup(db, member)
     return _issue_token(member)
 
 

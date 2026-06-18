@@ -55,34 +55,21 @@ async function ensureActiveServiceWorkerRegistration(): Promise<ServiceWorkerReg
     throw new Error("이 브라우저에서는 웹푸시를 지원하지 않습니다.");
   }
 
-  let registration = await navigator.serviceWorker.getRegistration();
-  if (!registration) {
-    registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-  }
-
-  if (registration.active) {
-    return registration;
-  }
-
-  await withTimeout(
+  return withTimeout(
     navigator.serviceWorker.ready,
     SERVICE_WORKER_READY_TIMEOUT_MS,
     "알림 설정 준비 시간이 초과되었습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.",
   );
-
-  registration = (await navigator.serviceWorker.getRegistration()) ?? registration;
-  if (!registration.active) {
-    throw new Error("알림 설정에 필요한 준비가 끝나지 않았습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.");
-  }
-
-  return registration;
 }
 
 async function getPushRegistration(): Promise<ServiceWorkerRegistration | null> {
+  if (!("serviceWorker" in navigator)) return null;
+  const existing = await navigator.serviceWorker.getRegistration();
+  if (existing?.active) return existing;
   try {
-    return await ensureActiveServiceWorkerRegistration();
+    return await withTimeout(navigator.serviceWorker.ready, 5_000, "");
   } catch {
-    return null;
+    return existing ?? null;
   }
 }
 
@@ -118,6 +105,10 @@ export async function enableWebPush(member: MemberProfile): Promise<"enabled" | 
   const permissionState = await getNotificationPermissionState();
   if (permissionState === "unsupported") return "unsupported";
 
+  // Request permission before any network/SW wait so mobile browsers keep the tap gesture.
+  const permission = permissionState === "default" ? await Notification.requestPermission() : permissionState;
+  if (permission !== "granted") return "denied";
+
   const config = await fetchWebPushConfig();
   if (!config.enabled || !config.vapidPublicKey) return "disabled";
 
@@ -127,9 +118,6 @@ export async function enableWebPush(member: MemberProfile): Promise<"enabled" | 
   } catch (error) {
     throw error instanceof Error ? error : new Error("알림 설정에 필요한 준비가 끝나지 않았습니다.");
   }
-
-  const permission = permissionState === "default" ? await Notification.requestPermission() : permissionState;
-  if (permission !== "granted") return "denied";
 
   const existing = await registration.pushManager.getSubscription();
   const createdNewSubscription = !existing;

@@ -558,10 +558,13 @@ function App() {
         const data = await fetchAdminOverview();
         if (!alive) return;
         setOverview(data);
-        const queryJobId = new URLSearchParams(window.location.search).get("job_id");
+        const queryParams = new URLSearchParams(window.location.search);
+        const queryJobId = queryParams.get("job_id");
         if (queryJobId) {
           setActiveMenu("jobs");
           void openDetailModal(queryJobId);
+        } else if (queryParams.get("menu") === "members") {
+          setActiveMenu("members");
         }
       } catch (err) {
         if (!alive) return;
@@ -587,6 +590,10 @@ function App() {
           type?: string;
           payload?: Record<string, unknown>;
         };
+        if (payload.type === "member_created") {
+          const name = String(payload.payload?.name ?? "신규 회원");
+          notifyAdminEvent("신규 회원 가입", `${name} 님이 가입했습니다.`);
+        }
         if (payload.type === "job_inquiry_created" && payload.payload?.sender_role === "client") {
           notifyAdminEvent("의뢰인 문의 도착", "의뢰인이 관리자에게 새 문의를 남겼습니다.");
         }
@@ -618,8 +625,14 @@ function App() {
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
-    const handler = (event: MessageEvent<{ type?: string; payload?: { jobId?: string | null } }>) => {
+    const handler = (
+      event: MessageEvent<{ type?: string; payload?: { jobId?: string | null; kind?: string } }>,
+    ) => {
       if (event.data?.type !== "ADMIN_WEB_PUSH_NOTIFICATION_CLICK") return;
+      if (event.data?.payload?.kind === "admin_member_signup") {
+        setActiveMenu("members");
+        return;
+      }
       const jobId = event.data?.payload?.jobId;
       if (!jobId) return;
       setActiveMenu("jobs");
@@ -794,7 +807,7 @@ function App() {
         setActionNotice({
           kind: "success",
           title: "관리자 알림 등록 완료",
-          message: "이 브라우저에서 의뢰인 문의와 검토 요청을 웹푸시로 받습니다.",
+          message: "이 브라우저에서 신규 회원 가입, 의뢰인 문의, 검토 요청을 웹푸시로 받습니다.",
         });
         return;
       }
