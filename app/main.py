@@ -10,7 +10,9 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.db import SessionLocal, ensure_db_initialized
+from app.db import SessionLocal, ensure_db_initialized, get_engine
+from app.services.database_migrate import ensure_jobs_status_column, run_startup_migrations
+from app.services.database_reset import purge_all_data
 from app.routers import jobs, member_auth, projects, transcribe, transcriber_auth, upload
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "client" / "dist"
@@ -42,6 +44,13 @@ def _bootstrap_database() -> None:
         return
     try:
         ensure_db_initialized()
+        db_engine = get_engine()
+        if db_engine is None:
+            return
+        if settings.purge_db_on_startup.lower() in {"1", "true", "yes"}:
+            purge_all_data(db_engine)
+        run_startup_migrations(db_engine)
+        ensure_jobs_status_column(db_engine)
     except Exception:
         logger.exception("Database startup tasks failed")
 
@@ -88,6 +97,12 @@ app.include_router(projects.router)
 
 @app.get("/health", include_in_schema=False)
 def health() -> dict:
+    try:
+        ensure_db_initialized()
+    except Exception:
+        db_ready = False
+    else:
+        db_ready = SessionLocal is not None
     return {
         "status": "ok",
         "soniox_configured": bool(settings.soniox_api_key),
@@ -96,7 +111,7 @@ def health() -> dict:
         "speaker_diarization": settings.soniox_enable_speaker_diarization,
         "bucket": settings.r2_bucket_name,
         "database_configured": settings.database_configured,
-        "database_ready": SessionLocal is not None,
+        "database_ready": db_ready,
     }
 
 

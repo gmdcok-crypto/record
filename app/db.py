@@ -6,12 +6,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import settings
-from app.services.database_reset import purge_all_data
 
 engine = None
 SessionLocal: Optional[sessionmaker[Session]] = None
 _init_lock = Lock()
-_migrations_applied = False
 
 
 class Base(DeclarativeBase):
@@ -38,24 +36,16 @@ def create_tables() -> None:
 
 
 def ensure_db_initialized() -> None:
-    global engine, SessionLocal, _migrations_applied
-    if SessionLocal is not None and _migrations_applied:
+    global engine, SessionLocal
+    if SessionLocal is not None:
         return
     if not settings.database_configured:
         raise RuntimeError("Database is not configured")
     with _init_lock:
-        if SessionLocal is not None and _migrations_applied:
+        if SessionLocal is not None:
             return
         init_db(settings.resolved_database_url)
         create_tables()
-        if engine is not None and not _migrations_applied:
-            if settings.purge_db_on_startup.lower() in {"1", "true", "yes"}:
-                purge_all_data(engine)
-            from app.services.database_migrate import ensure_jobs_status_column, run_startup_migrations
-
-            run_startup_migrations(engine)
-            ensure_jobs_status_column(engine)
-            _migrations_applied = True
 
 
 def get_engine():

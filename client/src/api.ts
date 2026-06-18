@@ -249,7 +249,7 @@ export async function fetchProjects(includeFiles = true): Promise<ProjectSummary
   const res = await fetchWithRetry(`${apiBase()}/api/projects${query}`, { headers: memberAuthHeaders() });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(parseErrorDetail(err));
+    throw new Error(parseErrorDetail(err, res.status));
   }
   const data = (await res.json()) as { projects?: ProjectSummary[] };
   return data.projects || [];

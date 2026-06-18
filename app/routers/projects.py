@@ -1,4 +1,5 @@
 from datetime import datetime
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,6 +23,7 @@ from app.services.project_store import (
 )
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
+logger = logging.getLogger(__name__)
 
 
 class ProjectCreateRequest(BaseModel):
@@ -44,7 +46,11 @@ def get_projects(
     member: Annotated[Member | None, Depends(get_optional_current_member)] = None,
     include_files: bool = Query(default=False),
 ) -> dict:
-    return {"projects": list_projects(db, member=member, include_files=include_files)}
+    try:
+        return {"projects": list_projects(db, member=member, include_files=include_files)}
+    except Exception as exc:
+        logger.exception("Failed to list projects")
+        raise HTTPException(status_code=503, detail=f"프로젝트 목록 조회 실패: {exc}") from exc
 
 
 @router.post("")
