@@ -2,7 +2,9 @@ from collections.abc import Generator
 from threading import Lock
 from typing import Optional
 
+from fastapi import HTTPException
 from sqlalchemy import create_engine
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import settings
@@ -55,10 +57,16 @@ def get_engine():
 
 
 def get_db() -> Generator[Session, None, None]:
-    ensure_db_initialized()
+    try:
+        ensure_db_initialized()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="데이터베이스가 준비되지 않았습니다.") from exc
     if SessionLocal is None:
-        raise RuntimeError("Database is not configured")
-    db = SessionLocal()
+        raise HTTPException(status_code=503, detail="데이터베이스가 준비되지 않았습니다.")
+    try:
+        db = SessionLocal()
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=503, detail="데이터베이스 연결에 실패했습니다.") from exc
     try:
         yield db
     finally:

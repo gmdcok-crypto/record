@@ -3,6 +3,7 @@ from typing import Annotated
 import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -29,7 +30,11 @@ def get_optional_current_member(
     except (jwt.InvalidTokenError, KeyError, TypeError, ValueError):
         return None
 
-    member = get_member_by_id(db, member_id)
+    try:
+        member = get_member_by_id(db, member_id)
+    except SQLAlchemyError:
+        return None
+
     if member is None or not member.is_active:
         return None
 
@@ -52,7 +57,11 @@ def get_current_member(
     except (jwt.InvalidTokenError, KeyError, TypeError, ValueError):
         raise HTTPException(status_code=401, detail="Invalid or expired token") from None
 
-    member = get_member_by_id(db, member_id)
+    try:
+        member = get_member_by_id(db, member_id)
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=503, detail="회원 정보를 확인할 수 없습니다.") from exc
+
     if member is None or not member.is_active:
         raise HTTPException(status_code=401, detail="Member not found")
 

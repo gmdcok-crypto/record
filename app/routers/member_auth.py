@@ -114,17 +114,29 @@ def _append_query(url: str, params: dict[str, str]) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 
+def _coerce_payment_amount(value: object, *, fallback: int) -> int:
+    if isinstance(value, bool):
+        return fallback
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.isdigit():
+            return int(stripped)
+        try:
+            return int(float(stripped))
+        except ValueError:
+            return fallback
+    return fallback
+
+
 def _payment_total_amount(payment: dict, fallback: int = 0) -> int:
     amount = payment.get("amount")
     if isinstance(amount, dict):
         total = amount.get("total")
         if total is not None:
-            return int(total)
-    if isinstance(amount, (int, float)):
-        return int(amount)
-    if isinstance(amount, str) and amount.strip().isdigit():
-        return int(amount.strip())
-    return fallback
+            return _coerce_payment_amount(total, fallback=fallback)
+    return _coerce_payment_amount(amount, fallback=fallback)
 
 
 def _is_portone_payment_paid(payment: dict) -> bool:
@@ -501,6 +513,25 @@ def portone_payment_redirect(
         return redirect_failure("결제 복귀 처리 중 오류가 발생했습니다.")
 
 
+def _complete_portone_payment_response(
+    *,
+    body: PortOnePaymentCompleteRequest,
+    current: Member,
+    payment: dict,
+) -> dict:
+    if not _is_portone_payment_paid(payment):
+        raise HTTPException(status_code=409, detail="결제가 아직 완료되지 않았습니다.")
+
+    return {
+        "ok": True,
+        "payment_id": body.payment_id,
+        "amount": _payment_total_amount(payment, fallback=body.amount),
+        "order_name": str(payment.get("orderName") or "").strip() or body.order_name.strip() or body.payment_id,
+        "member_id": current.id,
+        "payment_record_pending": settings.payment_records_enabled,
+    }
+
+
 @router.post("/payments/complete")
 def complete_portone_payment(
     body: PortOnePaymentCompleteRequest,
@@ -538,19 +569,21 @@ def complete_portone_payment(
             current.id,
         )
 
-    if payment is None:
-        payment = _fetch_portone_json(f"/payments/{body.payment_id}")
-    if not _is_portone_payment_paid(payment):
-        raise HTTPException(status_code=409, detail="결제가 아직 완료되지 않았습니다.")
-
-    return {
-        "ok": True,
-        "payment_id": body.payment_id,
-        "amount": _payment_total_amount(payment, fallback=body.amount),
-        "order_name": str(payment.get("orderName") or "").strip() or body.order_name.strip() or body.payment_id,
-        "member_id": current.id,
-        "payment_record_pending": settings.payment_records_enabled,
-    }
+    try:
+        if payment is None:
+            payment = _fetch_portone_json(f"/payments/{body.payment_id}")
+        return _complete_portone_payment_response(body=body, current=current, payment=payment)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            "payment complete response build failed payment_id=%s member_id=%s",
+            body.payment_id,
+            current.id,
+        )
+        if payment is not None and _is_portone_payment_paid(payment):
+            return _complete_portone_payment_response(body=body, current=current, payment=payment)
+        raise HTTPException(status_code=503, detail="결제 확인 중 오류가 발생했습니다.") from None
 
 
 @router.post("/push-subscriptions")
