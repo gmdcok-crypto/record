@@ -30,15 +30,94 @@ export function formatStepError(stepId: PostPaymentStepId, message: string): str
   return `${label}\n${message}`;
 }
 
-export function readPaymentReturnFlags(): {
+const PENDING_PORTONE_PAYMENT_KEY = "pending_portone_payment";
+const POST_PAYMENT_RETURN_KEY = "post_payment_return";
+
+export type PaymentReturnFlags = {
   paymentId: string | null;
   paymentConfirmed: boolean;
   paymentError: string | null;
-} {
-  const params = new URLSearchParams(window.location.search);
+};
+
+function readPaymentReturnFlagsFromSearch(search: string): PaymentReturnFlags {
+  const params = new URLSearchParams(search);
   return {
     paymentId: params.get("paymentId"),
     paymentConfirmed: params.get("payment_confirmed") === "1",
     paymentError: params.get("payment_error"),
+  };
+}
+
+export function readPaymentReturnFlags(): PaymentReturnFlags {
+  return readPaymentReturnFlagsFromSearch(window.location.search);
+}
+
+export function stashPaymentReturnFlags(): void {
+  const flags = readPaymentReturnFlags();
+  if (!flags.paymentId) return;
+  try {
+    sessionStorage.setItem(POST_PAYMENT_RETURN_KEY, JSON.stringify(flags));
+  } catch {
+    // no-op
+  }
+}
+
+export function readStashedPaymentReturnFlags(): PaymentReturnFlags | null {
+  try {
+    const raw = sessionStorage.getItem(POST_PAYMENT_RETURN_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PaymentReturnFlags>;
+    if (!parsed.paymentId) return null;
+    return {
+      paymentId: parsed.paymentId,
+      paymentConfirmed: Boolean(parsed.paymentConfirmed),
+      paymentError: parsed.paymentError ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function clearStashedPaymentReturnFlags(): void {
+  try {
+    sessionStorage.removeItem(POST_PAYMENT_RETURN_KEY);
+  } catch {
+    // no-op
+  }
+}
+
+function isMobilePaymentClient(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+export function shouldResumePostPaymentUpload(flags: PaymentReturnFlags): boolean {
+  if (!flags.paymentId || flags.paymentError) return false;
+  if (flags.paymentConfirmed) return true;
+  // Mobile PortOne return often keeps only paymentId when PWA reloads or query params are trimmed.
+  if (isMobilePaymentClient()) return true;
+  try {
+    const raw = window.localStorage.getItem(PENDING_PORTONE_PAYMENT_KEY);
+    if (!raw) return false;
+    const pending = JSON.parse(raw) as { paymentId?: string };
+    return pending.paymentId === flags.paymentId;
+  } catch {
+    return false;
+  }
+}
+
+export function resolvePaymentReturnFlags(): PaymentReturnFlags {
+  const fromUrl = readPaymentReturnFlags();
+  const stashed = readStashedPaymentReturnFlags();
+  if (!fromUrl.paymentId) {
+    return stashed ?? fromUrl;
+  }
+  if (!stashed || stashed.paymentId !== fromUrl.paymentId) {
+    return fromUrl;
+  }
+  return {
+    paymentId: fromUrl.paymentId,
+    paymentConfirmed: fromUrl.paymentConfirmed || stashed.paymentConfirmed,
+    paymentError: fromUrl.paymentError ?? stashed.paymentError,
   };
 }

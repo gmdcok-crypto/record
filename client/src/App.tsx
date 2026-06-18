@@ -56,8 +56,11 @@ import {
   savePendingUploadSnapshot,
 } from "./pendingUploadStore";
 import {
+  clearStashedPaymentReturnFlags,
   formatStepError,
-  readPaymentReturnFlags,
+  resolvePaymentReturnFlags,
+  shouldResumePostPaymentUpload,
+  stashPaymentReturnFlags,
   type PostPaymentStepId,
 } from "./postPaymentFlow";
 import SegmentPlaybackText from "./SegmentPlaybackText";
@@ -468,8 +471,9 @@ export default function App() {
 
   const restoreSession = async () => {
     bootstrapMemberTokenFromUrl();
+    stashPaymentReturnFlags();
     const token = localStorage.getItem(MEMBER_TOKEN_KEY);
-    const paymentReturn = readPaymentReturnFlags();
+    const paymentReturn = resolvePaymentReturnFlags();
     if (paymentReturn.paymentError) {
       showNotice("error", paymentReturn.paymentError);
       clearUrlQuery();
@@ -559,6 +563,7 @@ export default function App() {
 
   const finalizePaymentReturn = useCallback(() => {
     storePendingPayment(null);
+    clearStashedPaymentReturnFlags();
     if (readPortOnePaymentIdFromUrl()) {
       clearUrlQuery();
     }
@@ -596,14 +601,14 @@ export default function App() {
   }, [setAutoUploadPending]);
 
   useEffect(() => {
-    const paymentReturn = readPaymentReturnFlags();
+    const paymentReturn = resolvePaymentReturnFlags();
     const paymentId = paymentReturn.paymentId;
     if (!paymentId) return;
     if (paymentReturn.paymentError) {
       finalizePaymentReturn();
       return;
     }
-    if (!paymentReturn.paymentConfirmed) return;
+    if (!shouldResumePostPaymentUpload(paymentReturn)) return;
     if (authStatus === "loading") return;
     if (authStatus === "unauthenticated" && !hasMemberSession()) return;
     if (paymentFlowHandledRef.current === paymentId) return;
@@ -611,17 +616,24 @@ export default function App() {
 
     const finishPostPayment = async () => {
       queueAutoUpload();
-      const restoredCount = await restorePendingUploadState();
+      let restoredCount = await restorePendingUploadState();
+      if (!restoredCount) {
+        // iOS PWA can delay IndexedDB readiness right after an external payment redirect.
+        await new Promise((resolve) => window.setTimeout(resolve, 400));
+        restoredCount = await restorePendingUploadState();
+      }
       if (!restoredCount) {
         showStepError(
           "restore_files",
           "업로드할 파일 정보를 불러오지 못했습니다. 결제가 완료되었다면 같은 파일을 다시 선택해 업로드를 눌러 주세요.",
         );
+        setAutoUploadPending(false);
+        paymentFlowHandledRef.current = null;
       }
     };
 
     void finishPostPayment();
-  }, [authStatus, finalizePaymentReturn, queueAutoUpload, restorePendingUploadState, showStepError]);
+  }, [authStatus, queueAutoUpload, restorePendingUploadState, setAutoUploadPending, showStepError]);
 
   useEffect(() => {
     if (authStatus !== "authenticated" || selectedFiles.length > 0) return;
@@ -1137,9 +1149,6 @@ export default function App() {
   useEffect(() => {
     if (!uploadPaid || !selectedFiles.length || busy || autoUploadStartedRef.current) return;
     if (window.localStorage.getItem(AUTO_UPLOAD_TRIGGER_KEY) !== "1") return;
-    if (restoredBillingEntriesRef.current.length > 0 && uploadBillingEntries.length === 0) {
-      return;
-    }
     if (uploadProjectMode === "existing" && loadingWorkspace && !selectedUploadProjectId) {
       return;
     }
@@ -1155,7 +1164,6 @@ export default function App() {
     selectedFiles.length,
     selectedUploadProjectId,
     setAutoUploadPending,
-    uploadBillingEntries.length,
     uploadPaid,
     uploadProjectMode,
   ]);
