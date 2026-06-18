@@ -1195,23 +1195,19 @@ export default function App() {
   const onRequestTranscriberReview = async () => {
     if (!job) return;
     setSubmittingReview(true);
-    setSaving(true);
     try {
-      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-      await submitTranscriberReviewRequest(job.job_id, currentTranscript);
+      await submitTranscriberReviewRequest(job.job_id);
       setJob(null);
       setSegments([]);
       setSpeakerLabels({});
       setExtraSpeakerIds([]);
       setEditContext(null);
       setActiveTab("archive");
-      setChangeHistoryRefresh((value) => value + 1);
       showNotice("success", "검토 요청이 접수되었습니다. 속기사가 확인 후 PDF를 전달합니다.");
       await refreshWorkspace();
     } catch (err) {
       showNotice("error", err instanceof Error ? err.message : "검토 요청 실패");
     } finally {
-      setSaving(false);
       setSubmittingReview(false);
     }
   };

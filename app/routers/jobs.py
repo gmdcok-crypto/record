@@ -1751,36 +1751,21 @@ def submit_shared_review_request(
 @router.post("/{job_id}/transcriber-review-request")
 def submit_transcriber_review_request(
     job_id: str,
-    body: SaveTranscriptRequest,
     db: Annotated[Session, Depends(get_db)],
     member: Annotated[Member, Depends(get_current_member)],
 ) -> dict:
-    voice_key = get_voice_object_key(job_id)
-    if not voice_key:
-        raise HTTPException(status_code=404, detail="Voice file not found")
-
     job = get_job_record(db, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     _ensure_member_owns_job(db, member, job)
 
     try:
-        persist_job_transcript(
-            db,
-            job,
-            job_id,
-            body.transcript_json,
-            member=member,
-            save_kind=body.save_kind or "review_request",
-        )
         job = _set_job_status_or_http_error(db, job, "transcriber_review", "의뢰인 검토요청")
         _notify_client_status_change(db, job, note="속기사 검토가 요청되었습니다.")
         _maybe_notify_admin_review_request(db, job, note="의뢰인 검토요청")
         _maybe_notify_transcriber_client_request(db, job, note="의뢰인 검토요청")
     except HTTPException:
         raise
-    except ValueError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"검토 요청 처리 실패: {exc}") from exc
 

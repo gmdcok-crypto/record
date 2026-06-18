@@ -549,17 +549,10 @@ export async function fetchTranscriptChanges(jobId: string): Promise<TranscriptC
   return data.entries ?? [];
 }
 
-export async function submitTranscriberReviewRequest(
-  jobId: string,
-  transcript: TranscriptJson,
-): Promise<void> {
+export async function submitTranscriberReviewRequest(jobId: string): Promise<void> {
   const res = await fetchWithRetry(`${jobWriteApiBase()}/api/jobs/${jobId}/transcriber-review-request`, {
     method: "POST",
-    headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
-    body: JSON.stringify({
-      transcript_json: transcript,
-      save_kind: "review_request",
-    }),
+    headers: memberAuthHeaders(),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
