@@ -78,7 +78,12 @@ import {
   playSegmentAudio,
   resolveSegmentEndMs,
 } from "./segmentAudio";
-import { isMobileLikeClient } from "./uploadEnvironment";
+import { isMobileLikeClient, shouldForceMobilePaymentRedirect } from "./uploadEnvironment";
+import {
+  clearMobilePrePaymentUpload,
+  readMobilePrePaymentUpload,
+  saveMobilePrePaymentUpload,
+} from "./prePaymentUpload";
 
 type Step = "idle" | "uploading" | "ready" | "error";
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -601,41 +606,6 @@ export default function App() {
   }, [setAutoUploadPending]);
 
   useEffect(() => {
-    const paymentReturn = resolvePaymentReturnFlags();
-    const paymentId = paymentReturn.paymentId;
-    if (!paymentId) return;
-    if (paymentReturn.paymentError) {
-      finalizePaymentReturn();
-      return;
-    }
-    if (!shouldResumePostPaymentUpload(paymentReturn)) return;
-    if (authStatus === "loading") return;
-    if (authStatus === "unauthenticated" && !hasMemberSession()) return;
-    if (paymentFlowHandledRef.current === paymentId) return;
-    paymentFlowHandledRef.current = paymentId;
-
-    const finishPostPayment = async () => {
-      queueAutoUpload();
-      let restoredCount = await restorePendingUploadState();
-      if (!restoredCount) {
-        // iOS PWA can delay IndexedDB readiness right after an external payment redirect.
-        await new Promise((resolve) => window.setTimeout(resolve, 400));
-        restoredCount = await restorePendingUploadState();
-      }
-      if (!restoredCount) {
-        showStepError(
-          "restore_files",
-          "업로드할 파일 정보를 불러오지 못했습니다. 결제가 완료되었다면 같은 파일을 다시 선택해 업로드를 눌러 주세요.",
-        );
-        setAutoUploadPending(false);
-        paymentFlowHandledRef.current = null;
-      }
-    };
-
-    void finishPostPayment();
-  }, [authStatus, queueAutoUpload, restorePendingUploadState, setAutoUploadPending, showStepError]);
-
-  useEffect(() => {
     if (authStatus !== "authenticated" || selectedFiles.length > 0) return;
     if (window.localStorage.getItem(AUTO_UPLOAD_TRIGGER_KEY) !== "1") return;
     void restorePendingUploadState().catch(() => undefined);
@@ -1022,118 +992,215 @@ export default function App() {
     setDuplicateDialogMessage("");
   }, []);
 
+  const uploadSelectedFilesToProject = useCallback(async () => {
+    if (!selectedFiles.length) {
+      throw new Error("업로드할 파일이 없습니다.");
+    }
+
+    const filesToUpload = [...selectedFiles];
+    const duplicateFile = filesToUpload.find((file) => archivedFilenames.has(normalizeUploadFilename(file.name)));
+    if (duplicateFile) {
+      throw new Error(`이미 업로드된 파일입니다: ${duplicateFile.name}`);
+    }
+
+    let targetProjectId: string | undefined;
+    let uploadedProjectTitle = uploadProjectLabel;
+    const usedUploadMethods = new Set<string>();
+
+    if (uploadProjectMode === "existing") {
+      if (!selectedUploadProjectId) {
+        throw new Error("업로드할 프로젝트를 선택해 주세요.");
+      }
+      targetProjectId = selectedUploadProjectId;
+      uploadedProjectTitle = selectedUploadProject?.title || uploadProjectLabel || "프로젝트";
+    } else {
+      const title = newProjectTitle.trim();
+      if (!title) {
+        throw new Error("프로젝트 이름을 먼저 입력해 주세요.");
+      }
+      const created = await createProject(title);
+      targetProjectId = created.project_id;
+      uploadedProjectTitle = created.title;
+      setSelectedUploadProjectId(created.project_id);
+      setUploadProjectMode("existing");
+      setNewProjectTitle("");
+    }
+
+    for (let index = 0; index < filesToUpload.length; index += 1) {
+      const file = filesToUpload[index];
+      const billingEntry = uploadBillingEntries.find((entry) => entry.file === file || entry.key === fileIdentity(file));
+      const selectedSegments =
+        billingEntry?.mode === "segments"
+          ? billingEntry.segments.filter((segment) => segment.selected).map((segment) => ({
+              start_ms: segment.start_ms,
+              end_ms: segment.end_ms,
+              selected: segment.selected,
+            }))
+          : [];
+      setStep("uploading");
+      setUploadStatus(`"${uploadedProjectTitle}" 업로드 중 ${index + 1}/${filesToUpload.length}: ${file.name}`);
+      const uploadResult = await performUpload(file, targetProjectId, selectedSegments);
+      if (uploadResult?.upload_method) {
+        usedUploadMethods.add(uploadResult.upload_method);
+      }
+    }
+
+    const uploadMethodLabel =
+      usedUploadMethods.size === 0
+        ? ""
+        : usedUploadMethods.size === 1
+          ? `\n업로드 방식: ${usedUploadMethods.has("direct") ? "직접 업로드" : "서버 경유 업로드"}`
+          : "\n업로드 방식: 직접 업로드 + 서버 경유 업로드";
+
+    return {
+      projectTitle: uploadedProjectTitle,
+      fileCount: filesToUpload.length,
+      uploadMethodLabel,
+    };
+  }, [
+    archivedFilenames,
+    createProject,
+    fileIdentity,
+    newProjectTitle,
+    performUpload,
+    selectedFiles,
+    selectedUploadProject,
+    selectedUploadProjectId,
+    uploadBillingEntries,
+    uploadProjectLabel,
+    uploadProjectMode,
+  ]);
+
+  const completeSuccessfulUpload = useCallback(
+    async (result: { projectTitle: string; fileCount: number; uploadMethodLabel: string }) => {
+      try {
+        await refreshWorkspace();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "보관함 새로고침 실패";
+        showNotice(
+          "info",
+          formatStepError(
+            "refresh_workspace",
+            `파일 업로드는 완료되었지만 보관함 새로고침은 잠시 후 다시 시도합니다.\n${message}`,
+          ),
+        );
+      }
+      resetUploadUi(
+        `"${result.projectTitle}" 프로젝트에 ${result.fileCount}개 파일이 추가되었습니다. 관리자 배정 후 속기사가 녹취록을 작성합니다.${result.uploadMethodLabel}`,
+      );
+      setActiveTab("archive");
+    },
+    [refreshWorkspace, resetUploadUi, showNotice],
+  );
+
+  const uploadFilesBeforePaymentRedirect = useCallback(
+    async (paymentId: string) => {
+      setUploadStatus("결제 화면으로 이동하기 전에 파일을 서버에 저장하는 중...");
+      const result = await uploadSelectedFilesToProject();
+      saveMobilePrePaymentUpload({
+        paymentId,
+        projectTitle: result.projectTitle,
+        fileCount: result.fileCount,
+        completedAt: Date.now(),
+      });
+      await clearPendingUploadSnapshot();
+      return result;
+    },
+    [uploadSelectedFilesToProject],
+  );
+
   const onUpload = useCallback(async () => {
     if (!selectedFiles.length) return;
     if (readPortOnePaymentIdFromUrl() || window.localStorage.getItem(AUTO_UPLOAD_TRIGGER_KEY) === "1") {
       finalizePaymentReturn();
     }
-    const filesToUpload = [...selectedFiles];
-    let uploadStarted = false;
-
-    const duplicateFile = filesToUpload.find((file) => archivedFilenames.has(normalizeUploadFilename(file.name)));
-    if (duplicateFile) {
-      openDuplicateDialog(`이미 업로드된 파일입니다: ${duplicateFile.name}`);
-      return;
-    }
 
     try {
-      let targetProjectId: string | undefined;
-      let uploadedProjectTitle = uploadProjectLabel;
-      const usedUploadMethods = new Set<string>();
-      if (uploadProjectMode === "existing") {
-        if (!selectedUploadProjectId) {
-          showStepError("create_project", "업로드할 프로젝트를 선택해 주세요.");
-          return;
-        }
-        targetProjectId = selectedUploadProjectId;
-        uploadedProjectTitle = selectedUploadProject?.title || uploadProjectLabel || "프로젝트";
-      } else {
-        const title = newProjectTitle.trim();
-        if (!title) {
-          showStepError("create_project", "프로젝트 이름을 먼저 입력해 주세요.");
-          return;
-        }
-        let created;
-        try {
-          created = await createProject(title);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : "프로젝트 생성 실패";
-          showStepError("create_project", message);
-          return;
-        }
-        targetProjectId = created.project_id;
-        uploadedProjectTitle = created.title;
-        setSelectedUploadProjectId(created.project_id);
-        setUploadProjectMode("existing");
-        setNewProjectTitle("");
-      }
-
-      for (let index = 0; index < filesToUpload.length; index += 1) {
-        uploadStarted = true;
-        const file = filesToUpload[index];
-        const billingEntry = uploadBillingEntries.find((entry) => entry.file === file || entry.key === fileIdentity(file));
-        const selectedSegments =
-          billingEntry?.mode === "segments"
-            ? billingEntry.segments.filter((segment) => segment.selected).map((segment) => ({
-                start_ms: segment.start_ms,
-                end_ms: segment.end_ms,
-                selected: segment.selected,
-              }))
-            : [];
-        setStep("uploading");
-        setUploadStatus(`"${uploadedProjectTitle}" 업로드 중 ${index + 1}/${filesToUpload.length}: ${file.name}`);
-        let uploadResult;
-        try {
-          uploadResult = await performUpload(file, targetProjectId, selectedSegments);
-        } catch {
-          return;
-        }
-        if (uploadResult?.upload_method) {
-          usedUploadMethods.add(uploadResult.upload_method);
-        }
-      }
-      try {
-        await refreshWorkspace();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "보관함 새로고침 실패";
-        showNotice("info", formatStepError("refresh_workspace", `파일 업로드는 완료되었지만 보관함 새로고침은 잠시 후 다시 시도합니다.\n${message}`));
-      }
-      const uploadMethodLabel =
-        usedUploadMethods.size === 0
-          ? ""
-          : usedUploadMethods.size === 1
-            ? `\n업로드 방식: ${usedUploadMethods.has("direct") ? "직접 업로드" : "서버 경유 업로드"}`
-            : "\n업로드 방식: 직접 업로드 + 서버 경유 업로드";
-      resetUploadUi(
-        `"${uploadedProjectTitle}" 프로젝트에 ${filesToUpload.length}개 파일이 추가되었습니다. 관리자 배정 후 속기사가 녹취록을 작성합니다.${uploadMethodLabel}`,
-      );
-      setActiveTab("archive");
+      const result = await uploadSelectedFilesToProject();
+      await completeSuccessfulUpload(result);
     } catch (err) {
-      if (!uploadStarted) {
-        const failureMessage = err instanceof Error ? err.message : "업로드 준비 중 오류가 발생했습니다.";
-        showNotice("error", failureMessage);
-        setStep("error");
-        setUploadStatus("");
+      const failureMessage = err instanceof Error ? err.message : "업로드 준비 중 오류가 발생했습니다.";
+      if (failureMessage.includes("이미 업로드된 파일입니다")) {
+        openDuplicateDialog(failureMessage);
+        return;
       }
+      showStepError("upload_voice", failureMessage);
+      setStep("error");
+      setUploadStatus("");
     }
   }, [
-    archivedFilenames,
-    createProject,
-    fileIdentity,
+    completeSuccessfulUpload,
     finalizePaymentReturn,
-    newProjectTitle,
     openDuplicateDialog,
-    performUpload,
-    refreshWorkspace,
-    resetUploadUi,
-    selectedFiles,
-    selectedUploadProject,
-    selectedUploadProjectId,
-    showNotice,
+    selectedFiles.length,
     showStepError,
-    uploadBillingEntries,
-    uploadProjectLabel,
-    uploadProjectMode,
+    uploadSelectedFilesToProject,
+  ]);
+
+  useEffect(() => {
+    const paymentReturn = resolvePaymentReturnFlags();
+    const paymentId = paymentReturn.paymentId;
+    if (!paymentId) return;
+    if (paymentReturn.paymentError) {
+      finalizePaymentReturn();
+      return;
+    }
+    if (!shouldResumePostPaymentUpload(paymentReturn)) return;
+    if (authStatus === "loading") return;
+    if (authStatus === "unauthenticated" && !hasMemberSession()) return;
+    if (paymentFlowHandledRef.current === paymentId) return;
+    paymentFlowHandledRef.current = paymentId;
+
+    const finishPostPayment = async () => {
+      const preUpload = readMobilePrePaymentUpload(paymentId);
+      if (preUpload) {
+        paymentFlowHandledRef.current = paymentId;
+        setUploadPaid(true);
+        finalizePaymentReturn();
+        clearMobilePrePaymentUpload();
+        await completeSuccessfulUpload({
+          projectTitle: preUpload.projectTitle,
+          fileCount: preUpload.fileCount,
+          uploadMethodLabel: "",
+        });
+        return;
+      }
+
+      queueAutoUpload();
+      const retryDelaysMs = [0, 400, 1000, 2000];
+      let restoredCount = 0;
+      for (const delayMs of retryDelaysMs) {
+        if (delayMs > 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+        }
+        restoredCount = await restorePendingUploadState();
+        if (restoredCount > 0) break;
+      }
+      if (!restoredCount) {
+        const standalone =
+          typeof window !== "undefined" &&
+          (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+        const hint = isMobileLikeClient() && !standalone
+          ? "\n홈 화면에 추가한 불판녹취 앱으로 다시 열어 주세요."
+          : "";
+        showStepError(
+          "restore_files",
+          `업로드할 파일 정보를 불러오지 못했습니다. 결제가 완료되었다면 같은 파일을 다시 선택해 업로드를 눌러 주세요.${hint}`,
+        );
+        setAutoUploadPending(false);
+        paymentFlowHandledRef.current = null;
+      }
+    };
+
+    void finishPostPayment();
+  }, [
+    authStatus,
+    completeSuccessfulUpload,
+    finalizePaymentReturn,
+    queueAutoUpload,
+    restorePendingUploadState,
+    setAutoUploadPending,
+    showStepError,
   ]);
 
   const handlePaymentConfirmed = useCallback(() => {
@@ -1562,6 +1629,9 @@ export default function App() {
                     if (payload) {
                       try {
                         await persistPendingUpload();
+                        if (shouldForceMobilePaymentRedirect()) {
+                          await uploadFilesBeforePaymentRedirect(payload.paymentId);
+                        }
                       } catch (err) {
                         const message = err instanceof Error ? err.message : "파일 저장 실패";
                         throw new Error(message);
