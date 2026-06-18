@@ -1,7 +1,7 @@
 import asyncio
 import hashlib
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -47,6 +47,7 @@ def _bootstrap_database() -> None:
         db_engine = get_engine()
         if db_engine is None:
             return
+        ensure_jobs_status_column(db_engine)
         if settings.purge_db_on_startup.lower() in {"1", "true", "yes"}:
             purge_all_data(db_engine)
         run_startup_migrations(db_engine)
@@ -68,8 +69,11 @@ def _frontend_version(directory: Path) -> str | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await asyncio.to_thread(_bootstrap_database)
+    bootstrap_task = asyncio.create_task(asyncio.to_thread(_bootstrap_database))
     yield
+    bootstrap_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await bootstrap_task
 
 
 app = FastAPI(
@@ -97,12 +101,7 @@ app.include_router(projects.router)
 
 @app.get("/health", include_in_schema=False)
 def health() -> dict:
-    try:
-        ensure_db_initialized()
-    except Exception:
-        db_ready = False
-    else:
-        db_ready = SessionLocal is not None
+    db_ready = SessionLocal is not None
     return {
         "status": "ok",
         "soniox_configured": bool(settings.soniox_api_key),
