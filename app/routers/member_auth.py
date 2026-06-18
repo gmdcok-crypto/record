@@ -86,8 +86,15 @@ class PortOnePaymentPrepareRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+DEFAULT_RAILWAY_API_URL = "https://record-production.up.railway.app"
+
+
 def _api_public_base() -> str:
-    return settings.public_api_url.strip().rstrip("/") or "https://record-production.up.railway.app"
+    raw = settings.public_api_url.strip().rstrip("/") or DEFAULT_RAILWAY_API_URL
+    # Payment redirect must hit Railway directly. Netlify /api/* uses a 200 rewrite that breaks 302.
+    if ".netlify.app" in raw or ".github.io" in raw:
+        return DEFAULT_RAILWAY_API_URL
+    return raw
 
 
 def _resolve_return_url(request: Request, return_to: str) -> str:
@@ -322,6 +329,30 @@ def prepare_portone_payment(
     return {"redirectUrl": redirect_url}
 
 
+def _payment_return_destination(request: Request, return_to: str) -> str:
+    target = (return_to or "/").strip() or "/"
+    if target.startswith("http://") or target.startswith("https://"):
+        return target
+    return _resolve_return_url(request, target)
+
+
+def _redirect_after_payment(
+    request: Request,
+    *,
+    return_to: str,
+    payment_id: str,
+    confirmed: bool,
+    error: str | None = None,
+) -> RedirectResponse:
+    params: dict[str, str] = {"paymentId": payment_id}
+    if confirmed:
+        params["payment_confirmed"] = "1"
+    if error:
+        params["payment_error"] = error
+    destination = _append_query(_payment_return_destination(request, return_to), params)
+    return RedirectResponse(url=destination, status_code=302)
+
+
 @router.get("/payments/redirect")
 def portone_payment_redirect(
     request: Request,
@@ -331,48 +362,93 @@ def portone_payment_redirect(
     payment_id: str = Query(alias="paymentId", min_length=1),
 ) -> RedirectResponse:
     try:
-        payload = decode_payment_prepare_token(state)
-    except jwt.InvalidTokenError as exc:
-        raise HTTPException(status_code=400, detail="결제 세션이 만료되었거나 유효하지 않습니다.") from exc
+        try:
+            payload = decode_payment_prepare_token(state)
+        except jwt.InvalidTokenError:
+            return _redirect_after_payment(
+                request,
+                return_to=return_to,
+                payment_id=payment_id,
+                confirmed=False,
+                error="결제 세션이 만료되었거나 유효하지 않습니다.",
+            )
 
-    if str(payload.get("payment_id") or "") != payment_id:
-        raise HTTPException(status_code=400, detail="결제 정보가 일치하지 않습니다.")
+        if str(payload.get("payment_id") or "") != payment_id:
+            return _redirect_after_payment(
+                request,
+                return_to=return_to,
+                payment_id=payment_id,
+                confirmed=False,
+                error="결제 정보가 일치하지 않습니다.",
+            )
 
-    member_id = int(payload["sub"])
-    member = get_member_by_id(db, member_id)
-    if member is None or not member.is_active:
-        raise HTTPException(status_code=401, detail="회원 정보를 확인할 수 없습니다.")
+        member_id = int(payload["sub"])
+        member = get_member_by_id(db, member_id)
+        if member is None or not member.is_active:
+            return _redirect_after_payment(
+                request,
+                return_to=return_to,
+                payment_id=payment_id,
+                confirmed=False,
+                error="회원 정보를 확인할 수 없습니다.",
+            )
 
-    payment = _fetch_portone_json(f"/payments/{payment_id}")
-    if not _is_portone_payment_paid(payment):
-        raise HTTPException(status_code=409, detail="결제가 아직 완료되지 않았습니다.")
+        try:
+            payment = _fetch_portone_json(f"/payments/{payment_id}")
+        except HTTPException as exc:
+            logger.warning("payment redirect portone fetch failed payment_id=%s detail=%s", payment_id, exc.detail)
+            return _redirect_after_payment(
+                request,
+                return_to=return_to,
+                payment_id=payment_id,
+                confirmed=False,
+                error="결제 확인 중 오류가 발생했습니다.",
+            )
 
-    try:
-        _finalize_portone_payment(
-            db,
-            member=member,
+        if not _is_portone_payment_paid(payment):
+            return _redirect_after_payment(
+                request,
+                return_to=return_to,
+                payment_id=payment_id,
+                confirmed=False,
+                error="결제가 아직 완료되지 않았습니다.",
+            )
+
+        try:
+            _finalize_portone_payment(
+                db,
+                member=member,
+                payment_id=payment_id,
+                expected_amount=int(payload.get("amount") or 0),
+                expected_order_name=str(payload.get("order_name") or ""),
+                payment=payment,
+            )
+        except HTTPException as exc:
+            if exc.status_code != 409:
+                logger.warning(
+                    "payment redirect finalize rejected payment_id=%s status=%s detail=%s",
+                    payment_id,
+                    exc.status_code,
+                    exc.detail,
+                )
+        except Exception:
+            logger.exception("payment redirect finalize failed payment_id=%s (redirect continues)", payment_id)
+
+        return _redirect_after_payment(
+            request,
+            return_to=return_to,
             payment_id=payment_id,
-            expected_amount=int(payload.get("amount") or 0),
-            expected_order_name=str(payload.get("order_name") or ""),
-            payment=payment,
-        )
-    except HTTPException as exc:
-        if exc.status_code == 409:
-            raise
-        logger.warning(
-            "payment redirect finalize rejected payment_id=%s status=%s detail=%s",
-            payment_id,
-            exc.status_code,
-            exc.detail,
+            confirmed=True,
         )
     except Exception:
-        logger.exception("payment redirect finalize failed payment_id=%s (redirect continues)", payment_id)
-
-    destination = _append_query(
-        return_to if return_to.startswith("http://") or return_to.startswith("https://") else _resolve_return_url(request, return_to),
-        {"paymentId": payment_id, "payment_confirmed": "1"},
-    )
-    return RedirectResponse(url=destination, status_code=302)
+        logger.exception("payment redirect unexpected failure payment_id=%s", payment_id)
+        return _redirect_after_payment(
+            request,
+            return_to=return_to,
+            payment_id=payment_id,
+            confirmed=False,
+            error="결제 복귀 처리 중 오류가 발생했습니다.",
+        )
 
 
 @router.post("/payments/complete")

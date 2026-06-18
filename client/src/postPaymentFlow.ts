@@ -30,10 +30,15 @@ export function formatStepError(stepId: PostPaymentStepId, message: string): str
   return `${label}\n${message}`;
 }
 
-export function readPaymentReturnFlags(): { paymentId: string | null; paymentConfirmed: boolean } {
+export function readPaymentReturnFlags(): {
+  paymentId: string | null;
+  paymentConfirmed: boolean;
+  paymentError: string | null;
+} {
   const params = new URLSearchParams(window.location.search);
   return {
     paymentId: params.get("paymentId"),
     paymentConfirmed: params.get("payment_confirmed") === "1",
+    paymentError: params.get("payment_error"),
   };
 }

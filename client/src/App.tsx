@@ -470,6 +470,10 @@ export default function App() {
     bootstrapMemberTokenFromUrl();
     const token = localStorage.getItem(MEMBER_TOKEN_KEY);
     const paymentReturn = readPaymentReturnFlags();
+    if (paymentReturn.paymentError) {
+      showNotice("error", paymentReturn.paymentError);
+      clearUrlQuery();
+    }
     if (!token) {
       if (paymentReturn.paymentId) {
         showNotice("error", "로그인 토큰이 없습니다. 다시 로그인해 주세요.");
@@ -592,8 +596,14 @@ export default function App() {
   }, [setAutoUploadPending]);
 
   useEffect(() => {
-    const paymentId = readPortOnePaymentIdFromUrl();
+    const paymentReturn = readPaymentReturnFlags();
+    const paymentId = paymentReturn.paymentId;
     if (!paymentId) return;
+    if (paymentReturn.paymentError) {
+      finalizePaymentReturn();
+      return;
+    }
+    if (!paymentReturn.paymentConfirmed) return;
     if (authStatus === "loading") return;
     if (authStatus === "unauthenticated" && !hasMemberSession()) return;
     if (paymentFlowHandledRef.current === paymentId) return;
@@ -611,7 +621,7 @@ export default function App() {
     };
 
     void finishPostPayment();
-  }, [authStatus, queueAutoUpload, restorePendingUploadState, showStepError]);
+  }, [authStatus, finalizePaymentReturn, queueAutoUpload, restorePendingUploadState, showStepError]);
 
   useEffect(() => {
     if (authStatus !== "authenticated" || selectedFiles.length > 0) return;

@@ -133,6 +133,26 @@ function uploadApiBase(): string {
   return window.location.origin;
 }
 
+function paymentApiBase(): string {
+  // Mobile PortOne redirect must use Railway directly; Netlify /api/* rewrite breaks 302.
+  return uploadApiBase();
+}
+
+function normalizePaymentRedirectUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (isNetlifyLikeHost(parsed.hostname) && parsed.pathname.includes("/payments/redirect")) {
+      const railway = new URL(DEFAULT_RAILWAY_API_URL);
+      parsed.protocol = railway.protocol;
+      parsed.hostname = railway.hostname;
+      return parsed.toString();
+    }
+  } catch {
+    // ignore malformed URLs
+  }
+  return url;
+}
+
 export function createAdminEventsSource(): EventSource {
   return new EventSource(`${apiBase()}/api/jobs/admin/events`);
 }
@@ -818,7 +838,7 @@ export async function preparePortOnePayment(input: {
   let res: Response;
   try {
     res = await fetchWithRetry(
-      `${apiBase()}/api/member/auth/payments/prepare`,
+      `${paymentApiBase()}/api/member/auth/payments/prepare`,
       {
         method: "POST",
         headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },
@@ -833,7 +853,7 @@ export async function preparePortOnePayment(input: {
   if (!res.ok || !data.redirectUrl) {
     throw new Error(parseErrorDetail(data));
   }
-  return { redirectUrl: data.redirectUrl };
+  return { redirectUrl: normalizePaymentRedirectUrl(data.redirectUrl) };
 }
 
 export async function completePortOnePayment(input: {
@@ -844,7 +864,7 @@ export async function completePortOnePayment(input: {
   let res: Response;
   try {
     res = await fetchWithRetry(
-      `${apiBase()}/api/member/auth/payments/complete`,
+      `${paymentApiBase()}/api/member/auth/payments/complete`,
       {
         method: "POST",
         headers: { ...memberAuthHeaders(), "Content-Type": "application/json" },

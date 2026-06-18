@@ -15,6 +15,13 @@
   status = 200
   force = true
 
+# Mobile PortOne return must follow Railway 302; Netlify 200 rewrite would show Internal Server Error.
+[[redirects]]
+  from = "/api/member/auth/payments/redirect"
+  to = "https://record-production.up.railway.app/api/member/auth/payments/redirect"
+  status = 302
+  force = true
+
 [[redirects]]
   from = "/api/*"
   to = "https://record-production.up.railway.app/api/:splat"
