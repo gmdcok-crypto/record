@@ -32,6 +32,7 @@ import {
 } from "./webPush";
 import { canAccessMenu, defaultMenuForRole } from "./permissions";
 import { formatKstDateTime, formatKstDateTimeCompact } from "./formatKstDateTime";
+import { isMobileLikeAdmin } from "./mobileEnvironment";
 
 type AuthStatus = "loading" | "guest" | "authed";
 
@@ -842,6 +843,16 @@ function App() {
   const enableAdminPushNotifications = async () => {
     setAdminPushLoading(true);
     try {
+      if (typeof Notification !== "undefined" && Notification.permission === "default") {
+        setActionNotice({
+          kind: "info",
+          title: "알림 허용 필요",
+          message: isMobileLikeAdmin()
+            ? "화면에 나타나는 알림 허용 요청을 눌러 주세요."
+            : "브라우저 상단 또는 주소창 옆의 알림 허용 창을 확인해 주세요.",
+        });
+      }
+
       const result = await enableAdminWebPush();
       const permission = await getAdminNotificationPermissionState();
       setAdminPushPermission(permission);
@@ -1883,9 +1894,38 @@ function App() {
                 );
               })}
             </nav>
+
+            <div className="mt-4 rounded-xl border border-cyan-500/25 bg-cyan-500/10 p-3 lg:hidden">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300">모바일 알림</p>
+              <p className="mt-1.5 text-xs leading-5 text-cyan-50/90">
+                {adminPushRegistered
+                  ? "이 기기에서 신규 가입, 문의, 검토 요청 알림을 받고 있습니다."
+                  : "신규 가입, 의뢰인 문의, 검토 요청을 이 기기로 받으려면 알림을 허용해 주세요."}
+              </p>
+              <div className="mt-3 flex flex-col gap-2">
+                <span className="text-[11px] text-slate-400">
+                  상태:{" "}
+                  {adminPushRegistered
+                    ? "웹푸시 등록됨"
+                    : adminPushPermission === "denied"
+                      ? "권한 차단"
+                      : "미등록"}
+                </span>
+                {!adminPushRegistered ? (
+                  <button
+                    type="button"
+                    onClick={() => void enableAdminPushNotifications()}
+                    disabled={adminPushLoading || adminPushPermission === "unsupported"}
+                    className="w-full rounded-xl border border-cyan-500/40 bg-cyan-500/15 px-3 py-2.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {adminPushLoading ? "등록 중..." : "관리자 알림 받기"}
+                  </button>
+                ) : null}
+              </div>
+            </div>
           </aside>
 
-          <main className="space-y-4">
+          <main className={`space-y-4 ${!adminPushRegistered ? "pb-28 lg:pb-0" : ""}`}>
             <section className="rounded-2xl border border-slate-800 bg-slate-900/92 px-4 py-3">
               <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                 <div>
@@ -1938,7 +1978,7 @@ function App() {
                         </button>
                       </>
                     ) : null}
-                    <span className="rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1 text-[11px] text-slate-400">
+                    <span className="hidden rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1 text-[11px] text-slate-400 lg:inline">
                       관리자 알림: {adminPushRegistered ? "웹푸시 등록됨" : adminPushPermission === "denied" ? "권한 차단" : "미등록"}
                     </span>
                     {!adminPushRegistered ? (
@@ -1946,7 +1986,7 @@ function App() {
                         type="button"
                         onClick={() => void enableAdminPushNotifications()}
                         disabled={adminPushLoading || adminPushPermission === "unsupported"}
-                        className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-semibold text-cyan-300 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="hidden rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-semibold text-cyan-300 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50 lg:inline-flex"
                       >
                         {adminPushLoading ? "등록 중..." : "관리자 알림 받기"}
                       </button>
@@ -1966,6 +2006,24 @@ function App() {
           </main>
         </div>
       </div>
+
+      {!adminPushRegistered ? (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-cyan-500/30 bg-slate-950/95 p-3 backdrop-blur lg:hidden pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <button
+            type="button"
+            onClick={() => void enableAdminPushNotifications()}
+            disabled={adminPushLoading || adminPushPermission === "unsupported"}
+            className="w-full rounded-xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {adminPushLoading ? "알림 등록 중..." : "관리자 알림 받기"}
+          </button>
+          <p className="mt-2 text-center text-[11px] text-slate-400">
+            {adminPushPermission === "denied"
+              ? "알림이 차단되어 있습니다. 브라우저 설정에서 허용해 주세요."
+              : "신규 가입 · 문의 · 검토 요청을 이 기기로 받습니다."}
+          </p>
+        </div>
+      ) : null}
 
       {detailJobId ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm">
