@@ -16,6 +16,39 @@ from app.services.passwords import hash_password, verify_password
 logger = logging.getLogger(__name__)
 
 
+def _clean_bootstrap_password(raw: str) -> str:
+    value = raw.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        value = value[1:-1].strip()
+    return value
+
+
+def _is_default_admin_email(email: str) -> bool:
+    return normalize_email(email) == normalize_email(DEFAULT_ADMIN_EMAIL)
+
+
+def _prepare_default_admin(db: Session) -> AdminUser | None:
+    ensure_admin_bootstrap_password(db)
+    return get_admin_by_email(db, DEFAULT_ADMIN_EMAIL)
+
+
+def _sync_default_admin_password_if_needed(db: Session, admin: AdminUser, password: str) -> bool:
+    if admin.email != DEFAULT_ADMIN_EMAIL:
+        return False
+    bootstrap_password = _clean_bootstrap_password(settings.admin_bootstrap_password)
+    if not bootstrap_password or password != bootstrap_password:
+        return False
+    try:
+        validate_password(bootstrap_password)
+    except MemberAuthError:
+        return False
+    admin.password_hash = hash_password(bootstrap_password)
+    db.commit()
+    db.refresh(admin)
+    logger.info("Resynced default admin password from ADMIN_BOOTSTRAP_PASSWORD")
+    return True
+
+
 class AdminAuthError(ValueError):
     pass
 
@@ -53,12 +86,25 @@ def authenticate_admin(db: Session, *, email: str, password: str) -> AdminUser:
         raise AdminAuthError(str(exc)) from exc
 
     admin = get_admin_by_email(db, normalized_email)
+    if admin is None and _is_default_admin_email(normalized_email):
+        admin = _prepare_default_admin(db)
+
     if admin is None or not admin.is_active:
+        if _is_default_admin_email(normalized_email):
+            raise AdminAuthError(
+                "기본 관리자 계정을 만들 수 없습니다. ADMIN_BOOTSTRAP_PASSWORD(영문·숫자·특수문자 #?!@$%^&*- 포함, 8~16자)를 확인하세요."
+            )
         raise AdminAuthError("이메일 또는 비밀번호가 올바르지 않습니다.")
     if not admin.password_hash:
-        raise AdminAuthError("관리자 비밀번호가 아직 설정되지 않았습니다. ADMIN_BOOTSTRAP_PASSWORD를 확인하세요.")
+        if _is_default_admin_email(normalized_email):
+            admin = _prepare_default_admin(db) or admin
+        if not admin.password_hash:
+            raise AdminAuthError("관리자 비밀번호가 아직 설정되지 않았습니다. ADMIN_BOOTSTRAP_PASSWORD를 확인하세요.")
     if not verify_password(cleaned_password, admin.password_hash):
-        raise AdminAuthError("이메일 또는 비밀번호가 올바르지 않습니다.")
+        if not _sync_default_admin_password_if_needed(db, admin, cleaned_password):
+            raise AdminAuthError("이메일 또는 비밀번호가 올바르지 않습니다.")
+        if not verify_password(cleaned_password, admin.password_hash):
+            raise AdminAuthError("이메일 또는 비밀번호가 올바르지 않습니다.")
 
     admin.last_login_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
@@ -67,7 +113,7 @@ def authenticate_admin(db: Session, *, email: str, password: str) -> AdminUser:
 
 
 def ensure_admin_bootstrap_password(db: Session) -> None:
-    bootstrap_password = settings.admin_bootstrap_password.strip()
+    bootstrap_password = _clean_bootstrap_password(settings.admin_bootstrap_password)
     admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
     if admin is None:
         admin = AdminUser(email=DEFAULT_ADMIN_EMAIL, name=DEFAULT_ADMIN_NAME, role="owner")
