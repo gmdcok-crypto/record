@@ -74,6 +74,20 @@ def _bootstrap_database() -> None:
     except Exception:
         logger.exception("Database startup tasks failed")
 
+    if SessionLocal is None:
+        return
+
+    try:
+        db = SessionLocal()
+        try:
+            from app.services.admin_auth import ensure_admin_bootstrap_password
+
+            ensure_admin_bootstrap_password(db)
+        finally:
+            db.close()
+    except Exception:
+        logger.exception("Default admin bootstrap failed")
+
 
 def _frontend_version(directory: Path) -> str | None:
     index_path = directory / "index.html"
