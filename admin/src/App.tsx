@@ -7,21 +7,27 @@ import {
   assignProject,
   clearAdminSession,
   createTranscriber,
+  createAdminUser,
   createAdminEventsSource,
+  deactivateAdminUser,
   deleteTranscriber,
   deleteTranscriberGradeRate,
   fetchAdminMe,
   fetchAdminOverview,
+  fetchAdminUsers,
   revokeTranscriberAuth,
   fetchTranscriberGradeRates,
   fetchNextTranscriberCode,
   fetchJob,
   saveTranscriberGradeRate,
   recordSettlementPayment,
+  updateAdminUser,
   updateMemberActive,
   updateTranscriber,
+  type AdminAccount,
   type AdminOverview,
   type AdminProfile,
+  type AdminRole,
   type JobResponse,
   type TranscriberGradeRate as ApiTranscriberGradeRate,
 } from "./api";
@@ -30,7 +36,7 @@ import {
   getAdminNotificationPermissionState,
   hasRegisteredAdminPushSubscription,
 } from "./webPush";
-import { canAccessMenu, defaultMenuForRole } from "./permissions";
+import { ADMIN_ROLES, adminRoleLabel, canAccessMenu, defaultMenuForRole } from "./permissions";
 import { formatKstDateTime, formatKstDateTimeCompact } from "./formatKstDateTime";
 import { isMobileLikeAdmin } from "./mobileEnvironment";
 
@@ -44,7 +50,8 @@ type MenuKey =
   | "progress"
   | "sales"
   | "reports"
-  | "analytics";
+  | "analytics"
+  | "admins";
 
 type JobStatus =
   | "배정 대기"
@@ -165,6 +172,24 @@ const EMPTY_TRANSCRIBER_FORM: TranscriberForm = {
   accountNumber: "",
 };
 
+type AdminForm = {
+  email: string;
+  password: string;
+  name: string;
+  role: AdminRole;
+  phone: string;
+  isActive: boolean;
+};
+
+const EMPTY_ADMIN_FORM: AdminForm = {
+  email: "",
+  password: "",
+  name: "",
+  role: "operator",
+  phone: "",
+  isActive: true,
+};
+
 type SettlementItem = {
   id: number;
   month: string;
@@ -208,6 +233,7 @@ const MENU_BASE: Array<Omit<MenuItem, "count">> = [
   { key: "sales", label: "매출 관리" },
   { key: "reports", label: "집계" },
   { key: "analytics", label: "분석" },
+  { key: "admins", label: "관리자 관리" },
 ];
 
 function notifyAdminEvent(title: string, body: string) {
@@ -525,6 +551,12 @@ function App() {
   const [settlementPayTarget, setSettlementPayTarget] = useState<SettlementItem | null>(null);
   const [settlementPayAmount, setSettlementPayAmount] = useState("");
   const [settlementPayNote, setSettlementPayNote] = useState("");
+  const [adminAccounts, setAdminAccounts] = useState<AdminAccount[]>([]);
+  const [adminAccountsLoading, setAdminAccountsLoading] = useState(false);
+  const [adminQuery, setAdminQuery] = useState("");
+  const [adminModalOpen, setAdminModalOpen] = useState(false);
+  const [editingAdminId, setEditingAdminId] = useState<number | null>(null);
+  const [adminForm, setAdminForm] = useState<AdminForm>(EMPTY_ADMIN_FORM);
 
   useEffect(() => {
     void (async () => {
@@ -604,6 +636,8 @@ function App() {
           void openDetailModal(queryJobId);
         } else if (queryParams.get("menu") === "members") {
           setActiveMenu("members");
+        } else if (queryParams.get("menu") === "admins") {
+          setActiveMenu("admins");
         }
       } catch (err) {
         if (!alive) return;
@@ -668,6 +702,24 @@ function App() {
       setActiveMenu(defaultMenuForRole(adminProfile.role) as MenuKey);
     }
   }, [adminProfile, activeMenu]);
+
+  const loadAdminAccounts = async () => {
+    setAdminAccountsLoading(true);
+    try {
+      const rows = await fetchAdminUsers();
+      setAdminAccounts(rows);
+    } catch (err) {
+      console.error(err);
+      window.alert(err instanceof Error ? err.message : "관리자 목록을 불러올 수 없습니다.");
+    } finally {
+      setAdminAccountsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (authStatus !== "authed" || activeMenu !== "admins") return;
+    void loadAdminAccounts();
+  }, [authStatus, activeMenu]);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
@@ -1031,6 +1083,84 @@ function App() {
     setEditingTranscriberId(null);
   };
 
+  const openCreateAdminModal = () => {
+    setEditingAdminId(null);
+    setAdminForm(EMPTY_ADMIN_FORM);
+    setAdminModalOpen(true);
+  };
+
+  const openEditAdminModal = (account: AdminAccount) => {
+    setEditingAdminId(account.id);
+    setAdminForm({
+      email: account.email,
+      password: "",
+      name: account.name,
+      role: account.role,
+      phone: account.phone ?? "",
+      isActive: account.is_active,
+    });
+    setAdminModalOpen(true);
+  };
+
+  const closeAdminModal = () => {
+    setAdminModalOpen(false);
+    setEditingAdminId(null);
+    setAdminForm(EMPTY_ADMIN_FORM);
+  };
+
+  const saveAdminModal = async () => {
+    const name = adminForm.name.trim();
+    const email = adminForm.email.trim();
+    const phone = adminForm.phone.trim();
+    if (!name) {
+      window.alert("이름을 입력해 주세요.");
+      return;
+    }
+
+    if (editingAdminId === null) {
+      if (!email) {
+        window.alert("이메일을 입력해 주세요.");
+        return;
+      }
+      if (!adminForm.password.trim()) {
+        window.alert("비밀번호를 입력해 주세요.");
+        return;
+      }
+      await runAdminAction("관리자 계정이 추가되었습니다.", async () => {
+        await createAdminUser({
+          email,
+          password: adminForm.password,
+          name,
+          role: adminForm.role,
+          phone: phone || undefined,
+        });
+        await loadAdminAccounts();
+      });
+    } else {
+      await runAdminAction("관리자 계정이 수정되었습니다.", async () => {
+        await updateAdminUser(editingAdminId, {
+          name,
+          role: adminForm.role,
+          phone: phone || null,
+          is_active: adminForm.isActive,
+          ...(adminForm.password.trim() ? { password: adminForm.password } : {}),
+        });
+        await loadAdminAccounts();
+      });
+    }
+    closeAdminModal();
+  };
+
+  const deactivateAdminAccount = async (account: AdminAccount) => {
+    if (!window.confirm(`${account.name}(${account.email}) 관리자를 비활성화하시겠습니까?`)) {
+      return;
+    }
+    await runAdminAction("관리자 계정이 비활성화되었습니다.", async () => {
+      await deactivateAdminUser(account.id);
+      await loadAdminAccounts();
+    });
+  };
+
   const openGradeRateModal = async () => {
     try {
       const rates = await fetchTranscriberGradeRates();
@@ -1123,6 +1253,24 @@ function App() {
     if (!adminProfile) return [];
     return MENU_BASE.filter((item) => canAccessMenu(adminProfile.role, item.key));
   }, [adminProfile]);
+
+  const visibleAdminAccounts = useMemo(() => {
+    const q = adminQuery.trim().toLowerCase();
+    if (!q) return adminAccounts;
+    return adminAccounts.filter((account) => {
+      const haystack = [
+        String(account.id),
+        account.email,
+        account.name,
+        account.role,
+        account.role_label,
+        account.phone ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [adminAccounts, adminQuery]);
 
   const visibleMembers = useMemo(() => {
     const q = memberQuery.trim().toLowerCase();
@@ -1586,6 +1734,112 @@ function App() {
     </SectionCard>
   );
 
+  const renderAdmins = () => (
+    <SectionCard title="관리자 관리" subtitle="관리자 계정, 등급, 활성 상태를 관리합니다.">
+      <div className="mb-4 space-y-3">
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          <SummaryChip label="전체 관리자" value={`${adminAccounts.length}명`} tone="slate" />
+          <SummaryChip
+            label="활성"
+            value={`${adminAccounts.filter((account) => account.is_active).length}명`}
+            tone="emerald"
+          />
+          <SummaryChip
+            label="비활성"
+            value={`${adminAccounts.filter((account) => !account.is_active).length}명`}
+            tone="amber"
+          />
+          <SummaryChip label="검색 결과" value={`${visibleAdminAccounts.length}명`} tone="cyan" />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 p-2">
+          <input
+            value={adminQuery}
+            onChange={(event) => setAdminQuery(event.target.value)}
+            placeholder="이름, 이메일, 등급 검색"
+            className="w-full max-w-xl flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-cyan-400"
+          />
+          <button
+            type="button"
+            onClick={() => void openCreateAdminModal()}
+            className="rounded-md bg-cyan-500 px-3 py-2 text-[11px] font-semibold text-slate-950 transition hover:bg-cyan-400"
+          >
+            관리자 추가
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/70">
+        {adminAccountsLoading ? (
+          <div className="px-5 py-10 text-center text-sm text-slate-400">관리자 목록을 불러오는 중입니다.</div>
+        ) : visibleAdminAccounts.length === 0 ? (
+          <EmptyState message="표시할 관리자가 없습니다." />
+        ) : (
+          <table className="w-full min-w-[980px] border-collapse text-[13px]">
+            <thead>
+              <tr className="border-b border-slate-800 bg-slate-950 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                <th className="px-3 py-2">ID</th>
+                <th className="px-3 py-2">이름</th>
+                <th className="px-3 py-2">이메일</th>
+                <th className="px-3 py-2">등급</th>
+                <th className="px-3 py-2">휴대폰</th>
+                <th className="px-3 py-2">상태</th>
+                <th className="px-3 py-2">최근 로그인</th>
+                <th className="px-3 py-2">동작</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleAdminAccounts.map((account) => (
+                <tr key={account.id} className="border-t border-slate-800 bg-slate-950/40 text-slate-300 hover:bg-slate-900/50">
+                  <td className="px-3 py-2 font-mono text-[11px] text-slate-400">{account.id}</td>
+                  <td className="px-3 py-2 font-medium text-white">{account.name}</td>
+                  <td className="max-w-[220px] truncate px-3 py-2" title={account.email}>
+                    {account.email}
+                  </td>
+                  <td className="px-3 py-2">{account.role_label}</td>
+                  <td className="px-3 py-2">{account.phone || "-"}</td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ${
+                        account.is_active ? "bg-emerald-500/15 text-emerald-300" : "bg-slate-500/15 text-slate-400"
+                      }`}
+                    >
+                      {account.is_active ? "활성" : "비활성"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-slate-400">
+                    {account.last_login_at ? formatKstDateTime(account.last_login_at) : "-"}
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openEditAdminModal(account)}
+                        className="rounded-md border border-slate-700 px-2.5 py-1 text-[11px] font-medium text-slate-200"
+                      >
+                        수정
+                      </button>
+                      {account.is_active ? (
+                        <button
+                          type="button"
+                          onClick={() => void deactivateAdminAccount(account)}
+                          disabled={account.id === adminProfile?.id}
+                          className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          비활성화
+                        </button>
+                      ) : null}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </SectionCard>
+  );
+
   const renderTranscribers = () => (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/92 p-4 shadow-[0_10px_30px_rgba(2,6,23,0.28)]">
       <div className="mb-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -1833,6 +2087,8 @@ function App() {
         return renderReports();
       case "analytics":
         return renderAnalytics();
+      case "admins":
+        return renderAdmins();
       default:
         return renderDashboard();
     }
@@ -1945,6 +2201,8 @@ function App() {
                                   ? "매출 관리"
                                   : activeMenu === "reports"
                                     ? "집계"
+                                    : activeMenu === "admins"
+                                      ? "관리자 관리"
                                     : "분석"}
                   </h2>
                 </div>
@@ -1960,6 +2218,15 @@ function App() {
                     >
                       로그아웃
                     </button>
+                    {activeMenu === "admins" ? (
+                      <button
+                        type="button"
+                        onClick={() => void openCreateAdminModal()}
+                        className="rounded-md bg-cyan-500 px-3 py-1.5 text-[11px] font-semibold text-slate-950 transition hover:bg-cyan-400"
+                      >
+                        관리자 추가
+                      </button>
+                    ) : null}
                     {activeMenu === "transcribers" ? (
                       <>
                         <button
@@ -2393,6 +2660,130 @@ function App() {
                 </>
               );
             })()}
+          </div>
+        </div>
+      ) : null}
+
+      {adminModalOpen ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-2xl border border-slate-800 bg-slate-950 p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-300">관리자 관리</p>
+                <h3 className="mt-1 text-xl font-semibold text-white">
+                  {editingAdminId ? "관리자 수정" : "관리자 추가"}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={closeAdminModal}
+                className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300"
+              >
+                닫기
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label className={editingAdminId ? "md:col-span-2" : ""}>
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">이메일</span>
+                <input
+                  type="email"
+                  value={adminForm.email}
+                  onChange={(event) => setAdminForm((prev) => ({ ...prev, email: event.target.value }))}
+                  readOnly={editingAdminId !== null}
+                  placeholder="admin@example.com"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 read-only:text-slate-400"
+                />
+              </label>
+              {!editingAdminId ? (
+                <label>
+                  <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">비밀번호</span>
+                  <input
+                    type="password"
+                    value={adminForm.password}
+                    onChange={(event) => setAdminForm((prev) => ({ ...prev, password: event.target.value }))}
+                    placeholder="8~16자, 영문·숫자·특수문자"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+                  />
+                </label>
+              ) : null}
+              <label>
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">이름</span>
+                <input
+                  value={adminForm.name}
+                  onChange={(event) => setAdminForm((prev) => ({ ...prev, name: event.target.value }))}
+                  placeholder="이름"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">등급</span>
+                <select
+                  value={adminForm.role}
+                  onChange={(event) =>
+                    setAdminForm((prev) => ({ ...prev, role: event.target.value as AdminRole }))
+                  }
+                  disabled={editingAdminId === adminProfile?.id}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 disabled:opacity-50"
+                >
+                  {ADMIN_ROLES.map((role) => (
+                    <option key={role} value={role}>
+                      {adminRoleLabel(role)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">휴대폰</span>
+                <input
+                  value={adminForm.phone}
+                  onChange={(event) => setAdminForm((prev) => ({ ...prev, phone: event.target.value }))}
+                  placeholder="010-0000-0000"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+                />
+              </label>
+              {editingAdminId ? (
+                <label>
+                  <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">새 비밀번호</span>
+                  <input
+                    type="password"
+                    value={adminForm.password}
+                    onChange={(event) => setAdminForm((prev) => ({ ...prev, password: event.target.value }))}
+                    placeholder="변경 시에만 입력"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+                  />
+                </label>
+              ) : null}
+              {editingAdminId ? (
+                <label className="flex items-center gap-2 pt-6">
+                  <input
+                    type="checkbox"
+                    checked={adminForm.isActive}
+                    onChange={(event) => setAdminForm((prev) => ({ ...prev, isActive: event.target.checked }))}
+                    disabled={editingAdminId === adminProfile?.id}
+                    className="h-4 w-4 rounded border-slate-600 bg-slate-900"
+                  />
+                  <span className="text-sm text-slate-300">활성 계정</span>
+                </label>
+              ) : null}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeAdminModal}
+                className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveAdminModal()}
+                className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950"
+              >
+                저장
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

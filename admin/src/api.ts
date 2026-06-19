@@ -311,6 +311,79 @@ export async function fetchAdminMe(): Promise<AdminProfile | null> {
   }
 }
 
+export type AdminAccount = {
+  id: number;
+  email: string;
+  name: string;
+  role: AdminRole;
+  role_label: string;
+  phone: string | null;
+  is_active: boolean;
+  last_login_at: string | null;
+  created_at: string | null;
+};
+
+export async function fetchAdminUsers(): Promise<AdminAccount[]> {
+  const res = await adminFetch(`${apiBase()}/api/admin/users`);
+  if (!res.ok) {
+    throw await parseApiError(res, "관리자 목록을 불러올 수 없습니다");
+  }
+  const data = (await res.json()) as { admins?: AdminAccount[] };
+  return data.admins ?? [];
+}
+
+export async function createAdminUser(payload: {
+  email: string;
+  password: string;
+  name: string;
+  role: AdminRole;
+  phone?: string;
+}): Promise<AdminAccount> {
+  const res = await adminFetch(`${apiBase()}/api/admin/users`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "관리자 추가 실패");
+  }
+  const data = (await res.json()) as { admin: AdminAccount };
+  return data.admin;
+}
+
+export async function updateAdminUser(
+  adminId: number,
+  payload: {
+    name?: string;
+    role?: AdminRole;
+    phone?: string | null;
+    is_active?: boolean;
+    password?: string;
+  },
+): Promise<AdminAccount> {
+  const res = await adminFetch(`${apiBase()}/api/admin/users/${adminId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "관리자 수정 실패");
+  }
+  const data = (await res.json()) as { admin: AdminAccount };
+  return data.admin;
+}
+
+export async function deactivateAdminUser(adminId: number): Promise<AdminAccount> {
+  const res = await adminFetch(`${apiBase()}/api/admin/users/${adminId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "관리자 비활성화 실패");
+  }
+  const data = (await res.json()) as { admin: AdminAccount };
+  return data.admin;
+}
+
 async function parseApiError(res: Response, fallback: string): Promise<Error> {
   const contentType = res.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {

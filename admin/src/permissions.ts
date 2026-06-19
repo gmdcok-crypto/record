@@ -11,6 +11,8 @@ export type AdminMenuKey =
   | "analytics"
   | "admins";
 
+export const ADMIN_ROLES: AdminRole[] = ["owner", "manager", "operator", "accounting", "viewer"];
+
 export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
   owner: "최고관리자",
   manager: "운영관리자",
