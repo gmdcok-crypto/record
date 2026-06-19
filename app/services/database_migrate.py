@@ -284,6 +284,25 @@ def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) ->
         logger.info("Railway-safe migration applied: %s", sql_path.name)
         return True
 
+    if sql_path.name == "migrate_admin_auth.sql":
+        with engine.begin() as conn:
+            column_exists = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'admin_users'
+                      AND COLUMN_NAME = 'password_hash'
+                    LIMIT 1
+                    """
+                )
+            ).first()
+            if not column_exists:
+                conn.execute(text("ALTER TABLE admin_users ADD COLUMN password_hash VARCHAR(255) NULL AFTER phone"))
+        logger.info("Railway-safe migration applied: %s", sql_path.name)
+        return True
+
     if sql_path.name in {
         "migrate_member_push_subscriptions.sql",
         "migrate_admin_push_subscriptions.sql",

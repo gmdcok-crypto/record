@@ -2,7 +2,7 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class AdminLoginRequest(BaseModel):
-    email: EmailStr
+    email: str = Field(min_length=3, max_length=150)
     password: str = Field(min_length=8, max_length=16)
 
 
