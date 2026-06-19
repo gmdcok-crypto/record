@@ -120,7 +120,7 @@ def assign_project(
     project_id: str,
     body: ProjectAssignRequest,
     db: Annotated[Session, Depends(get_db)],
-    _admin: AdminAuth,
+    admin: AdminAuth,
 ) -> dict:
     project = get_project_record(db, project_id)
     if project is None:
@@ -134,6 +134,7 @@ def assign_project(
             job_ids=body.job_ids,
             note=body.note,
             reassign=body.reassign,
+            admin=admin,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

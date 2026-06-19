@@ -3,17 +3,12 @@ from sqlalchemy.orm import Session
 
 from app.models.admin_models import AdminUser, Job, JobInquiryMessage, Member, Transcriber
 from app.services.job_store import (
-    DEFAULT_ADMIN_EMAIL,
     get_or_create_client_for_member,
     transcriber_can_view_job_transcript,
 )
 
 THREAD_CLIENT_ADMIN = "client_admin"
 THREAD_TRANSCRIBER_ADMIN = "transcriber_admin"
-
-
-def _default_admin(db: Session) -> AdminUser | None:
-    return db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
 
 
 def can_access_inquiry_thread(
@@ -73,8 +68,7 @@ def create_job_inquiry_message(
     sender_name = admin.name if admin is not None else "운영관리자"
     sender_member_id = None
     sender_transcriber_id = None
-    default_admin = _default_admin(db)
-    sender_admin_id = admin.id if admin is not None else default_admin.id if default_admin is not None else None
+    sender_admin_id = admin.id if admin is not None else None
 
     if member is not None:
         sender_role = "client"

@@ -110,3 +110,28 @@ def require_admin_permission(permission: str):
 
 AdminAuth = Annotated[AdminUser, Depends(get_current_admin)]
 AdminEventAuth = Annotated[AdminUser, Depends(get_current_admin_from_query_or_bearer)]
+
+
+def get_optional_current_admin(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+    db: Annotated[Session, Depends(get_db)],
+) -> AdminUser | None:
+    if not settings.jwt_configured:
+        return None
+
+    raw_token = _resolve_admin_token(credentials, None)
+    if raw_token is None:
+        return None
+
+    try:
+        admin_id = _decode_admin_token(raw_token)
+    except (jwt.InvalidTokenError, KeyError, TypeError, ValueError):
+        return None
+
+    try:
+        return _load_active_admin(db, admin_id)
+    except SQLAlchemyError:
+        return None
+
+
+OptionalAdminAuth = Annotated[AdminUser | None, Depends(get_optional_current_admin)]

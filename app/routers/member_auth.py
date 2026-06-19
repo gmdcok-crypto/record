@@ -11,15 +11,13 @@ import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
 from app.dependencies.member_auth import get_current_member
-from app.models.admin_models import AdminUser, Member
+from app.models.admin_models import Member
 from app.services.admin_events import publish_admin_event
-from app.services.job_store import DEFAULT_ADMIN_EMAIL
 from app.services.jwt_tokens import create_member_access_token, create_payment_prepare_token, decode_payment_prepare_token
 from app.services.job_store import record_payment_record
 from app.services.member_auth import (
@@ -277,13 +275,9 @@ def _notify_admins_member_signup(db: Session, member: Member) -> None:
         "member_created",
         {"member_id": member.id, "name": member.name, "email": member.email},
     )
-    admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
-    if admin is None:
-        return
     try:
         delivered = send_admin_member_signup_web_push(
             db,
-            admin_user=admin,
             member_name=member.name,
             member_email=member.email,
             member_id=member.id,

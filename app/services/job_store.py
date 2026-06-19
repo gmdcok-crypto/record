@@ -292,7 +292,6 @@ def create_job_record(
         client = get_or_create_client_for_member(db, member)
     else:
         client = ensure_seed_data(db)
-    admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     due_at = now + timedelta(hours=24)
     title = transcript_json.get("filename") if transcript_json else None
@@ -311,7 +310,7 @@ def create_job_record(
         priority="normal",
         status="waiting_assignment",
         assigned_transcriber_id=None,
-        assigned_admin_id=admin.id if admin else None,
+        assigned_admin_id=None,
         r2_voice_key=voice_key,
         r2_transcript_key=transcript_key,
         selected_segments_json=selected_segments or None,
@@ -362,18 +361,20 @@ def assign_job(
     *,
     transcriber_code: str,
     note: str | None = None,
+    admin: AdminUser | None = None,
 ) -> Job:
     transcriber = db.scalar(select(Transcriber).where(Transcriber.transcriber_code == transcriber_code))
     if transcriber is None:
         raise ValueError("Transcriber not found")
 
-    admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
     previous_transcriber_id = job.assigned_transcriber_id
     previous_status = job.status
     assigned_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
     job.assigned_transcriber_id = transcriber.id
     job.assigned_at = assigned_at
+    if admin is not None:
+        job.assigned_admin_id = admin.id
     if job.status in {"uploaded", "waiting_assignment", "review_waiting", "transcriber_review"}:
         job.status = "assigned"
 
@@ -407,22 +408,31 @@ def assign_job(
     return job
 
 
-def set_job_status(db: Session, job: Job, next_status: str, note: str | None = None) -> Job:
+def set_job_status(
+    db: Session,
+    job: Job,
+    next_status: str,
+    note: str | None = None,
+    *,
+    admin: AdminUser | None = None,
+) -> Job:
     previous = job.status
     job.status = next_status
     if next_status == "final_done" and job.completed_at is None:
         job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
         if job.finalized_at is None:
             job.finalized_at = datetime.now(timezone.utc).replace(tzinfo=None)
-    db.add(
-        JobStatusLog(
-            job_id=job.job_id,
-            from_status=previous,
-            to_status=next_status,
-            change_note=note,
-            changed_by_transcriber_id=job.assigned_transcriber_id,
-        )
+    status_log = JobStatusLog(
+        job_id=job.job_id,
+        from_status=previous,
+        to_status=next_status,
+        change_note=note,
     )
+    if admin is not None:
+        status_log.changed_by_admin_id = admin.id
+    else:
+        status_log.changed_by_transcriber_id = job.assigned_transcriber_id
+    db.add(status_log)
     db.commit()
     _sync_transcriber_load(db, job.assigned_transcriber_id)
     db.refresh(job)
@@ -975,7 +985,14 @@ def sync_generated_settlements(db: Session) -> None:
     db.commit()
 
 
-def record_settlement_payment(db: Session, settlement: Settlement, amount: float, note: str | None = None) -> Settlement:
+def record_settlement_payment(
+    db: Session,
+    settlement: Settlement,
+    amount: float,
+    note: str | None = None,
+    *,
+    admin: AdminUser | None = None,
+) -> Settlement:
     if amount <= 0:
         raise ValueError("입금액은 0보다 커야 합니다.")
     for attempt in range(2):
@@ -990,6 +1007,9 @@ def record_settlement_payment(db: Session, settlement: Settlement, amount: float
             settlement.total_paid_amount = float(settlement.total_paid_amount or 0) + amount
             settlement.paid_at = payment.paid_at
             settlement.status = "paid" if settlement.total_paid_amount >= float(settlement.final_amount or 0) else "confirmed"
+            if admin is not None and settlement.confirmed_by_admin_id is None:
+                settlement.confirmed_at = payment.paid_at
+                settlement.confirmed_by_admin_id = admin.id
             db.commit()
             db.refresh(settlement)
             return settlement
@@ -1257,8 +1277,13 @@ def get_settlement_record(db: Session, settlement_id: int) -> Settlement | None:
     return db.scalar(select(Settlement).where(Settlement.id == settlement_id))
 
 
-def update_settlement_status(db: Session, settlement: Settlement, status: str) -> Settlement:
-    admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
+def update_settlement_status(
+    db: Session,
+    settlement: Settlement,
+    status: str,
+    *,
+    admin: AdminUser | None = None,
+) -> Settlement:
     settlement.status = status
     if status == "confirmed":
         settlement.confirmed_at = datetime.now(timezone.utc).replace(tzinfo=None)

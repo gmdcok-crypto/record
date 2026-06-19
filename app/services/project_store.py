@@ -4,7 +4,7 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from app.models.admin_models import Client, Job, Member, Project, Transcriber
+from app.models.admin_models import AdminUser, Client, Job, Member, Project, Transcriber
 from app.services.id_factory import generate_project_id
 from app.services.job_store import (
     DEFAULT_CLIENT_NAME,
@@ -408,6 +408,7 @@ def assign_project_jobs(
     job_ids: list[str] | None = None,
     note: str | None = None,
     reassign: bool = False,
+    admin: AdminUser | None = None,
 ) -> list[str]:
     transcriber = db.scalar(select(Transcriber).where(Transcriber.transcriber_code == transcriber_code))
     if transcriber is None:
@@ -436,7 +437,7 @@ def assign_project_jobs(
     for job in eligible:
         if job.assigned_transcriber_id == transcriber.id:
             continue
-        assign_job(db, job, transcriber_code=transcriber_code, note=assignment_note)
+        assign_job(db, job, transcriber_code=transcriber_code, note=assignment_note, admin=admin)
         assigned.append(job.job_id)
 
     if not assigned:

@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.dependencies.member_auth import get_current_member, get_optional_current_member
 from app.dependencies.transcriber_auth import get_current_transcriber, get_optional_current_transcriber
-from app.dependencies.admin_auth import AdminAuth, AdminEventAuth
+from app.dependencies.admin_auth import AdminAuth, AdminEventAuth, OptionalAdminAuth
 from app.models.admin_models import AdminUser, Client, Job, Member, Transcriber
 from app.db import ensure_db_initialized, get_db, get_engine
 from app.services.audio import remux_faststart, should_faststart
@@ -28,7 +28,6 @@ from app.services.job_store import (
     create_transcriber,
     delete_transcriber_grade_rate,
     dashboard_overview,
-    DEFAULT_ADMIN_EMAIL,
     generate_transcriber_code,
     delete_job_if_unassigned,
     delete_transcriber,
@@ -299,9 +298,16 @@ def _get_valid_share_or_404(db: Session, token: str):
     return share
 
 
-def _set_job_status_or_http_error(db: Session, job: Job, next_status: str, note: str | None = None) -> Job:
+def _set_job_status_or_http_error(
+    db: Session,
+    job: Job,
+    next_status: str,
+    note: str | None = None,
+    *,
+    admin: AdminUser | None = None,
+) -> Job:
     try:
-        return set_job_status(db, job, next_status, note)
+        return set_job_status(db, job, next_status, note, admin=admin)
     except (DataError, DBAPIError) as exc:
         db.rollback()
         logger.exception("Job status update failed for %s -> %s", job.job_id, next_status)
@@ -309,7 +315,7 @@ def _set_job_status_or_http_error(db: Session, job: Job, next_status: str, note:
         if db_engine is not None and ensure_jobs_status_column(db_engine):
             db.refresh(job)
             try:
-                return set_job_status(db, job, next_status, note)
+                return set_job_status(db, job, next_status, note, admin=admin)
             except (DataError, DBAPIError):
                 db.rollback()
                 logger.exception("Job status update retry failed for %s -> %s", job.job_id, next_status)
@@ -348,10 +354,6 @@ def _job_member(db: Session, job: Job) -> Member | None:
     return None
 
 
-def _default_admin_user(db: Session) -> AdminUser | None:
-    return db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
-
-
 def _notify_client_status_change(db: Session, job: Job, *, note: str | None = None) -> None:
     member = _job_member(db, job)
     if member is None:
@@ -384,16 +386,12 @@ def _notify_admin_inquiry(
     message: str,
     sender_role: str,
 ) -> None:
-    admin = _default_admin_user(db)
-    if admin is None:
-        return
     preview = " ".join((message or "").split())
     if len(preview) > 120:
         preview = preview[:119].rstrip() + "…"
     try:
         delivered = send_admin_inquiry_web_push(
             db,
-            admin_user=admin,
             job=job,
             sender_name=sender_name,
             message_preview=preview,
@@ -408,11 +406,8 @@ def _notify_admin_inquiry(
 def _maybe_notify_admin_review_request(db: Session, job: Job, *, note: str | None = None) -> None:
     if job.status not in {"review_waiting", "transcriber_review"}:
         return
-    admin = _default_admin_user(db)
-    if admin is None:
-        return
     try:
-        delivered = send_admin_review_request_web_push(db, admin_user=admin, job=job, note=note)
+        delivered = send_admin_review_request_web_push(db, job=job, note=note)
         if delivered == 0:
             logger.info("Admin review-request web push delivered 0 notifications for job %s", job.job_id)
     except Exception:
@@ -565,6 +560,7 @@ def admin_purge_data(
     request: Request,
     body: DatabaseResetRequest,
     db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
 ) -> dict:
     _validate_maintenance_request(request, body)
     purge_all_data(db.get_bind())
@@ -693,13 +689,13 @@ def admin_assign_job(
     job_id: str,
     body: JobAssignRequest,
     db: Annotated[Session, Depends(get_db)],
-    _admin: AdminAuth,
+    admin: AdminAuth,
 ) -> dict:
     job = get_job_record(db, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     try:
-        job = assign_job(db, job, transcriber_code=body.transcriber_code, note=body.note)
+        job = assign_job(db, job, transcriber_code=body.transcriber_code, note=body.note, admin=admin)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     publish_admin_event("job_assigned", {"job_id": job.job_id})
@@ -1064,12 +1060,12 @@ def admin_update_settlement(
     settlement_id: int,
     body: SettlementStatusUpdateRequest,
     db: Annotated[Session, Depends(get_db)],
-    _admin: AdminAuth,
+    admin: AdminAuth,
 ) -> dict:
     settlement = get_settlement_record(db, settlement_id)
     if settlement is None:
         raise HTTPException(status_code=404, detail="Settlement not found")
-    settlement = update_settlement_status(db, settlement, body.status)
+    settlement = update_settlement_status(db, settlement, body.status, admin=admin)
     publish_admin_event("settlement_updated", {"settlement_id": settlement.id})
     return {"id": settlement.id, "status": settlement.status}
 
@@ -1094,13 +1090,13 @@ def admin_record_settlement_payment(
     settlement_id: int,
     body: SettlementPaymentRequest,
     db: Annotated[Session, Depends(get_db)],
-    _admin: AdminAuth,
+    admin: AdminAuth,
 ) -> dict:
     settlement = get_settlement_record(db, settlement_id)
     if settlement is None:
         raise HTTPException(status_code=404, detail="Settlement not found")
     try:
-        settlement = record_settlement_payment(db, settlement, body.amount, body.note)
+        settlement = record_settlement_payment(db, settlement, body.amount, body.note, admin=admin)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     publish_admin_event("settlement_payment_recorded", {"settlement_id": settlement.id})
@@ -1254,7 +1250,7 @@ def transcriber_deliver_draft(
 def admin_ai_draft(
     job_id: str,
     db: Annotated[Session, Depends(get_db)],
-    _admin: AdminAuth,
+    admin: AdminAuth,
 ) -> dict:
     job = get_job_record(db, job_id)
     if job is None:
@@ -1272,7 +1268,7 @@ def admin_ai_draft(
 
     mark_transcript_saved(db, job, transcript_key, transcript_json)
     if job.status == "assigned":
-        job = set_job_status(db, job, "working", "관리자 AI 초벌 생성")
+        job = set_job_status(db, job, "working", "관리자 AI 초벌 생성", admin=admin)
     publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
 
     return {
@@ -1316,7 +1312,7 @@ def admin_deliver_draft(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Save failed: {exc}") from exc
 
-    job = set_job_status(db, job, "first_done", "관리자 초벌 전달")
+    job = set_job_status(db, job, "first_done", "관리자 초벌 전달", admin=admin)
     _notify_client_status_change(db, job, note="초벌본이 도착했습니다.")
     publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
 
@@ -1789,11 +1785,12 @@ def update_job_status(
     job_id: str,
     body: JobStatusUpdateRequest,
     db: Annotated[Session, Depends(get_db)],
+    admin: OptionalAdminAuth = None,
 ) -> dict:
     job = get_job_record(db, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    job = _set_job_status_or_http_error(db, job, body.status, body.note)
+    job = _set_job_status_or_http_error(db, job, body.status, body.note, admin=admin)
     _notify_client_status_change(db, job, note=body.note)
     _maybe_notify_admin_review_request(db, job, note=body.note)
     _maybe_notify_transcriber_client_request(db, job, note=body.note)

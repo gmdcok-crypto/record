@@ -465,20 +465,29 @@ def send_client_inquiry_web_push(db: Session, *, member: Member, job: Job, sende
     )
 
 
+def broadcast_admin_web_push(db: Session, payload: dict[str, Any]) -> int:
+    if not web_push_enabled():
+        return 0
+
+    delivered = 0
+    admins = db.scalars(select(AdminUser).where(AdminUser.is_active == 1)).all()
+    for admin in admins:
+        delivered += send_web_push_to_admin(db, admin_user=admin, payload=payload)
+    return delivered
+
+
 def send_admin_inquiry_web_push(
     db: Session,
     *,
-    admin_user: AdminUser,
     job: Job,
     sender_name: str,
     message_preview: str,
     sender_role: str,
 ) -> int:
     role_label = "의뢰인" if sender_role == "client" else "속기사" if sender_role == "transcriber" else "사용자"
-    return send_web_push_to_admin(
+    return broadcast_admin_web_push(
         db,
-        admin_user=admin_user,
-        payload=_payload(
+        _payload(
             title=f"{role_label} 문의 도착",
             body=f"{job.original_filename}: {sender_name} - {message_preview}",
             url=_admin_job_url(job),
@@ -489,12 +498,11 @@ def send_admin_inquiry_web_push(
     )
 
 
-def send_admin_review_request_web_push(db: Session, *, admin_user: AdminUser, job: Job, note: str | None = None) -> int:
+def send_admin_review_request_web_push(db: Session, *, job: Job, note: str | None = None) -> int:
     extra = f" {note.strip()}" if note and note.strip() else ""
-    return send_web_push_to_admin(
+    return broadcast_admin_web_push(
         db,
-        admin_user=admin_user,
-        payload=_payload(
+        _payload(
             title="의뢰인 검토 요청",
             body=f"{job.original_filename}: 속기사 재검토 요청이 접수되었습니다.{extra}",
             url=_admin_job_url(job),
@@ -508,15 +516,13 @@ def send_admin_review_request_web_push(db: Session, *, admin_user: AdminUser, jo
 def send_admin_member_signup_web_push(
     db: Session,
     *,
-    admin_user: AdminUser,
     member_name: str,
     member_email: str,
     member_id: int,
 ) -> int:
-    return send_web_push_to_admin(
+    return broadcast_admin_web_push(
         db,
-        admin_user=admin_user,
-        payload=_payload(
+        _payload(
             title="신규 회원 가입",
             body=f"{member_name} ({member_email}) 님이 가입했습니다.",
             url=_admin_members_url(),
