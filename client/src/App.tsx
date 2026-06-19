@@ -1000,7 +1000,6 @@ export default function App() {
 
     let targetProjectId: string | undefined;
     let uploadedProjectTitle = uploadProjectLabel;
-    const usedUploadMethods = new Set<string>();
 
     if (uploadProjectMode === "existing") {
       if (!selectedUploadProjectId) {
@@ -1034,23 +1033,12 @@ export default function App() {
           : [];
       setStep("uploading");
       setUploadStatus(`"${uploadedProjectTitle}" 업로드 중 ${index + 1}/${filesToUpload.length}: ${file.name}`);
-      const uploadResult = await performUpload(file, targetProjectId, selectedSegments);
-      if (uploadResult?.upload_method) {
-        usedUploadMethods.add(uploadResult.upload_method);
-      }
+      await performUpload(file, targetProjectId, selectedSegments);
     }
-
-    const uploadMethodLabel =
-      usedUploadMethods.size === 0
-        ? ""
-        : usedUploadMethods.size === 1
-          ? `\n업로드 방식: ${usedUploadMethods.has("direct") ? "직접 업로드" : "서버 경유 업로드"}`
-          : "\n업로드 방식: 직접 업로드 + 서버 경유 업로드";
 
     return {
       projectTitle: uploadedProjectTitle,
       fileCount: filesToUpload.length,
-      uploadMethodLabel,
     };
   }, [
     archivedFilenames,
@@ -1067,7 +1055,7 @@ export default function App() {
   ]);
 
   const completeSuccessfulUpload = useCallback(
-    async (result: { projectTitle: string; fileCount: number; uploadMethodLabel: string }) => {
+    async (result: { projectTitle: string; fileCount: number }) => {
       try {
         await refreshWorkspace();
       } catch (err) {
@@ -1081,7 +1069,7 @@ export default function App() {
         );
       }
       resetUploadUi(
-        `"${result.projectTitle}" 프로젝트에 ${result.fileCount}개 파일이 추가되었습니다. 관리자 배정 후 속기사가 녹취록을 작성합니다.${result.uploadMethodLabel}`,
+        `"${result.projectTitle}" 프로젝트에 ${result.fileCount}개 파일이 추가되었습니다. 관리자 배정 후 속기사가 녹취록을 작성합니다.`,
       );
       setActiveTab("archive");
     },

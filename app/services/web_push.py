@@ -533,6 +533,28 @@ def send_admin_member_signup_web_push(
     )
 
 
+def send_transcriber_assignment_web_push(
+    db: Session,
+    *,
+    transcriber: Transcriber,
+    job: Job,
+    note: str | None = None,
+) -> int:
+    extra = f" {note.strip()}" if note and note.strip() else ""
+    return send_web_push_to_transcriber(
+        db,
+        transcriber=transcriber,
+        payload=_payload(
+            title="새 작업 배정",
+            body=f"{job.original_filename}: 관리자가 작업을 배정했습니다.{extra}",
+            url=_transcriber_job_url(job),
+            tag=f"transcriber-assignment-{job.job_id}",
+            job_id=job.job_id,
+            kind="transcriber_assignment",
+        ),
+    )
+
+
 def send_transcriber_client_request_web_push(
     db: Session,
     *,

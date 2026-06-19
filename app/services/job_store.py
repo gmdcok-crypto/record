@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import date, datetime, timedelta, timezone
 
@@ -22,6 +23,10 @@ from app.models.admin_models import (
     TranscriberGradeRate,
     Transcriber,
 )
+
+from app.services.web_push import send_transcriber_assignment_web_push
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_ADMIN_EMAIL = "ops@bluecom.local"
 DEFAULT_ADMIN_NAME = "운영관리자"
@@ -405,6 +410,15 @@ def assign_job(
     _sync_transcriber_load(db, previous_transcriber_id)
     _sync_transcriber_load(db, transcriber.id)
     db.refresh(job)
+
+    if previous_transcriber_id != transcriber.id:
+        try:
+            delivered = send_transcriber_assignment_web_push(db, transcriber=transcriber, job=job, note=note)
+            if delivered == 0:
+                logger.info("Transcriber assignment web push delivered 0 notifications for job %s", job.job_id)
+        except Exception:
+            logger.exception("Failed to send transcriber assignment web push for job %s", job.job_id)
+
     return job
 
 
