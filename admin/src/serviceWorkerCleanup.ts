@@ -1,3 +1,10 @@
+function isStandaloneAdminHost(): boolean {
+  const host = window.location.hostname;
+  if (host === "localhost" || host === "127.0.0.1") return true;
+  if (host.endsWith(".netlify.app") || host.endsWith(".github.io")) return true;
+  return !window.location.pathname.startsWith("/admin/");
+}
+
 export async function clearStaleClientPwaServiceWorkers(): Promise<boolean> {
   if (!("serviceWorker" in navigator)) return false;
 
@@ -11,6 +18,13 @@ export async function clearStaleClientPwaServiceWorkers(): Promise<boolean> {
       "";
     const isClientPwaWorker = /\/sw\.js($|\?)/.test(script) || script.includes("workbox");
     if (isClientPwaWorker) {
+      removed = (await registration.unregister()) || removed;
+      continue;
+    }
+
+    const isWrongStandaloneAdminWorker =
+      isStandaloneAdminHost() && /\/admin\/admin-push-sw\.js($|\?)/.test(script);
+    if (isWrongStandaloneAdminWorker) {
       removed = (await registration.unregister()) || removed;
     }
   }

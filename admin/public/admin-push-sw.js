@@ -17,7 +17,8 @@ self.addEventListener("push", (event) => {
 
   const title = payload.title || "알림";
   const body = payload.body || "";
-  const url = payload.url || "/admin/";
+  const homeUrl = new URL(".", self.registration.scope).pathname;
+  const url = payload.url || homeUrl;
   const tag = payload.tag || undefined;
   const options = {
     body,
@@ -31,7 +32,8 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || "/admin/";
+  const homeUrl = new URL(".", self.registration.scope).pathname;
+  const targetUrl = event.notification.data?.url || homeUrl;
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
