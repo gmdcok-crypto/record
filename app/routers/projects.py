@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.dependencies.admin_auth import AdminAuth
 from app.dependencies.member_auth import get_optional_current_member
 from app.models.admin_models import Member
 from app.services.admin_events import publish_admin_event
@@ -119,6 +120,7 @@ def assign_project(
     project_id: str,
     body: ProjectAssignRequest,
     db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
 ) -> dict:
     project = get_project_record(db, project_id)
     if project is None:

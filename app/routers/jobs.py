@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.dependencies.member_auth import get_current_member, get_optional_current_member
 from app.dependencies.transcriber_auth import get_current_transcriber, get_optional_current_transcriber
+from app.dependencies.admin_auth import AdminAuth, AdminEventAuth
 from app.models.admin_models import AdminUser, Client, Job, Member, Transcriber
 from app.db import ensure_db_initialized, get_db, get_engine
 from app.services.audio import remux_faststart, should_faststart
@@ -587,7 +588,7 @@ def admin_reset_database(request: Request, body: DatabaseResetRequest) -> dict:
 
 
 @router.get("/admin/overview")
-def admin_overview(db: Annotated[Session, Depends(get_db)]) -> dict:
+def admin_overview(db: Annotated[Session, Depends(get_db)], _admin: AdminAuth) -> dict:
     try:
         return dashboard_overview(db)
     except Exception:
@@ -613,7 +614,7 @@ def admin_overview(db: Annotated[Session, Depends(get_db)]) -> dict:
 
 
 @router.get("/admin/events")
-def admin_events() -> StreamingResponse:
+def admin_events(_admin: AdminEventAuth) -> StreamingResponse:
     return StreamingResponse(
         stream_admin_events(),
         media_type="text/event-stream",
@@ -629,12 +630,10 @@ def admin_events() -> StreamingResponse:
 def register_admin_push_subscription(
     body: PushSubscriptionRequest,
     db: Annotated[Session, Depends(get_db)],
+    admin: AdminAuth,
 ) -> dict:
     if not body.endpoint.strip() or not body.keys.p256dh.strip() or not body.keys.auth.strip():
         raise HTTPException(status_code=400, detail="유효한 푸시 구독 정보가 필요합니다.")
-    admin = _default_admin_user(db)
-    if admin is None:
-        raise HTTPException(status_code=503, detail="기본 관리자 계정을 찾을 수 없습니다.")
     try:
         subscription = upsert_admin_push_subscription(
             db,
@@ -654,10 +653,8 @@ def register_admin_push_subscription(
 def unregister_admin_push_subscription(
     body: PushSubscriptionRequest,
     db: Annotated[Session, Depends(get_db)],
+    admin: AdminAuth,
 ) -> dict:
-    admin = _default_admin_user(db)
-    if admin is None:
-        return {"unregistered": True}
     try:
         deactivate_admin_push_subscription(db, endpoint=body.endpoint, admin_user=admin)
     except Exception as exc:
@@ -667,12 +664,12 @@ def unregister_admin_push_subscription(
 
 
 @router.get("/admin/transcribers")
-def admin_transcribers(db: Annotated[Session, Depends(get_db)]) -> dict:
+def admin_transcribers(db: Annotated[Session, Depends(get_db)], _admin: AdminAuth) -> dict:
     return {"transcribers": list_transcribers(db)}
 
 
 @router.get("/admin/members")
-def admin_members(db: Annotated[Session, Depends(get_db)]) -> dict:
+def admin_members(db: Annotated[Session, Depends(get_db)], _admin: AdminAuth) -> dict:
     return {"members": list_members_admin(db)}
 
 
@@ -681,6 +678,7 @@ def admin_update_member_active(
     member_id: int,
     body: MemberActiveUpdateRequest,
     db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
 ) -> dict:
     member = get_member_by_id(db, member_id)
     if member is None:
@@ -695,6 +693,7 @@ def admin_assign_job(
     job_id: str,
     body: JobAssignRequest,
     db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
 ) -> dict:
     job = get_job_record(db, job_id)
     if job is None:
@@ -711,6 +710,7 @@ def admin_assign_job(
 def admin_get_job(
     job_id: str,
     db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
 ) -> dict:
     voice_key = get_voice_object_key(job_id)
     if not voice_key:
@@ -823,6 +823,7 @@ def list_admin_job_inquiries(
     job_id: str,
     thread_type: str,
     db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
 ) -> dict:
     if thread_type not in {THREAD_CLIENT_ADMIN, THREAD_TRANSCRIBER_ADMIN}:
         raise HTTPException(status_code=404, detail="Thread not found")
@@ -838,13 +839,13 @@ def create_admin_job_inquiry(
     thread_type: str,
     body: JobInquiryMessageRequest,
     db: Annotated[Session, Depends(get_db)],
+    admin: AdminAuth,
 ) -> dict:
     if thread_type not in {THREAD_CLIENT_ADMIN, THREAD_TRANSCRIBER_ADMIN}:
         raise HTTPException(status_code=404, detail="Thread not found")
     job = get_job_record(db, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
     try:
         message = create_job_inquiry_message(db, job, thread_type, body.message, admin=admin)
     except ValueError as exc:
@@ -870,6 +871,7 @@ def admin_save_transcript(
     job_id: str,
     body: SaveTranscriptRequest,
     db: Annotated[Session, Depends(get_db)],
+    admin: AdminAuth,
 ) -> dict:
     voice_key = get_voice_object_key(job_id)
     if not voice_key:
@@ -879,7 +881,6 @@ def admin_save_transcript(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
     save_kind = body.save_kind or "draft"
 
     try:
@@ -901,7 +902,7 @@ def admin_save_transcript(
 
 
 @router.get("/admin/transcribers/next-code")
-def admin_next_transcriber_code(db: Annotated[Session, Depends(get_db)]) -> dict:
+def admin_next_transcriber_code(db: Annotated[Session, Depends(get_db)], _admin: AdminAuth) -> dict:
     return {"code": generate_transcriber_code(db)}
 
 
@@ -910,6 +911,7 @@ def admin_update_transcriber(
     transcriber_code: str,
     body: AdminTranscriberUpdateRequest,
     db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
 ) -> dict:
     transcriber = get_transcriber_by_code(db, transcriber_code)
     if transcriber is None:
@@ -947,6 +949,7 @@ def admin_update_transcriber(
 def admin_create_transcriber(
     body: AdminTranscriberCreateRequest,
     db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
 ) -> dict:
     try:
         transcriber = create_transcriber(
@@ -979,7 +982,7 @@ def admin_create_transcriber(
 
 
 @router.get("/admin/transcriber-grade-rates")
-def admin_list_transcriber_grade_rates(db: Annotated[Session, Depends(get_db)]) -> dict:
+def admin_list_transcriber_grade_rates(db: Annotated[Session, Depends(get_db)], _admin: AdminAuth) -> dict:
     return {"rates": list_transcriber_grade_rates(db)}
 
 
@@ -987,6 +990,7 @@ def admin_list_transcriber_grade_rates(db: Annotated[Session, Depends(get_db)]) 
 def admin_upsert_transcriber_grade_rate(
     body: TranscriberGradeRateRequest,
     db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
 ) -> dict:
     try:
         rate = upsert_transcriber_grade_rate(db, body.grade_level, body.per_minute_rate)
@@ -1006,6 +1010,7 @@ def admin_upsert_transcriber_grade_rate(
 def admin_delete_transcriber_grade_rate(
     rate_id: int,
     db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
 ) -> dict:
     try:
         delete_transcriber_grade_rate(db, rate_id)
@@ -1019,6 +1024,7 @@ def admin_delete_transcriber_grade_rate(
 def admin_revoke_transcriber_auth(
     transcriber_code: str,
     db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
 ) -> dict:
     transcriber = get_transcriber_by_code(db, transcriber_code)
     if transcriber is None:
@@ -1039,6 +1045,7 @@ def admin_revoke_transcriber_auth(
 def admin_delete_transcriber(
     transcriber_code: str,
     db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
 ) -> dict:
     transcriber = get_transcriber_by_code(db, transcriber_code)
     if transcriber is None:
@@ -1057,6 +1064,7 @@ def admin_update_settlement(
     settlement_id: int,
     body: SettlementStatusUpdateRequest,
     db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
 ) -> dict:
     settlement = get_settlement_record(db, settlement_id)
     if settlement is None:
@@ -1071,6 +1079,7 @@ def admin_update_invoice(
     invoice_id: int,
     body: InvoiceStatusUpdateRequest,
     db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
 ) -> dict:
     invoice = get_invoice_record(db, invoice_id)
     if invoice is None:
@@ -1085,6 +1094,7 @@ def admin_record_settlement_payment(
     settlement_id: int,
     body: SettlementPaymentRequest,
     db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
 ) -> dict:
     settlement = get_settlement_record(db, settlement_id)
     if settlement is None:
@@ -1244,6 +1254,7 @@ def transcriber_deliver_draft(
 def admin_ai_draft(
     job_id: str,
     db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
 ) -> dict:
     job = get_job_record(db, job_id)
     if job is None:
@@ -1279,6 +1290,7 @@ def admin_deliver_draft(
     job_id: str,
     body: SaveTranscriptRequest,
     db: Annotated[Session, Depends(get_db)],
+    admin: AdminAuth,
 ) -> dict:
     job = get_job_record(db, job_id)
     if job is None:
@@ -1289,8 +1301,6 @@ def admin_deliver_draft(
     voice_key = get_voice_object_key(job_id)
     if not voice_key:
         raise HTTPException(status_code=404, detail="Voice file not found")
-
-    admin = db.scalar(select(AdminUser).where(AdminUser.email == DEFAULT_ADMIN_EMAIL))
 
     try:
         transcript_key = persist_job_transcript(
@@ -1323,6 +1333,7 @@ def admin_deliver_draft(
 def admin_list_job_transcript_changes(
     job_id: str,
     db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
 ) -> dict:
     job = get_job_record(db, job_id)
     if job is None:

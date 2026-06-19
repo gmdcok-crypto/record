@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
   name VARCHAR(100) NOT NULL,
   role ENUM('owner', 'manager', 'operator', 'accounting', 'viewer') NOT NULL DEFAULT 'operator',
   phone VARCHAR(30) NULL,
+  password_hash VARCHAR(255) NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   last_login_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

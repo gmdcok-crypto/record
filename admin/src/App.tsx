@@ -1,13 +1,16 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 
 import ActionNoticeModal, { type ActionNotice } from "./ActionNoticeModal";
+import AdminLogin from "./AdminLogin";
 import AdminTranscriptEditor from "./AdminTranscriptEditor";
 import {
   assignProject,
+  clearAdminSession,
   createTranscriber,
   createAdminEventsSource,
   deleteTranscriber,
   deleteTranscriberGradeRate,
+  fetchAdminMe,
   fetchAdminOverview,
   revokeTranscriberAuth,
   fetchTranscriberGradeRates,
@@ -18,6 +21,7 @@ import {
   updateMemberActive,
   updateTranscriber,
   type AdminOverview,
+  type AdminProfile,
   type JobResponse,
   type TranscriberGradeRate as ApiTranscriberGradeRate,
 } from "./api";
@@ -26,7 +30,10 @@ import {
   getAdminNotificationPermissionState,
   hasRegisteredAdminPushSubscription,
 } from "./webPush";
+import { canAccessMenu, defaultMenuForRole } from "./permissions";
 import { formatKstDateTime, formatKstDateTimeCompact } from "./formatKstDateTime";
+
+type AuthStatus = "loading" | "guest" | "authed";
 
 type MenuKey =
   | "dashboard"
@@ -488,6 +495,8 @@ function SummaryChip({
 }
 
 function App() {
+  const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
+  const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null);
   const [activeMenu, setActiveMenu] = useState<MenuKey>("dashboard");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"전체" | JobStatus>("전체");
@@ -515,6 +524,34 @@ function App() {
   const [settlementPayTarget, setSettlementPayTarget] = useState<SettlementItem | null>(null);
   const [settlementPayAmount, setSettlementPayAmount] = useState("");
   const [settlementPayNote, setSettlementPayNote] = useState("");
+
+  useEffect(() => {
+    void (async () => {
+      const admin = await fetchAdminMe();
+      if (admin) {
+        setAdminProfile(admin);
+        setActiveMenu(defaultMenuForRole(admin.role) as MenuKey);
+        setAuthStatus("authed");
+        return;
+      }
+      setAuthStatus("guest");
+      setLoading(false);
+    })();
+  }, []);
+
+  const handleLoginSuccess = (admin: AdminProfile) => {
+    setAdminProfile(admin);
+    setActiveMenu(defaultMenuForRole(admin.role) as MenuKey);
+    setAuthStatus("authed");
+  };
+
+  const handleLogout = () => {
+    clearAdminSession();
+    setAdminProfile(null);
+    setOverview(null);
+    setAuthStatus("guest");
+    setLoading(false);
+  };
 
   const loadOverview = async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
@@ -549,6 +586,7 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (authStatus !== "authed" || !adminProfile) return;
     let alive = true;
 
     const initialLoad = async () => {
@@ -621,7 +659,14 @@ function App() {
       window.removeEventListener("focus", refreshVisibleData);
       document.removeEventListener("visibilitychange", refreshVisibleData);
     };
-  }, []);
+  }, [authStatus, adminProfile?.id]);
+
+  useEffect(() => {
+    if (!adminProfile) return;
+    if (!canAccessMenu(adminProfile.role, activeMenu)) {
+      setActiveMenu(defaultMenuForRole(adminProfile.role) as MenuKey);
+    }
+  }, [adminProfile, activeMenu]);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
@@ -1063,7 +1108,10 @@ function App() {
     }));
   }, [jobs]);
 
-  const menuItems = MENU_BASE;
+  const menuItems = useMemo(() => {
+    if (!adminProfile) return [];
+    return MENU_BASE.filter((item) => canAccessMenu(adminProfile.role, item.key));
+  }, [adminProfile]);
 
   const visibleMembers = useMemo(() => {
     const q = memberQuery.trim().toLowerCase();
@@ -1779,6 +1827,18 @@ function App() {
     }
   })();
 
+  if (authStatus === "loading") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-300">
+        관리자 세션을 확인하는 중입니다...
+      </div>
+    );
+  }
+
+  if (authStatus === "guest" || !adminProfile) {
+    return <AdminLogin onSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="relative min-h-screen">
@@ -1850,6 +1910,16 @@ function App() {
                 </div>
                 <div className="flex flex-col items-stretch gap-2 xl:items-end">
                   <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1 text-[11px] text-slate-300">
+                      {adminProfile.role_label} · {adminProfile.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="rounded-md border border-slate-700 bg-slate-900/90 px-3 py-1.5 text-[11px] font-semibold text-slate-200 transition hover:bg-slate-800"
+                    >
+                      로그아웃
+                    </button>
                     {activeMenu === "transcribers" ? (
                       <>
                         <button

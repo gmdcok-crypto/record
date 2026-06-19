@@ -112,6 +112,10 @@ def ensure_seed_data(db: Session) -> Client:
 
     db.commit()
     db.refresh(client)
+
+    from app.services.admin_auth import ensure_admin_bootstrap_password
+
+    ensure_admin_bootstrap_password(db)
     return client
 
 

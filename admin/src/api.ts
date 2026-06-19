@@ -251,6 +251,66 @@ export function getApiBaseUrl(): string {
   return apiBase();
 }
 
+export const ADMIN_TOKEN_KEY = "admin_access_token";
+
+export type AdminRole = "owner" | "manager" | "operator" | "accounting" | "viewer";
+
+export type AdminProfile = {
+  id: number;
+  email: string;
+  name: string;
+  role: AdminRole;
+  role_label: string;
+  phone: string | null;
+  is_active: boolean;
+  menus: string[];
+  permissions: string[];
+  last_login_at: string | null;
+};
+
+export function clearAdminSession(): void {
+  localStorage.removeItem(ADMIN_TOKEN_KEY);
+}
+
+async function adminFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers ?? {});
+  if (!headers.has("Accept")) headers.set("Accept", "application/json");
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(url, { ...init, headers });
+  if (response.status === 401) {
+    clearAdminSession();
+  }
+  return response;
+}
+
+export async function loginAdmin(email: string, password: string): Promise<AdminProfile> {
+  const res = await fetch(`${apiBase()}/api/admin/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ email: email.trim(), password }),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "로그인에 실패했습니다");
+  }
+  const data = (await res.json()) as { access_token: string; admin: AdminProfile };
+  localStorage.setItem(ADMIN_TOKEN_KEY, data.access_token);
+  return data.admin;
+}
+
+export async function fetchAdminMe(): Promise<AdminProfile | null> {
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (!token) return null;
+  try {
+    const res = await adminFetch(`${apiBase()}/api/admin/auth/me`);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { admin: AdminProfile };
+    return data.admin;
+  } catch {
+    return null;
+  }
+}
+
 async function parseApiError(res: Response, fallback: string): Promise<Error> {
   const contentType = res.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
@@ -271,7 +331,10 @@ export function resolveUrl(path: string): string {
 }
 
 export function createAdminEventsSource(): EventSource {
-  return new EventSource(`${apiBase()}/api/jobs/admin/events`);
+  const url = new URL(`${apiBase()}/api/jobs/admin/events`);
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (token) url.searchParams.set("token", token);
+  return new EventSource(url.toString());
 }
 
 export type PushSubscriptionPayload = {
@@ -299,7 +362,7 @@ export async function fetchWebPushConfig(): Promise<{ enabled: boolean; vapidPub
 }
 
 export async function registerAdminPushSubscription(payload: PushSubscriptionPayload): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/push-subscriptions`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/push-subscriptions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -310,7 +373,7 @@ export async function registerAdminPushSubscription(payload: PushSubscriptionPay
 }
 
 export async function unregisterAdminPushSubscription(payload: PushSubscriptionPayload): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/push-subscriptions`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/push-subscriptions`, {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -321,7 +384,7 @@ export async function unregisterAdminPushSubscription(payload: PushSubscriptionP
 }
 
 export async function fetchJob(jobId: string): Promise<JobResponse> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}`);
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}`);
   if (!res.ok) {
     throw await parseApiError(res, "작업을 불러올 수 없습니다");
   }
@@ -329,7 +392,7 @@ export async function fetchJob(jobId: string): Promise<JobResponse> {
 }
 
 export async function fetchAdminOverview(): Promise<AdminOverview> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/overview`);
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/overview`);
   if (!res.ok) {
     throw await parseApiError(res, "관리자 데이터를 불러올 수 없습니다");
   }
@@ -337,7 +400,7 @@ export async function fetchAdminOverview(): Promise<AdminOverview> {
 }
 
 export async function updateMemberActive(memberId: number, isActive: boolean): Promise<AdminOverviewMember> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/members/${memberId}`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/members/${memberId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ is_active: isActive }),
@@ -359,7 +422,7 @@ export async function assignProject(
   note?: string,
   reassign = false,
 ): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/projects/${projectId}/assign`, {
+  const res = await adminFetch(`${apiBase()}/api/projects/${projectId}/assign`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -375,7 +438,7 @@ export async function assignProject(
 }
 
 export async function assignJob(jobId: string, transcriberCode: string, note?: string): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/assign`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/assign`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ transcriber_code: transcriberCode, note }),
@@ -386,7 +449,7 @@ export async function assignJob(jobId: string, transcriberCode: string, note?: s
 }
 
 export async function updateJobStatus(jobId: string, status: string, note?: string): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/status`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/${jobId}/status`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status, note }),
@@ -397,7 +460,7 @@ export async function updateJobStatus(jobId: string, status: string, note?: stri
 }
 
 export async function fetchNextTranscriberCode(): Promise<string> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/transcribers/next-code`);
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/transcribers/next-code`);
   if (!res.ok) {
     throw await parseApiError(res, "속기사 코드 조회 실패");
   }
@@ -420,7 +483,7 @@ export async function updateTranscriber(
     status?: string;
   },
 ): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/transcribers/${encodeURIComponent(transcriberCode)}`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/transcribers/${encodeURIComponent(transcriberCode)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -442,7 +505,7 @@ export async function createTranscriber(payload: {
   monthly_capacity?: number;
   status?: string;
 }): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/transcribers`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/transcribers`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -453,7 +516,7 @@ export async function createTranscriber(payload: {
 }
 
 export async function fetchTranscriberGradeRates(): Promise<TranscriberGradeRate[]> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/transcriber-grade-rates`);
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/transcriber-grade-rates`);
   if (!res.ok) {
     throw await parseApiError(res, "등급별 요율 조회 실패");
   }
@@ -465,7 +528,7 @@ export async function saveTranscriberGradeRate(payload: {
   grade_level: number;
   per_minute_rate: number;
 }): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/transcriber-grade-rates`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/transcriber-grade-rates`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -476,7 +539,7 @@ export async function saveTranscriberGradeRate(payload: {
 }
 
 export async function deleteTranscriberGradeRate(rateId: number): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/transcriber-grade-rates/${rateId}`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/transcriber-grade-rates/${rateId}`, {
     method: "DELETE",
   });
   if (!res.ok) {
@@ -485,7 +548,7 @@ export async function deleteTranscriberGradeRate(rateId: number): Promise<void> 
 }
 
 export async function deleteTranscriber(transcriberCode: string): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/transcribers/${encodeURIComponent(transcriberCode)}`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/transcribers/${encodeURIComponent(transcriberCode)}`, {
     method: "DELETE",
   });
   if (!res.ok) {
@@ -494,7 +557,7 @@ export async function deleteTranscriber(transcriberCode: string): Promise<void> 
 }
 
 export async function revokeTranscriberAuth(transcriberCode: string): Promise<void> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${apiBase()}/api/jobs/admin/transcribers/${encodeURIComponent(transcriberCode)}/revoke-auth`,
     { method: "POST" },
   );
@@ -504,7 +567,7 @@ export async function revokeTranscriberAuth(transcriberCode: string): Promise<vo
 }
 
 export async function updateSettlementStatus(settlementId: number, status: string): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/settlements/${settlementId}/status`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/settlements/${settlementId}/status`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
@@ -515,7 +578,7 @@ export async function updateSettlementStatus(settlementId: number, status: strin
 }
 
 export async function recordSettlementPayment(settlementId: number, payload: { amount: number; note?: string }): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/settlements/${settlementId}/payment`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/settlements/${settlementId}/payment`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -526,7 +589,7 @@ export async function recordSettlementPayment(settlementId: number, payload: { a
 }
 
 export async function updateInvoiceStatus(invoiceId: number, status: string): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/invoices/${invoiceId}/status`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/invoices/${invoiceId}/status`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
@@ -537,7 +600,7 @@ export async function updateInvoiceStatus(invoiceId: number, status: string): Pr
 }
 
 export async function saveTranscript(jobId: string, transcript: TranscriptJson, saveKind = "draft"): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/transcript`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/transcript`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ transcript_json: transcript, save_kind: saveKind }),
@@ -548,7 +611,7 @@ export async function saveTranscript(jobId: string, transcript: TranscriptJson, 
 }
 
 export async function fetchTranscriptChanges(jobId: string): Promise<TranscriptChangeEntry[]> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/transcript/changes`);
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/transcript/changes`);
   if (!res.ok) {
     throw await parseApiError(res, "변경 이력 조회 실패");
   }
@@ -557,7 +620,7 @@ export async function fetchTranscriptChanges(jobId: string): Promise<TranscriptC
 }
 
 export async function runAiDraft(jobId: string): Promise<AiDraftResponse> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/ai-draft`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/ai-draft`, {
     method: "POST",
   });
   if (!res.ok) {
@@ -570,7 +633,7 @@ export async function deliverDraftToClient(
   jobId: string,
   transcript: TranscriptJson,
 ): Promise<{ job_id: string; status: string; workflow_status?: string; transcript_json: TranscriptJson }> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/deliver-draft`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/deliver-draft`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ transcript_json: transcript }),
@@ -582,7 +645,7 @@ export async function deliverDraftToClient(
 }
 
 export async function fetchAdminJobInquiries(jobId: string, threadType: "client_admin" | "transcriber_admin"): Promise<JobInquiryMessage[]> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/inquiries/${threadType}`);
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/inquiries/${threadType}`);
   if (!res.ok) {
     throw await parseApiError(res, "문의 내역 조회 실패");
   }
@@ -595,7 +658,7 @@ export async function createAdminJobInquiry(
   threadType: "client_admin" | "transcriber_admin",
   message: string,
 ): Promise<JobInquiryMessage> {
-  const res = await fetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/inquiries/${threadType}`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/inquiries/${threadType}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message }),
@@ -622,7 +685,7 @@ function parseFilenameFromDisposition(header: string | null, fallback: string): 
 }
 
 export async function downloadTranscriptPdf(jobId: string, transcript: TranscriptJson): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/transcript.pdf`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/${jobId}/transcript.pdf`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ transcript_json: transcript }),
@@ -648,7 +711,7 @@ export async function finalizeTranscriptPdf(
   jobId: string,
   transcript: TranscriptJson,
 ): Promise<{ download_url: string; filename: string; final_pdf_key: string }> {
-  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/transcript.pdf/finalize`, {
+  const res = await adminFetch(`${apiBase()}/api/jobs/${jobId}/transcript.pdf/finalize`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ transcript_json: transcript }),
@@ -660,7 +723,7 @@ export async function finalizeTranscriptPdf(
 }
 
 export async function downloadFinalTranscriptPdf(jobId: string): Promise<void> {
-  const res = await fetch(`${apiBase()}/api/jobs/${jobId}/transcript.pdf/final`);
+  const res = await adminFetch(`${apiBase()}/api/jobs/${jobId}/transcript.pdf/final`);
   if (!res.ok) {
     throw await parseApiError(res, "최종 PDF 다운로드 실패");
   }

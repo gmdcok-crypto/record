@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     maintenance_reset_token: str = ""
     purge_db_on_startup: str = ""
     jwt_secret: str = ""
+    admin_bootstrap_password: str = ""
     public_client_url: str = "https://bulpen-user.netlify.app"
     public_api_url: str = "https://record-production.up.railway.app"
     public_admin_url: str = ""
