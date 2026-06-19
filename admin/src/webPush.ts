@@ -59,7 +59,7 @@ async function findPushRegistration(): Promise<ServiceWorkerRegistration | null>
   const scoped = await navigator.serviceWorker.getRegistration(scope);
   if (scoped) return scoped;
 
-  return navigator.serviceWorker.getRegistration();
+  return (await navigator.serviceWorker.getRegistration()) ?? null;
 }
 
 async function ensureActiveServiceWorkerRegistration(): Promise<ServiceWorkerRegistration> {
