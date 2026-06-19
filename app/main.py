@@ -4,10 +4,11 @@ import logging
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
 from app.db import SessionLocal, ensure_db_initialized, get_engine
@@ -21,6 +22,19 @@ TRANSCRIBER_DIR = Path(__file__).resolve().parent.parent / "transcriber" / "dist
 INTRO_DIR = Path(__file__).resolve().parent.parent / "intro"
 
 logger = logging.getLogger(__name__)
+
+
+class RailwayHealthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path == "/health":
+            return JSONResponse(
+                {
+                    "status": "ok",
+                    "database_configured": settings.database_configured,
+                    "database_ready": SessionLocal is not None,
+                }
+            )
+        return await call_next(request)
 
 
 class NoCacheHtmlStaticFiles(StaticFiles):
@@ -95,6 +109,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RailwayHealthMiddleware)
 
 app.include_router(transcribe.router)
 app.include_router(upload.router)

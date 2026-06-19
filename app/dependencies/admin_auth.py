@@ -72,7 +72,7 @@ def get_current_admin(
 def get_current_admin_from_query_or_bearer(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     db: Annotated[Session, Depends(get_db)],
-    token: Annotated[str | None, Query(default=None)] = None,
+    token: Annotated[str | None, Query()] = None,
 ) -> AdminUser:
     if not settings.jwt_configured:
         raise HTTPException(status_code=503, detail="JWT is not configured")

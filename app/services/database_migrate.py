@@ -286,6 +286,20 @@ def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) ->
 
     if sql_path.name == "migrate_admin_auth.sql":
         with engine.begin() as conn:
+            table_exists = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM information_schema.TABLES
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'admin_users'
+                    LIMIT 1
+                    """
+                )
+            ).first()
+            if not table_exists:
+                logger.info("Skipping %s; admin_users table does not exist yet", sql_path.name)
+                return True
             column_exists = conn.execute(
                 text(
                     """
