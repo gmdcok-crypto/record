@@ -1,15 +1,14 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
 from app.dependencies.admin_auth import AdminAuth
-from app.models.admin_models import AdminUser
-from app.services.admin_auth import AdminAuthError, authenticate_admin, serialize_admin
+from app.services.admin_auth import AdminAuthError, authenticate_admin, reset_default_admin_password, serialize_admin
 from app.services.jwt_tokens import create_admin_access_token
 
 router = APIRouter(prefix="/api/admin/auth", tags=["admin-auth"])
@@ -44,3 +43,22 @@ def admin_login(body: AdminLoginRequest, db: Annotated[Session, Depends(get_db)]
 @router.get("/me")
 def admin_me(admin: AdminAuth) -> dict:
     return {"admin": serialize_admin(admin)}
+
+
+@router.post("/maintenance/reset-default-password")
+def maintenance_reset_default_admin_password(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    token = settings.maintenance_reset_token.strip()
+    if not token or request.headers.get("X-Maintenance-Token") != token:
+        raise HTTPException(status_code=403, detail="Invalid maintenance token")
+    try:
+        admin = reset_default_admin_password(db)
+    except AdminAuthError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "reset": True,
+        "email": admin.email,
+        "password_configured": bool(admin.password_hash),
+    }
