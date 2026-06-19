@@ -18,6 +18,7 @@ import {
   signupTranscriber,
   type TranscriberAuthProfile,
 } from "./api";
+import { createIdentityVerificationId } from "./identityVerification";
 
 type TranscriberSignupProps = {
   onSuccess: (transcriber: TranscriberAuthProfile) => void;
@@ -102,10 +103,7 @@ export default function TranscriberSignup({
       if (!config.portoneIdentityEnabled || !config.portoneStoreId || !config.portoneIdentityChannelKey) {
         throw new Error("포트원 본인인증 설정이 아직 완료되지 않았습니다.");
       }
-      const identityVerificationId =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? `identity-verification-${crypto.randomUUID()}`
-          : `identity-verification-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const identityVerificationId = createIdentityVerificationId();
       const response = await PortOne.requestIdentityVerification({
         storeId: config.portoneStoreId,
         identityVerificationId,
