@@ -49,7 +49,19 @@ type UploadBillingPanelProps = {
   onRemoveFile: (file: File) => void;
   onEntriesChange?: (entries: UploadBillingFile[]) => void;
   onPaymentPending?: (payload: { paymentId: string; amount: number; orderName: string } | null) => void | Promise<void>;
+  projectTitle?: string;
 };
+
+function buildPaymentOrderName(projectTitle: string, entryCount: number, firstFileName?: string): string {
+  const title = projectTitle.trim();
+  if (title) {
+    return entryCount > 1 ? `${title} · ${entryCount}건` : title;
+  }
+  if (entryCount > 1) {
+    return `녹취록 업로드 ${entryCount}건`;
+  }
+  return `${firstFileName ?? "녹취록 업로드"} 결제`;
+}
 
 function formatSegmentRange(startMs: number, endMs: number): string {
   return `${formatSegmentClock(startMs)} ~ ${formatSegmentClock(endMs)}`;
@@ -74,6 +86,7 @@ export default function UploadBillingPanel({
   onRemoveFile,
   onEntriesChange,
   onPaymentPending,
+  projectTitle = "",
 }: UploadBillingPanelProps) {
   const entriesRef = useRef<UploadBillingFile[]>([]);
   const paidBillableRef = useRef<number | null>(null);
@@ -243,10 +256,11 @@ export default function UploadBillingPanel({
         typeof crypto !== "undefined" && "randomUUID" in crypto
           ? `payment-${crypto.randomUUID()}`
           : `payment-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      const orderName =
-        entries.length > 1
-          ? `녹취록 업로드 ${entries.length}건`
-          : `${entries[0]?.file.name ?? "녹취록 업로드"} 결제`;
+      const orderName = buildPaymentOrderName(
+        projectTitle,
+        entries.length,
+        entries[0]?.file.name,
+      );
       await Promise.resolve(onPaymentPending?.({ paymentId, amount: totalAmount, orderName }));
 
       const useServerRedirect = shouldForceMobilePaymentRedirect();

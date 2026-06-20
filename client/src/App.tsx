@@ -1528,6 +1528,7 @@ export default function App() {
                   files={selectedFiles}
                   fileIdentity={fileIdentity}
                   formatSize={formatSize}
+                  projectTitle={uploadProjectLabel}
                   paid={uploadPaid}
                   uploading={step === "uploading"}
                   holdPaidState={autoUploadPending || uploadPaid}
