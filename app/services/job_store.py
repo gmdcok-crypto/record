@@ -1045,7 +1045,7 @@ def record_payment_record(
     amount: float,
     pay_method: str | None,
     paid_at: datetime | None,
-) -> PaymentRecord:
+) -> tuple[PaymentRecord, bool]:
     safe_payment_id = payment_id.strip()[:120]
     safe_member_name = (member.name or "").strip()[:100] or "의뢰인"
     safe_order_name = (order_name or "").strip()[:255] or safe_payment_id
@@ -1054,6 +1054,7 @@ def record_payment_record(
     for attempt in range(2):
         try:
             record = db.scalar(select(PaymentRecord).where(PaymentRecord.payment_id == safe_payment_id))
+            created = record is None
             if record is None:
                 record = PaymentRecord(payment_id=safe_payment_id)
                 db.add(record)
@@ -1066,7 +1067,7 @@ def record_payment_record(
             record.paid_at = paid_at
             db.commit()
             db.refresh(record)
-            return record
+            return record, created
         except (OperationalError, ProgrammingError) as exc:
             db.rollback()
             message = str(exc).lower()

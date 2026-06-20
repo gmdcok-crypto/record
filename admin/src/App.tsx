@@ -667,6 +667,15 @@ function App() {
           const name = String(payload.payload?.name ?? "신규 회원");
           notifyAdminEvent("신규 회원 가입", `${name} 님이 가입했습니다.`);
         }
+        if (payload.type === "payment_recorded") {
+          const memberName = String(payload.payload?.member_name ?? "의뢰인");
+          const orderName = String(payload.payload?.order_name ?? "결제");
+          const amount = Number(payload.payload?.amount ?? 0);
+          notifyAdminEvent(
+            "매출 발생",
+            `${memberName} · ${orderName} · ${amount.toLocaleString("ko-KR")}원`,
+          );
+        }
         if (payload.type === "job_inquiry_created" && payload.payload?.sender_role === "client") {
           notifyAdminEvent("의뢰인 문의 도착", "의뢰인이 관리자에게 새 문의를 남겼습니다.");
         }
@@ -729,6 +738,10 @@ function App() {
       if (event.data?.type !== "ADMIN_WEB_PUSH_NOTIFICATION_CLICK") return;
       if (event.data?.payload?.kind === "admin_member_signup") {
         setActiveMenu("members");
+        return;
+      }
+      if (event.data?.payload?.kind === "admin_payment_recorded") {
+        setActiveMenu("sales");
         return;
       }
       const jobId = event.data?.payload?.jobId;

@@ -401,6 +401,14 @@ def _admin_members_url() -> str:
     return f"{base}{separator}menu=members"
 
 
+def _admin_sales_url() -> str:
+    base = settings.public_admin_url.rstrip("/")
+    if not base:
+        return ""
+    separator = "&" if "?" in base else "?"
+    return f"{base}{separator}menu=sales"
+
+
 def _transcriber_job_url(job: Job) -> str:
     base = settings.public_transcriber_url.rstrip("/")
     return f"{base}?job_id={job.job_id}" if base else ""
@@ -544,6 +552,34 @@ def send_admin_member_signup_web_push(
             tag=f"admin-member-signup-{member_id}",
             job_id=None,
             kind="admin_member_signup",
+        ),
+    )
+
+
+def send_admin_payment_recorded_web_push(
+    db: Session,
+    *,
+    member_name: str,
+    order_name: str,
+    amount: float,
+    payment_id: str,
+) -> int:
+    owner_ids = list(
+        db.scalars(
+            select(AdminUser.id).where(AdminUser.is_active == 1, AdminUser.role == "owner")
+        ).all()
+    )
+    amount_label = f"{int(round(amount)):,}원"
+    return send_admin_web_push_to_admin_ids(
+        db,
+        owner_ids,
+        _payload(
+            title="매출 발생",
+            body=f"{member_name} · {order_name} · {amount_label}",
+            url=_admin_sales_url(),
+            tag=f"admin-payment-{payment_id}",
+            job_id=None,
+            kind="admin_payment_recorded",
         ),
     )
 

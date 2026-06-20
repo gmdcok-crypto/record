@@ -11,12 +11,13 @@ import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
 from app.dependencies.member_auth import get_current_member
-from app.models.admin_models import Member
+from app.models.admin_models import AdminUser, Member
 from app.services.admin_events import publish_admin_event
 from app.services.jwt_tokens import create_member_access_token, create_payment_prepare_token, decode_payment_prepare_token
 from app.services.job_store import record_payment_record
@@ -32,6 +33,7 @@ from app.services.portone_identity import parse_portone_identity_verification
 from app.services.web_push import (
     deactivate_member_push_subscription,
     send_admin_member_signup_web_push,
+    send_admin_payment_recorded_web_push,
     upsert_member_push_subscription,
 )
 
@@ -221,7 +223,7 @@ def _finalize_portone_payment(
             except ValueError:
                 paid_at = None
         try:
-            record_payment_record(
+            _record, created = record_payment_record(
                 db,
                 payment_id=payment_id,
                 member=member,
@@ -230,6 +232,14 @@ def _finalize_portone_payment(
                 pay_method=pay_method,
                 paid_at=paid_at,
             )
+            if created:
+                _notify_owner_payment_recorded(
+                    db,
+                    member=member,
+                    payment_id=payment_id,
+                    order_name=order_name,
+                    amount=total_amount,
+                )
         except Exception:
             logger.exception("payment record save failed payment_id=%s member_id=%s", payment_id, member_id)
     else:
@@ -353,6 +363,41 @@ def _notify_admins_member_signup(db: Session, member: Member) -> None:
             logger.info("Admin member-signup web push delivered 0 for member %s", member.id)
     except Exception:
         logger.exception("Failed to send admin member-signup web push for member %s", member.id)
+
+
+def _notify_owner_payment_recorded(
+    db: Session,
+    *,
+    member: Member,
+    payment_id: str,
+    order_name: str,
+    amount: int,
+) -> None:
+    owner_ids = list(
+        db.scalars(
+            select(AdminUser.id).where(AdminUser.is_active == 1, AdminUser.role == "owner")
+        ).all()
+    )
+    member_name = (member.name or "").strip() or "의뢰인"
+    event_payload = {
+        "payment_id": payment_id,
+        "member_name": member_name,
+        "order_name": order_name,
+        "amount": amount,
+    }
+    publish_admin_event("payment_recorded", event_payload, admin_ids=owner_ids)
+    try:
+        delivered = send_admin_payment_recorded_web_push(
+            db,
+            member_name=member_name,
+            order_name=order_name,
+            amount=amount,
+            payment_id=payment_id,
+        )
+        if delivered == 0:
+            logger.info("Admin payment-recorded web push delivered 0 for payment %s", payment_id)
+    except Exception:
+        logger.exception("Failed to send admin payment-recorded web push for payment %s", payment_id)
 
 
 @router.post("/signup", response_model=MemberAuthTokenResponse)
