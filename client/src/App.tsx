@@ -96,8 +96,6 @@ const EDITABLE_JOB_STATUSES = new Set(["first_done", "client_editing"]);
 
 const ACCEPT = "audio/*,video/mp4,video/webm,.wav,.mp3,.m4a,.flac,.ogg";
 const GUEST_CLIENT_NAME = "의뢰인";
-const INTRO_SIGNUP_URL =
-  import.meta.env.VITE_INTRO_URL?.replace(/\/$/, "") || "https://record-voi.netlify.app";
 const PENDING_PORTONE_PAYMENT_KEY = "pending_portone_payment";
 const AUTO_UPLOAD_TRIGGER_KEY = "auto_upload_after_payment";
 
@@ -1330,7 +1328,7 @@ export default function App() {
   }
 
   if (authStatus === "unauthenticated") {
-    return <MemberLogin signupUrl={INTRO_SIGNUP_URL} onSuccess={handleLoginSuccess} />;
+    return <MemberLogin onSuccess={handleLoginSuccess} />;
   }
 
   return (

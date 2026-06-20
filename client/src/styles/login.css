@@ -137,9 +137,15 @@
 }
 
 .client-login__link {
+  border: 0;
+  padding: 0;
+  background: none;
   color: var(--navy);
   font-weight: 800;
+  font-size: inherit;
+  font-family: inherit;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .client-login__link:hover {

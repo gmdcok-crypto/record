@@ -737,6 +737,49 @@ export type MemberProfile = {
   phone: string | null;
 };
 
+export const EMAIL_PATTERN = /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/;
+export const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[#?!@$%^&*\-]).{8,16}$/;
+
+export async function checkEmailAvailability(email: string): Promise<{ ok: boolean; message: string }> {
+  const res = await fetch(
+    `${apiBase()}/api/member/auth/check-email?email=${encodeURIComponent(email.trim().toLowerCase())}`,
+    { headers: { Accept: "application/json" } },
+  );
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { ok: false, message: parseErrorDetail(data) || "이메일 확인에 실패했습니다." };
+  }
+  if (data.available) {
+    return { ok: true, message: "사용 가능한 이메일입니다." };
+  }
+  return { ok: false, message: "이미 사용 중인 이메일입니다." };
+}
+
+export async function signupMember(payload: {
+  name: string;
+  email: string;
+  password: string;
+}): Promise<MemberProfile> {
+  const res = await fetch(`${apiBase()}/api/member/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      name: payload.name.trim(),
+      email: payload.email.trim().toLowerCase(),
+      password: payload.password,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data) || "회원가입에 실패했습니다.");
+  }
+  if (!data.access_token) {
+    throw new Error("회원가입에 실패했습니다.");
+  }
+  localStorage.setItem(MEMBER_TOKEN_KEY, data.access_token);
+  return data.member as MemberProfile;
+}
+
 export type PortOnePublicConfig = {
   portoneStoreId: string;
   portonePaymentChannelKey: string;
