@@ -2,6 +2,8 @@
 @import "./figma-components.css";
 @import "./client-shell.css";
 @import "./client-upload.css";
+@import "./client-archive.css";
+@import "./client-edit.css";
 
 body {
   background: var(--bp-paper);

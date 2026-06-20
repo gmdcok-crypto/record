@@ -1,0 +1,244 @@
+/**
+ * Client archive (library) — Figma unit 3.
+ */
+.client-archive__page-card {
+  padding: 20px;
+}
+
+.client-archive__heading {
+  margin-bottom: 20px;
+}
+
+.client-archive__eyebrow {
+  margin: 0;
+  font-size: var(--bp-text-caption-size);
+  font-weight: 700;
+  color: var(--bp-accent);
+}
+
+.client-archive__title {
+  margin: 4px 0 0;
+  font-size: var(--bp-text-title-size);
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--bp-ink);
+}
+
+.client-archive__desc {
+  margin: 8px 0 0;
+  font-size: var(--bp-text-body-size);
+  line-height: 1.55;
+  color: var(--bp-body);
+}
+
+.client-archive__empty {
+  padding: 40px 20px;
+  border: 2px dashed var(--bp-line);
+  border-radius: var(--bp-radius-section);
+  background: var(--bp-surface-muted);
+  text-align: center;
+  font-size: var(--bp-text-body-size);
+  color: var(--bp-body);
+}
+
+.client-archive__project {
+  overflow: hidden;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-radius-section);
+  background: var(--bp-surface-muted);
+}
+
+.client-archive__project-toggle {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.client-archive__project-toggle:hover {
+  background: var(--bp-surface);
+}
+
+.client-archive__project-title {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--bp-text-body-size);
+  font-weight: 700;
+  color: var(--bp-ink);
+}
+
+.client-archive__project-meta {
+  margin: 4px 0 0;
+  font-size: var(--bp-text-caption-size);
+  color: var(--bp-body);
+}
+
+.client-archive__project-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.client-archive__chevron {
+  font-size: var(--bp-text-caption-size);
+  color: var(--bp-body);
+}
+
+.client-archive__files {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--bp-line);
+  padding: 8px 16px 16px;
+}
+
+.client-archive__file {
+  padding: 12px;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-radius-control);
+  background: var(--bp-surface);
+  transition: border-color 0.15s ease;
+}
+
+.client-archive__file:hover {
+  border-color: color-mix(in srgb, var(--bp-accent) 45%, var(--bp-line));
+}
+
+.client-archive__file-open {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+}
+
+.client-archive__file-open:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.client-archive__file-name {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--bp-text-body-size);
+  font-weight: 700;
+  color: var(--bp-ink);
+}
+
+.client-archive__file-title {
+  margin: 4px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--bp-text-caption-size);
+  color: var(--bp-body);
+}
+
+.client-archive__file-badges {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.client-archive__file-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: var(--bp-text-caption-size);
+  color: var(--bp-body);
+}
+
+.client-archive__file-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.client-archive__no-files {
+  margin: 0;
+  border-top: 1px solid var(--bp-line);
+  padding: 12px 16px;
+  font-size: var(--bp-text-body-size);
+  color: var(--bp-body);
+}
+
+.client-archive__refresh {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.client-archive__status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: var(--bp-text-micro-size);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.client-archive__status--review {
+  background: color-mix(in srgb, var(--bp-review) 14%, transparent);
+  color: var(--bp-review);
+}
+
+.client-archive__status--client {
+  background: var(--bp-accent-soft);
+  color: var(--bp-accent);
+}
+
+.client-archive__status--done {
+  background: color-mix(in srgb, #16a34a 12%, transparent);
+  color: #15803d;
+}
+
+.client-archive__status--working {
+  background: color-mix(in srgb, #2563eb 12%, transparent);
+  color: #1d4ed8;
+}
+
+.client-archive__status--waiting {
+  background: color-mix(in srgb, #d97706 12%, transparent);
+  color: #b45309;
+}
+
+.client-archive__status--cancelled {
+  background: color-mix(in srgb, var(--bp-body) 12%, transparent);
+  color: var(--bp-body);
+}
+
+.client-archive__inquiry {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: var(--bp-text-micro-size);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.client-archive__inquiry--pending {
+  border: 1px solid color-mix(in srgb, #d97706 35%, transparent);
+  background: color-mix(in srgb, #d97706 10%, transparent);
+  color: #b45309;
+}
+
+.client-archive__inquiry--arrived {
+  border: 1px solid color-mix(in srgb, var(--bp-accent) 35%, transparent);
+  background: var(--bp-accent-soft);
+  color: var(--bp-accent);
+}

@@ -76,28 +76,28 @@ export default function TranscriptChangeHistory({ jobId, refreshKey = 0, loadEnt
   if (!jobId) return null;
 
   return (
-    <div className="rounded-2xl border border-line bg-soft">
+    <div className="client-edit__panel">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left"
+        className="client-edit__panel-toggle"
       >
-        <span className="text-sm font-semibold text-brand-navy">변경 이력</span>
-        <span className="text-xs text-brand-brown/80">{open ? "접기" : "펼치기"}</span>
+        <span className="client-edit__panel-toggle-title">변경 이력</span>
+        <span className="client-edit__panel-toggle-action">{open ? "접기" : "펼치기"}</span>
       </button>
 
       {open ? (
-        <div className="border-t border-line px-4 py-3">
-          {loading ? <p className="text-sm text-brand-brown/80">불러오는 중...</p> : null}
-          {error ? <p className="text-sm text-red-700">{error}</p> : null}
+        <div className="client-edit__panel-body border-t border-[var(--bp-line)]">
+          {loading ? <p className="text-sm text-[var(--bp-body)]">불러오는 중...</p> : null}
+          {error ? <p className="client-edit__error">{error}</p> : null}
           {!loading && !error && entries.length === 0 ? (
-            <p className="text-sm text-brand-brown/80">저장된 변경 이력이 없습니다.</p>
+            <p className="text-sm text-[var(--bp-body)]">저장된 변경 이력이 없습니다.</p>
           ) : null}
           <div className="max-h-72 space-y-3 overflow-y-auto">
             {entries.map((entry) => (
-              <div key={`${entry.version}-${entry.created_at}`} className="rounded-xl border border-line px-3 py-2.5">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-brand-brown">
-                  <span className="font-semibold text-brand-navy-soft">v{entry.version}</span>
+              <div key={`${entry.version}-${entry.created_at}`} className="client-edit__history-item">
+                <div className="client-edit__history-meta">
+                  <span className="client-edit__history-version">v{entry.version}</span>
                   <span>{entry.save_kind_label}</span>
                   <span>·</span>
                   <span>
@@ -110,11 +110,9 @@ export default function TranscriptChangeHistory({ jobId, refreshKey = 0, loadEnt
                     </>
                   ) : null}
                 </div>
-                <ul className="mt-2 space-y-1 text-sm text-brand-navy">
+                <ul className="client-edit__history-changes">
                   {entry.changes.map((change, index) => (
-                    <li key={`${entry.version}-${index}`} className="leading-6">
-                      {formatChangeLine(change)}
-                    </li>
+                    <li key={`${entry.version}-${index}`}>{formatChangeLine(change)}</li>
                   ))}
                 </ul>
               </div>

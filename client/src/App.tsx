@@ -171,17 +171,19 @@ function archiveStatusStyle(status: string): string {
     case "first_done":
     case "review_waiting":
     case "transcriber_review":
-      return "bg-violet-500/15 text-brand-navy-soft";
+      return "client-archive__status client-archive__status--review";
     case "client_editing":
-      return "bg-brand-orange/10 text-brand-orange";
+      return "client-archive__status client-archive__status--client";
     case "final_done":
     case "pdf_sent":
-      return "bg-emerald-500/15 text-emerald-300";
+      return "client-archive__status client-archive__status--done";
     case "assigned":
     case "working":
-      return "bg-blue-500/15 text-brand-orange";
+      return "client-archive__status client-archive__status--working";
+    case "cancelled":
+      return "client-archive__status client-archive__status--cancelled";
     default:
-      return "bg-amber-500/15 text-amber-300";
+      return "client-archive__status client-archive__status--waiting";
   }
 }
 
@@ -217,13 +219,13 @@ function mapProjectStatus(status: string): string {
 function projectStatusStyle(status: string): string {
   switch (status) {
     case "completed":
-      return "bg-emerald-500/15 text-emerald-300";
+      return "client-archive__status client-archive__status--done";
     case "client_review":
-      return "bg-violet-500/15 text-brand-navy-soft";
+      return "client-archive__status client-archive__status--review";
     case "working":
-      return "bg-blue-500/15 text-brand-orange";
+      return "client-archive__status client-archive__status--working";
     default:
-      return "bg-amber-500/15 text-amber-300";
+      return "client-archive__status client-archive__status--waiting";
   }
 }
 
@@ -244,14 +246,14 @@ function projectFileToArchiveItem(file: ProjectFile, clientName: string): JobArc
 function renderClientInquiryBadge(status?: "reply_pending" | "reply_arrived" | null) {
   if (status === "reply_pending") {
     return (
-      <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-200">
+      <span className="client-archive__inquiry client-archive__inquiry--pending">
         답변 필요
       </span>
     );
   }
   if (status === "reply_arrived") {
     return (
-      <span className="rounded-full border border-brand-orange/30 bg-brand-orange/10 px-2.5 py-1 text-[11px] font-semibold text-brand-orange">
+      <span className="client-archive__inquiry client-archive__inquiry--arrived">
         답변 도착
       </span>
     );
@@ -1521,82 +1523,72 @@ export default function App() {
           ) : null}
 
           {activeTab === "archive" ? (
-          <section className="rounded-shell border border-line bg-white p-5 shadow-card">
-            <div className="mb-5">
-              <p className="text-sm font-semibold text-emerald-300">보관함</p>
-              <h2 className="mt-1 text-xl font-bold text-brand-navy">프로젝트 보관함</h2>
-              <p className="mt-1 text-sm text-brand-brown">
+          <section className="bp-card client-archive__page-card">
+            <div className="client-archive__heading">
+              <p className="client-archive__eyebrow">보관함</p>
+              <h2 className="client-archive__title">프로젝트 보관함</h2>
+              <p className="client-archive__desc">
                 프로젝트(사건)별로 묶여 있습니다. 의뢰인 검토 파일을 누르면 편집 탭으로 이동합니다.
               </p>
             </div>
 
             <div className="space-y-3">
               {loadingWorkspace && !projects.length ? (
-                <div className="rounded-2xl border border-dashed border-line bg-soft px-5 py-10 text-center text-sm text-brand-brown">
-                  보관함을 불러오는 중입니다.
-                </div>
+                <div className="client-archive__empty">보관함을 불러오는 중입니다.</div>
               ) : projects.length ? (
                 projects.map((project) => {
                   const expanded = isProjectExpanded(project.project_id);
                   const files = project.files ?? [];
                   return (
-                    <div
-                      key={project.project_id}
-                      className="overflow-hidden rounded-2xl border border-line bg-soft"
-                    >
+                    <div key={project.project_id} className="client-archive__project">
                       <button
                         type="button"
                         onClick={() => toggleProjectExpanded(project.project_id)}
-                        className="flex w-full items-start justify-between gap-3 p-4 text-left transition hover:bg-white"
+                        className="client-archive__project-toggle"
                       >
                         <div className="min-w-0">
-                          <p className="truncate font-semibold text-brand-navy">{project.title}</p>
-                          <p className="mt-1 text-sm text-brand-brown">
+                          <p className="client-archive__project-title">{project.title}</p>
+                          <p className="client-archive__project-meta">
                             진행 {project.completed_count}/{project.file_count} · 마감{" "}
                             {formatKstDateTime(project.due_at)}
                           </p>
                         </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <span
-                            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${projectStatusStyle(project.status)}`}
-                          >
+                        <div className="client-archive__project-actions">
+                          <span className={projectStatusStyle(project.status)}>
                             {mapProjectStatus(project.status)}
                           </span>
-                          <span className="text-brand-brown/80">{expanded ? "▾" : "▸"}</span>
+                          <span className="client-archive__chevron" aria-hidden="true">
+                            {expanded ? "▾" : "▸"}
+                          </span>
                         </div>
                       </button>
                       {expanded && files.length ? (
-                        <div className="space-y-2 border-t border-line px-4 pb-4 pt-2">
+                        <div className="client-archive__files">
                           {files.map((file) => {
                             const fileStatus = file.workflow_status ?? file.status;
                             const item = projectFileToArchiveItem(file, memberName || GUEST_CLIENT_NAME);
                             return (
-                              <div
-                                key={file.job_id}
-                                className="rounded-xl border border-line bg-white p-3 transition hover:border-brand-orange/50"
-                              >
+                              <div key={file.job_id} className="client-archive__file">
                                 <div className="flex items-start justify-between gap-3">
                                   <button
                                     type="button"
                                     onClick={() => openArchiveJob(item, project.title)}
                                     onDoubleClick={() => openArchiveJob(item, project.title)}
                                     disabled={loadingJob}
-                                    className="min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-60"
+                                    className="client-archive__file-open"
                                   >
-                                    <p className="truncate text-sm font-semibold text-brand-navy">{file.filename}</p>
-                                    <p className="mt-1 truncate text-xs text-brand-brown/80">{file.title}</p>
+                                    <p className="client-archive__file-name">{file.filename}</p>
+                                    <p className="client-archive__file-title">{file.title}</p>
                                   </button>
-                                  <div className="flex shrink-0 items-center gap-2">
+                                  <div className="client-archive__file-badges">
                                     {renderClientInquiryBadge(file.client_inquiry_status)}
-                                    <span
-                                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${archiveStatusStyle(fileStatus)}`}
-                                    >
+                                    <span className={archiveStatusStyle(fileStatus)}>
                                       {mapClientJobStatus(fileStatus)}
                                     </span>
                                   </div>
                                 </div>
-                                <div className="mt-2 flex items-center justify-between text-xs text-brand-brown/80">
-                                  <span className="font-mono">{file.job_id}</span>
+                                <div className="client-archive__file-footer">
+                                  <span className="client-archive__file-id">{file.job_id}</span>
                                   <span>{formatKstDateTime(file.uploaded_at)}</span>
                                 </div>
                               </div>
@@ -1605,13 +1597,13 @@ export default function App() {
                         </div>
                       ) : null}
                       {expanded && !files.length ? (
-                        <p className="border-t border-line px-4 py-3 text-sm text-brand-brown/80">파일이 없습니다.</p>
+                        <p className="client-archive__no-files">파일이 없습니다.</p>
                       ) : null}
                     </div>
                   );
                 })
               ) : (
-                <div className="rounded-2xl border border-dashed border-line bg-soft px-5 py-10 text-center text-sm text-brand-brown">
+                <div className="client-archive__empty">
                   아직 프로젝트가 없습니다. 업로드 탭에서 파일을 올려 주세요.
                 </div>
               )}
@@ -1620,7 +1612,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => void refreshWorkspace()}
-              className="mt-4 w-full rounded-xl border border-line bg-page py-2.5 text-sm font-semibold text-brand-navy transition hover:bg-muted"
+              className="bp-button bp-button-outline client-archive__refresh"
             >
               보관함 새로고침
             </button>
@@ -1628,60 +1620,60 @@ export default function App() {
           ) : null}
 
           {activeTab === "edit" ? (
-          <section className="relative rounded-shell border border-line bg-white p-5 shadow-card">
+          <section className="bp-card client-edit__page-card">
             {loadingJob ? (
-              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-shell bg-page/80 px-6 backdrop-blur-sm">
-                <div className="rounded-2xl border border-line bg-white px-6 py-5 text-center shadow-strong">
-                  <p className="text-sm font-semibold text-brand-navy">작업을 불러오는 중입니다.</p>
+              <div className="client-edit__overlay">
+                <div className="client-edit__overlay-card">
+                  <p className="client-edit__overlay-text">작업을 불러오는 중입니다.</p>
                 </div>
               </div>
             ) : null}
             {submittingTranscriptRequest ? (
-              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-shell bg-page/80 px-6 backdrop-blur-sm">
-                <div className="rounded-2xl border border-line bg-white px-6 py-5 text-center shadow-strong">
-                  <p className="text-sm font-semibold text-brand-navy">녹취록 요청을 접수하는 중입니다.</p>
+              <div className="client-edit__overlay">
+                <div className="client-edit__overlay-card">
+                  <p className="client-edit__overlay-text">녹취록 요청을 접수하는 중입니다.</p>
                 </div>
               </div>
             ) : null}
             {submittingReview ? (
-              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-shell bg-page/80 px-6 backdrop-blur-sm">
-                <div className="rounded-2xl border border-line bg-white px-6 py-5 text-center shadow-strong">
-                  <p className="text-sm font-semibold text-brand-navy">검토 요청을 접수하는 중입니다.</p>
+              <div className="client-edit__overlay">
+                <div className="client-edit__overlay-card">
+                  <p className="client-edit__overlay-text">검토 요청을 접수하는 중입니다.</p>
                 </div>
               </div>
             ) : null}
-            <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+            <div className="client-edit__heading">
               <div>
-                <p className="text-sm font-semibold text-brand-navy-soft">편집</p>
+                <p className="client-edit__eyebrow">편집</p>
                 {editContext ? (
-                  <p className="mt-1 text-sm text-brand-orange/90">
+                  <p className="client-edit__breadcrumb">
                     {editContext.projectTitle} &gt; {editContext.filename}
                   </p>
                 ) : null}
-                <h2 className="mt-1 text-xl font-bold text-brand-navy">{currentTitle}</h2>
-                <p className="mt-1 text-sm text-brand-brown">
+                <h2 className="client-edit__title">{currentTitle}</h2>
+                <p className="client-edit__desc">
                   구간 텍스트를 누르면 해당 오디오가 재생되고, 같은 영역에서 바로 수정할 수 있습니다.
                 </p>
               </div>
               {job && (
-                <div className="flex flex-col items-end gap-2">
+                <div className="client-edit__aside">
                   <button
                     type="button"
                     onClick={scrollToInquiryPanel}
-                    className="rounded-xl border border-brand-orange/30 bg-brand-orange/10 px-4 py-2 text-sm font-semibold text-brand-orange transition hover:bg-brand-orange/15"
+                    className="bp-button bp-button-soft"
                   >
                     문의하기
                   </button>
-                  <div className="rounded-2xl border border-line bg-page px-3 py-2 text-xs text-brand-brown">
+                  <div className="client-edit__job-id">
                     <div>작업 ID</div>
-                    <div className="mt-1 font-mono text-[11px] text-brand-navy">{job.job_id}</div>
+                    <div className="client-edit__job-id-value">{job.job_id}</div>
                   </div>
                 </div>
               )}
             </div>
 
             {job && !isEditableArchiveStatus(currentWorkflowStatus) ? (
-              <div className="rounded-2xl border border-dashed border-line bg-soft px-5 py-10 text-center text-sm text-brand-brown">
+              <div className="client-edit__empty">
                 {currentWorkflowStatus === "assigned" || currentWorkflowStatus === "working" ? (
                   <>
                     속기사가 초벌 작업 중입니다.
@@ -1713,7 +1705,7 @@ export default function App() {
             ) : job ? (
               <div className="space-y-4">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-brand-navy">원본 음성</label>
+                  <label className="client-edit__section-label">원본 음성</label>
                   <audio
                     ref={audioRef}
                     controls
@@ -1724,20 +1716,18 @@ export default function App() {
                 </div>
 
                 <div>
-                  <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                    <label className="text-sm font-medium text-brand-navy">
-                      녹취 초안 / 의뢰인 수정본
-                    </label>
+                  <div className="client-edit__section-head">
+                    <label className="client-edit__section-label">녹취 초안 / 의뢰인 수정본</label>
                     <button
                       type="button"
                       onClick={() => setSpeakerSettingsOpen(true)}
                       disabled={busy || pdfReceived}
-                      className="rounded-lg border border-line bg-page px-3 py-1.5 text-xs font-semibold text-brand-navy transition hover:bg-muted disabled:opacity-50"
+                      className="bp-button bp-button-outline bp-button-compact"
                     >
                       화자 설정
                     </button>
                   </div>
-                  <p className="mb-2 text-xs text-brand-brown/80">
+                  <p className="client-edit__hint">
                     노란 글자는 업로드 시 선택한 구간 밖의 텍스트입니다. PDF에는 선택한 구간만 반영됩니다.
                   </p>
                   <div className="space-y-2">
@@ -1753,21 +1743,22 @@ export default function App() {
                         );
                         const hasActiveWord =
                           isAudioPlaying && segmentContainsActiveWord(segmentWords, playbackMs);
+                        const toolbarDisabled = busy || pdfReceived || !speakerIds.length;
 
                         return (
                         <div
                           key={segment.id}
-                          className={`rounded-xl border px-3 py-2.5 transition-colors ${
+                          className={`client-edit__segment ${
                             segment.omitted
-                              ? "border-line-strong/80 bg-white/50"
+                              ? "is-omitted"
                               : hasActiveWord
-                              ? "border-brand-orange/40 bg-brand-orange/10"
-                              : "border-line/80 bg-soft"
+                              ? "is-active"
+                              : ""
                           }`}
                         >
                           <div
                             role="button"
-                            tabIndex={busy || pdfReceived || !speakerIds.length ? -1 : 0}
+                            tabIndex={toolbarDisabled ? -1 : 0}
                             onClick={() => openAddSegmentAfter(index)}
                             onKeyDown={(event) => {
                               if (event.key === "Enter" || event.key === " ") {
@@ -1776,10 +1767,8 @@ export default function App() {
                               }
                             }}
                             title="클릭하여 이 대화 다음에 새 대화 추가"
-                            className={`mb-1.5 flex w-full min-w-0 items-center gap-2 rounded-lg border border-transparent px-1 py-0.5 text-left transition ${
-                              busy || pdfReceived || !speakerIds.length
-                                ? "cursor-not-allowed opacity-50"
-                                : "cursor-pointer hover:border-brand-orange/30 hover:bg-brand-orange/10"
+                            className={`client-edit__segment-toolbar ${
+                              toolbarDisabled ? "is-disabled" : "is-clickable"
                             }`}
                           >
                             <select
@@ -1788,7 +1777,7 @@ export default function App() {
                               onMouseDown={(event) => event.stopPropagation()}
                               onChange={(e) => updateSegment(index, { speaker: e.target.value })}
                               disabled={pdfReceived || Boolean(segment.omitted)}
-                              className="max-w-[9rem] shrink-0 rounded-lg border border-line bg-white px-2 py-1 text-xs font-semibold text-brand-navy outline-none transition focus:border-brand-orange/55 disabled:opacity-60"
+                              className="client-edit__speaker-select disabled:opacity-60"
                             >
                               {speakerIds.map((id) => (
                                 <option key={id} value={id}>
@@ -1796,7 +1785,7 @@ export default function App() {
                                 </option>
                               ))}
                             </select>
-                            <span className="text-[11px] text-brand-brown/80">
+                            <span className="client-edit__segment-time">
                               {formatSegmentTime(segment.start_ms)} - {formatSegmentTime(segment.end_ms)}
                             </span>
                             <button
@@ -1806,16 +1795,16 @@ export default function App() {
                                 toggleSegmentOmit(index);
                               }}
                               disabled={busy || pdfReceived}
-                              className="ml-auto shrink-0 rounded-lg border border-line-strong bg-white px-2 py-1 text-[10px] font-semibold text-brand-navy transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                              className="bp-btn-inline bp-btn-inline--outline client-edit__segment-omit disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               {segment.omitted ? "복구" : "구간삭제"}
                             </button>
                             {!segment.omitted ? (
-                              <span className="shrink-0 text-[10px] font-semibold text-brand-orange/80">+ 추가</span>
+                              <span className="client-edit__segment-add">+ 추가</span>
                             ) : null}
                           </div>
                           {segment.omitted ? (
-                            <p className="px-1 text-sm font-medium text-brand-brown">
+                            <p className="client-edit__segment-omitted-text">
                               {formatSegmentTime(segment.start_ms)} - {formatSegmentTime(segment.end_ms)}{" "}
                               {OMITTED_MARKER}
                             </p>
@@ -1841,9 +1830,7 @@ export default function App() {
                         );
                       })
                     ) : (
-                      <div className="rounded-2xl border border-dashed border-line bg-soft px-5 py-10 text-center text-sm text-brand-brown">
-                        수정할 대화 구간이 없습니다.
-                      </div>
+                      <div className="client-edit__empty">수정할 대화 구간이 없습니다.</div>
                     )}
                   </div>
                 </div>
@@ -1865,23 +1852,23 @@ export default function App() {
                 </div>
 
                 {(!pushRegistered || pushPermission !== "granted") ? (
-                  <div className="rounded-2xl border border-brand-orange/30 bg-brand-orange/10 px-4 py-3 text-sm text-brand-navy">
+                  <div className="client-edit__notice client-edit__notice--accent">
                     관리자 답변, PDF 전달, 상태 변경 알림을 받으려면 브라우저 알림을 허용해 주세요.
                   </div>
                 ) : null}
 
                 {pdfReceived ? (
-                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+                  <div className="client-edit__notice client-edit__notice--success">
                     의뢰인에게 PDF가 전달된 상태입니다. 이 화면에서는 내용을 확인하고 PDF만 다운로드할 수 있습니다.
                   </div>
                 ) : null}
 
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="client-edit__actions">
                   <button
                     type="button"
                     onClick={onSaveDraft}
                     disabled={busy || pdfReceived}
-                    className="rounded-xl border border-line bg-page py-3 text-sm font-semibold text-brand-navy transition hover:bg-muted disabled:opacity-50"
+                    className="bp-button bp-button-save"
                   >
                     저장
                   </button>
@@ -1889,7 +1876,7 @@ export default function App() {
                     type="button"
                     onClick={onSubmitTranscriptRequest}
                     disabled={busy || pdfReceived}
-                    className="rounded-xl bg-violet-600 py-3 text-sm font-semibold text-brand-navy transition hover:bg-violet-500 disabled:opacity-50"
+                    className="bp-button bp-button-transcript"
                   >
                     녹취록 요청
                   </button>
@@ -1897,7 +1884,7 @@ export default function App() {
                     type="button"
                     onClick={onRequestTranscriberReview}
                     disabled={busy || pdfReceived}
-                    className="rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-brand-navy transition hover:bg-indigo-500 disabled:opacity-50"
+                    className="bp-button bp-button-review"
                   >
                     검토요청
                   </button>
@@ -1905,7 +1892,7 @@ export default function App() {
                     type="button"
                     onClick={onCreateShareLink}
                     disabled={busy || creatingShare || pdfReceived}
-                    className="rounded-xl border border-brand-orange/40 bg-brand-orange/10 py-3 text-sm font-semibold text-brand-orange transition hover:bg-brand-orange/15 disabled:opacity-50"
+                    className="bp-button bp-button-share"
                   >
                     {creatingShare ? "링크 생성 중..." : "공유 링크 만들기"}
                   </button>
@@ -1913,14 +1900,14 @@ export default function App() {
                     type="button"
                     onClick={onDownloadPdf}
                     disabled={busy}
-                    className="rounded-xl border border-line bg-white py-3 text-sm font-semibold text-brand-navy transition hover:bg-soft disabled:opacity-50"
+                    className="bp-button bp-button-pdf"
                   >
                     PDF 다운로드
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="rounded-2xl border border-dashed border-line bg-soft px-6 py-14 text-center text-sm text-brand-brown">
+              <div className="client-edit__empty">
                 보관함에서 의뢰인 검토 항목을 선택하거나 작업번호로 문서를 불러오세요.
               </div>
             )}

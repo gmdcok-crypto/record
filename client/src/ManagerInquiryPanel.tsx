@@ -17,14 +17,14 @@ type Props = {
 
 function bubbleClass(role: string): string {
   if (role === "admin") {
-    return "border-brand-orange/30 bg-brand-orange/10 text-brand-navy";
+    return "client-edit__bubble client-edit__bubble--admin";
   }
-  return "border-line bg-page text-brand-navy";
+  return "client-edit__bubble client-edit__bubble--client";
 }
 
 export default function ManagerInquiryPanel({
   title = "관리자 문의",
-  accent = "cyan",
+  accent: _accent = "cyan",
   jobId,
   loadMessages,
   sendMessage,
@@ -66,30 +66,23 @@ export default function ManagerInquiryPanel({
     }
   };
 
-  const titleColor =
-    accent === "violet" ? "text-brand-navy-soft" : accent === "blue" ? "text-brand-orange" : "text-brand-orange";
-  const buttonColor =
-    accent === "violet"
-      ? "bg-violet-600 hover:bg-violet-500"
-      : accent === "blue"
-        ? "bg-blue-600 hover:bg-blue-500"
-        : "bg-brand-orange hover:bg-brand-orange";
-
   return (
-    <div className="rounded-2xl border border-line bg-soft">
-      <div className="border-b border-line px-4 py-3">
-        <h3 className={`text-sm font-semibold ${titleColor}`}>{title}</h3>
-        <p className="mt-1 text-xs text-brand-brown/80">작업 관련 문의는 관리자에게만 전달됩니다.</p>
+    <div className="client-edit__panel">
+      <div className="client-edit__panel-header">
+        <h3 className="client-edit__panel-title">{title}</h3>
+        <p className="client-edit__panel-desc">작업 관련 문의는 관리자에게만 전달됩니다.</p>
       </div>
 
       <div className="max-h-64 space-y-3 overflow-y-auto px-4 py-3">
-        {loading ? <p className="text-sm text-brand-brown/80">불러오는 중...</p> : null}
-        {!loading && messages.length === 0 ? <p className="text-sm text-brand-brown/80">{emptyMessage}</p> : null}
+        {loading ? <p className="text-sm text-[var(--bp-body)]">불러오는 중...</p> : null}
+        {!loading && messages.length === 0 ? (
+          <p className="text-sm text-[var(--bp-body)]">{emptyMessage}</p>
+        ) : null}
         {messages.map((message) => (
-          <div key={message.id} className={`rounded-xl border px-3 py-2 ${bubbleClass(message.sender_role)}`}>
+          <div key={message.id} className={bubbleClass(message.sender_role)}>
             <div className="flex items-center justify-between gap-3 text-[11px]">
               <span className="font-semibold">{message.sender_name}</span>
-              <span className="text-brand-brown">
+              <span className="text-[var(--bp-body)]">
                 {message.created_at ? formatKstDateTime(message.created_at) : "-"}
               </span>
             </div>
@@ -98,20 +91,20 @@ export default function ManagerInquiryPanel({
         ))}
       </div>
 
-      <div className="border-t border-line px-4 py-3">
+      <div className="border-t border-[var(--bp-line)] px-4 py-3">
         <textarea
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           rows={3}
           placeholder="관리자에게 전달할 내용을 입력하세요."
-          className="w-full rounded-xl border border-line bg-page px-3 py-2 text-sm leading-6 text-brand-navy outline-none transition focus:border-brand-orange"
+          className="client-edit__textarea"
         />
         <div className="mt-3 flex justify-end">
           <button
             type="button"
             onClick={() => void handleSend()}
             disabled={sending || !draft.trim()}
-            className={`rounded-xl px-4 py-2 text-sm font-semibold text-brand-navy transition disabled:opacity-50 ${buttonColor}`}
+            className="bp-button bp-button-primary"
           >
             {sending ? "전송 중..." : sendLabel}
           </button>
