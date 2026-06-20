@@ -34,3 +34,5 @@ transcriber/node_modules/
 transcriber/dist/
 transcriber/.env
 transcriber/tsconfig.tsbuildinfo
+new_intro/node_modules/
+new_intro/dist/

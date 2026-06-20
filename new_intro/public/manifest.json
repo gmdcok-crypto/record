@@ -1,0 +1,25 @@
+{
+  "name": "불판녹취",
+  "short_name": "불판녹취",
+  "description": "불판녹취 속기사무소 메인페이지",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fbfbf9",
+  "theme_color": "#0f2748",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/images/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/images/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
