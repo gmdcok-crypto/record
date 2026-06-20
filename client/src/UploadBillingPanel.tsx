@@ -364,18 +364,28 @@ export default function UploadBillingPanel({
           </>
         ) : null}
 
-        <label className="mt-4 flex items-start gap-3 rounded-xl border border-line/80 bg-soft px-3 py-3">
+        <label
+          className={`mt-4 flex gap-3 rounded-xl border border-line/80 bg-soft px-3 py-3 ${
+            purchaseAgreementChecked ? "items-center" : "items-start"
+          }`}
+        >
           <input
             type="checkbox"
             checked={purchaseAgreementChecked}
             onChange={(event) => setPurchaseAgreementChecked(event.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-line-strong bg-white text-brand-orange focus:ring-brand-orange/40"
+            className={`h-4 w-4 shrink-0 rounded border-line-strong bg-white text-brand-orange focus:ring-brand-orange/40 ${
+              purchaseAgreementChecked ? "" : "mt-0.5"
+            }`}
           />
           <span className="text-sm leading-6 text-brand-navy">
             <span className="block font-semibold text-brand-navy">구매조건 및 결제진행 동의</span>
-            결제 후 녹취록 작성 작업이 즉시 진행되며, 작업이 시작된 이후에는 단순 취소 및 환불이 어렵습니다. 음질,
-            잡음, 대화자 수, 화자 구분 난이도 등에 따라 추가 요금 또는 일정 변경이나 취소 환불이 발생할 수 있음을
-            확인하고 동의합니다.
+            {!purchaseAgreementChecked ? (
+              <span className="mt-1 block text-brand-brown">
+                결제 후 녹취록 작성 작업이 즉시 진행되며, 작업이 시작된 이후에는 단순 취소 및 환불이 어렵습니다. 음질,
+                잡음, 대화자 수, 화자 구분 난이도 등에 따라 추가 요금 또는 일정 변경이나 취소 환불이 발생할 수 있음을
+                확인하고 동의합니다.
+              </span>
+            ) : null}
           </span>
         </label>
 

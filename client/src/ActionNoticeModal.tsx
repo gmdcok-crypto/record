@@ -40,7 +40,9 @@ export default function ActionNoticeModal({ notice, onClose, accent = "cyan" }: 
         >
           {notice.title ?? DEFAULT_TITLES[notice.kind]}
         </h3>
-        <p className="mt-3 text-sm leading-6 text-brand-navy">{notice.message}</p>
+        {notice.message ? (
+          <p className="mt-3 text-sm leading-6 text-brand-navy">{notice.message}</p>
+        ) : null}
         <div className="mt-5 flex justify-end">
           <button
             type="button"

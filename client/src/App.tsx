@@ -1174,7 +1174,7 @@ export default function App() {
         workflow_status: "client_editing",
       });
       setChangeHistoryRefresh((value) => value + 1);
-      showNotice("success", "의뢰인 수정본이 DB와 R2에 저장되었습니다.", "임시 저장 완료");
+      showNotice("success", "", "저장완료");
       await refreshWorkspace();
     } catch (err) {
       showNotice("error", err instanceof Error ? err.message : "저장 실패", "임시 저장 실패");
