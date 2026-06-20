@@ -1,36 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import type { TranscriptChangeEntry } from "./api";
 import { formatKstDateTime } from "./formatKstDateTime";
+import TranscriptChangeLine from "./TranscriptChangeLine";
 
 type Props = {
   jobId: string | null;
   refreshKey?: number;
   loadEntries: (jobId: string) => Promise<TranscriptChangeEntry[]>;
+  onSegmentFocus?: (segmentIndex: number) => void;
 };
-
-function formatChangeLine(change: TranscriptChangeEntry["changes"][number]): string {
-  const segmentNo =
-    change.segment_index != null ? `구간 ${change.segment_index + 1}` : "";
-
-  switch (change.type) {
-    case "segment_text":
-      return `${segmentNo}: "${change.before || "(없음)"}" → "${change.after || "(없음)"}"`;
-    case "segment_speaker":
-      return `${segmentNo} 화자: ${change.before || "-"} → ${change.after || "-"}`;
-    case "speaker_label":
-      return `화자 ${change.speaker_id} 이름: ${change.before || "(기본)"} → ${change.after || "(기본)"}`;
-    case "segment_added":
-      return `${segmentNo} 추가: ${change.after || ""}`;
-    case "segment_removed":
-      return `${segmentNo} 삭제: ${change.before || ""}`;
-    case "segment_omitted":
-      return `${segmentNo} 생략: "${change.before || "(없음)"}" → ${change.after || "(생략)"}`;
-    case "segment_restored":
-      return `${segmentNo} 복구: ${change.before || "(생략)"} → "${change.after || "(없음)"}"`;
-    default:
-      return JSON.stringify(change);
-  }
-}
 
 function roleLabel(role: string): string {
   switch (role) {
@@ -38,12 +16,21 @@ function roleLabel(role: string): string {
       return "의뢰인";
     case "transcriber":
       return "속기사";
+    case "admin":
+      return "관리자";
+    case "share":
+      return "공유 사용자";
     default:
       return role;
   }
 }
 
-export default function TranscriptChangeHistory({ jobId, refreshKey = 0, loadEntries }: Props) {
+export default function TranscriptChangeHistory({
+  jobId,
+  refreshKey = 0,
+  loadEntries,
+  onSegmentFocus,
+}: Props) {
   const [entries, setEntries] = useState<TranscriptChangeEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -93,6 +80,9 @@ export default function TranscriptChangeHistory({ jobId, refreshKey = 0, loadEnt
           {!loading && !error && entries.length === 0 ? (
             <p className="text-sm text-[var(--bp-body)]">저장된 변경 이력이 없습니다.</p>
           ) : null}
+          {onSegmentFocus ? (
+            <p className="client-edit__history-hint">구간이 있는 항목을 클릭하면 편집 화면에서 해당 위치로 이동합니다.</p>
+          ) : null}
           <div className="max-h-72 space-y-3 overflow-y-auto">
             {entries.map((entry) => (
               <div key={`${entry.version}-${entry.created_at}`} className="client-edit__history-item">
@@ -112,7 +102,11 @@ export default function TranscriptChangeHistory({ jobId, refreshKey = 0, loadEnt
                 </div>
                 <ul className="client-edit__history-changes">
                   {entry.changes.map((change, index) => (
-                    <li key={`${entry.version}-${index}`}>{formatChangeLine(change)}</li>
+                    <TranscriptChangeLine
+                      key={`${entry.version}-${index}`}
+                      change={change}
+                      onSegmentFocus={onSegmentFocus}
+                    />
                   ))}
                 </ul>
               </div>

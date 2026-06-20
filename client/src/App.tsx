@@ -319,8 +319,11 @@ export default function App() {
   const [pushRegistered, setPushRegistered] = useState(false);
   const [enablingPush, setEnablingPush] = useState(false);
   const segmentEndRef = useRef<number | null>(null);
+  const segmentRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const historyFocusTimerRef = useRef<number | null>(null);
   const [playbackMs, setPlaybackMs] = useState(0);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [historyFocusedSegment, setHistoryFocusedSegment] = useState<number | null>(null);
   const autoUploadStartedRef = useRef(false);
   const paymentFlowHandledRef = useRef<string | null>(null);
   const [billingRestoreByKey, setBillingRestoreByKey] = useState<Record<string, BillingRestoreHint>>({});
@@ -1276,6 +1279,36 @@ export default function App() {
     inquiryPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const focusSegmentFromHistory = useCallback(
+    (index: number) => {
+      if (index < 0 || index >= segments.length) {
+        showNotice(
+          "info",
+          `구간 ${index + 1}은(는) 현재 문서에서 찾을 수 없습니다. 구간이 추가·삭제되었을 수 있습니다.`,
+        );
+        return;
+      }
+      setHistoryFocusedSegment(index);
+      segmentRefs.current.get(index)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (historyFocusTimerRef.current != null) {
+        window.clearTimeout(historyFocusTimerRef.current);
+      }
+      historyFocusTimerRef.current = window.setTimeout(() => {
+        setHistoryFocusedSegment(null);
+        historyFocusTimerRef.current = null;
+      }, 4000);
+    },
+    [segments.length, showNotice],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (historyFocusTimerRef.current != null) {
+        window.clearTimeout(historyFocusTimerRef.current);
+      }
+    };
+  }, []);
+
   const updateSegment = (index: number, patch: Partial<TranscriptSegment>) => {
     setSegments((prev) =>
       prev.map((segment, currentIndex) => (currentIndex === index ? { ...segment, ...patch } : segment)),
@@ -1748,13 +1781,17 @@ export default function App() {
                         return (
                         <div
                           key={segment.id}
+                          ref={(element) => {
+                            if (element) segmentRefs.current.set(index, element);
+                            else segmentRefs.current.delete(index);
+                          }}
                           className={`client-edit__segment ${
                             segment.omitted
                               ? "is-omitted"
                               : hasActiveWord
                               ? "is-active"
                               : ""
-                          }`}
+                          }${historyFocusedSegment === index ? " is-history-focus" : ""}`}
                         >
                           <div
                             role="button"
@@ -1839,6 +1876,7 @@ export default function App() {
                   jobId={job.job_id}
                   refreshKey={changeHistoryRefresh}
                   loadEntries={fetchTranscriptChanges}
+                  onSegmentFocus={focusSegmentFromHistory}
                 />
 
                 <div ref={inquiryPanelRef}>
