@@ -9,6 +9,23 @@ from app.services.job_store import (
 
 THREAD_CLIENT_ADMIN = "client_admin"
 THREAD_TRANSCRIBER_ADMIN = "transcriber_admin"
+INQUIRY_FALLBACK_ADMIN_ROLES = ("owner", "manager")
+
+
+def resolve_job_inquiry_notify_admin_ids(db: Session, job: Job) -> list[int]:
+    """Route inquiry alerts to the admin who assigned the job, with owner/manager fallback."""
+    if job.assigned_admin_id:
+        assigned = db.get(AdminUser, job.assigned_admin_id)
+        if assigned is not None and assigned.is_active:
+            return [assigned.id]
+
+    fallback_ids = db.scalars(
+        select(AdminUser.id).where(
+            AdminUser.is_active == 1,
+            AdminUser.role.in_(INQUIRY_FALLBACK_ADMIN_ROLES),
+        )
+    ).all()
+    return list(fallback_ids)
 
 
 def can_access_inquiry_thread(

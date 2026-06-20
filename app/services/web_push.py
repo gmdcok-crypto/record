@@ -465,6 +465,19 @@ def send_client_inquiry_web_push(db: Session, *, member: Member, job: Job, sende
     )
 
 
+def send_admin_web_push_to_admin_ids(db: Session, admin_ids: list[int], payload: dict[str, Any]) -> int:
+    if not web_push_enabled() or not admin_ids:
+        return 0
+
+    delivered = 0
+    for admin_id in admin_ids:
+        admin = db.get(AdminUser, admin_id)
+        if admin is None or not admin.is_active:
+            continue
+        delivered += send_web_push_to_admin(db, admin_user=admin, payload=payload)
+    return delivered
+
+
 def broadcast_admin_web_push(db: Session, payload: dict[str, Any]) -> int:
     if not web_push_enabled():
         return 0
@@ -483,10 +496,12 @@ def send_admin_inquiry_web_push(
     sender_name: str,
     message_preview: str,
     sender_role: str,
+    notify_admin_ids: list[int],
 ) -> int:
     role_label = "의뢰인" if sender_role == "client" else "속기사" if sender_role == "transcriber" else "사용자"
-    return broadcast_admin_web_push(
+    return send_admin_web_push_to_admin_ids(
         db,
+        notify_admin_ids,
         _payload(
             title=f"{role_label} 문의 도착",
             body=f"{job.original_filename}: {sender_name} - {message_preview}",

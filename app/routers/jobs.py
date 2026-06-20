@@ -77,6 +77,7 @@ from app.services.job_inquiries import (
     can_access_inquiry_thread,
     create_job_inquiry_message,
     list_job_inquiry_messages,
+    resolve_job_inquiry_notify_admin_ids,
 )
 from app.services.inquiry_notifications import send_inquiry_notification
 from app.services.r2 import (
@@ -385,6 +386,7 @@ def _notify_admin_inquiry(
     sender_name: str,
     message: str,
     sender_role: str,
+    notify_admin_ids: list[int],
 ) -> None:
     preview = " ".join((message or "").split())
     if len(preview) > 120:
@@ -396,9 +398,14 @@ def _notify_admin_inquiry(
             sender_name=sender_name,
             message_preview=preview,
             sender_role=sender_role,
+            notify_admin_ids=notify_admin_ids,
         )
         if delivered == 0:
-            logger.info("Admin inquiry web push delivered 0 notifications for job %s", job.job_id)
+            logger.info(
+                "Admin inquiry web push delivered 0 notifications for job %s (targets=%s)",
+                job.job_id,
+                notify_admin_ids,
+            )
     except Exception:
         logger.exception("Failed to send admin inquiry web push for job %s", job.job_id)
 
@@ -610,9 +617,9 @@ def admin_overview(db: Annotated[Session, Depends(get_db)], _admin: AdminAuth) -
 
 
 @router.get("/admin/events")
-def admin_events(_admin: AdminEventAuth) -> StreamingResponse:
+def admin_events(admin: AdminEventAuth) -> StreamingResponse:
     return StreamingResponse(
-        stream_admin_events(),
+        stream_admin_events(admin.id),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -750,6 +757,7 @@ def create_client_job_inquiry(
         message = create_job_inquiry_message(db, job, THREAD_CLIENT_ADMIN, body.message, member=member)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    notify_admin_ids = resolve_job_inquiry_notify_admin_ids(db, job)
     try:
         send_inquiry_notification(
             db,
@@ -762,8 +770,19 @@ def create_client_job_inquiry(
         )
     except Exception:
         logger.exception("Failed to send client inquiry notification for job %s", job_id)
-    _notify_admin_inquiry(db, job, sender_name=member.name, message=message["message"], sender_role="client")
-    publish_admin_event("job_inquiry_created", {"job_id": job_id, "thread_type": THREAD_CLIENT_ADMIN, "sender_role": "client"})
+    _notify_admin_inquiry(
+        db,
+        job,
+        sender_name=member.name,
+        message=message["message"],
+        sender_role="client",
+        notify_admin_ids=notify_admin_ids,
+    )
+    publish_admin_event(
+        "job_inquiry_created",
+        {"job_id": job_id, "thread_type": THREAD_CLIENT_ADMIN, "sender_role": "client"},
+        admin_ids=notify_admin_ids,
+    )
     return {"message": message}
 
 
@@ -797,6 +816,7 @@ def create_transcriber_job_inquiry(
         message = create_job_inquiry_message(db, job, THREAD_TRANSCRIBER_ADMIN, body.message, transcriber=current)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    notify_admin_ids = resolve_job_inquiry_notify_admin_ids(db, job)
     try:
         send_inquiry_notification(
             db,
@@ -809,8 +829,19 @@ def create_transcriber_job_inquiry(
         )
     except Exception:
         logger.exception("Failed to send transcriber inquiry notification for job %s", job_id)
-    _notify_admin_inquiry(db, job, sender_name=current.name, message=message["message"], sender_role="transcriber")
-    publish_admin_event("job_inquiry_created", {"job_id": job_id, "thread_type": THREAD_TRANSCRIBER_ADMIN, "sender_role": "transcriber"})
+    _notify_admin_inquiry(
+        db,
+        job,
+        sender_name=current.name,
+        message=message["message"],
+        sender_role="transcriber",
+        notify_admin_ids=notify_admin_ids,
+    )
+    publish_admin_event(
+        "job_inquiry_created",
+        {"job_id": job_id, "thread_type": THREAD_TRANSCRIBER_ADMIN, "sender_role": "transcriber"},
+        admin_ids=notify_admin_ids,
+    )
     return {"message": message}
 
 
