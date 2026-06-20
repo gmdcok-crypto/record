@@ -1,0 +1,114 @@
+/**
+ * Bulpan Figma UI handoff — design tokens (unit 0).
+ * Source: bulpan-figma-ui-handoff/tokens
+ */
+:root {
+  --bp-ink: #0d1f3c;
+  --bp-paper: #fbfbf9;
+  --bp-surface: #ffffff;
+  --bp-surface-muted: #f6f6f3;
+  --bp-line: #e5e5e0;
+  --bp-body: #736352;
+  --bp-accent: #ff6b4a;
+  --bp-accent-dark: #e85a38;
+  --bp-accent-soft: #ffeee8;
+  --bp-pinterest: #e60023;
+  --bp-danger: #e84b3c;
+  --bp-save-text: #c83e2f;
+  --bp-save-stroke: #d94f3d;
+  --bp-review: #5b53dd;
+  --bp-review-stroke: #4f46e5;
+  --bp-share-soft: #fff0ec;
+  --bp-share-text: #e84b3c;
+  --bp-pdf-soft: #fff7f4;
+  --bp-pdf-stroke: #f2b8aa;
+  --bp-pdf-text: #8f2f25;
+
+  --bp-font-family: Inter, Pretendard, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  --bp-text-display-size: 26px;
+  --bp-text-title-size: 22px;
+  --bp-text-section-size: 15px;
+  --bp-text-body-size: 14px;
+  --bp-text-caption-size: 12px;
+  --bp-text-micro-size: 11px;
+  --bp-text-button-size: 14px;
+
+  --bp-radius-button: 14px;
+  --bp-radius-control: 12px;
+  --bp-radius-small: 8px;
+  --bp-radius-section: 16px;
+  --bp-radius-card: 20px;
+
+  --bp-action-height: 44px;
+  --bp-section-gap: 16px;
+  --bp-card-padding: 16px;
+
+  --bp-shadow-card: 0 2px 16px rgba(13, 31, 60, 0.07);
+  --bp-shadow-strong: 0 24px 60px rgba(0, 0, 0, 0.34);
+
+  /* Legacy aliases — existing Tailwind/class usage during migration */
+  --orange: var(--bp-accent);
+  --orange-dark: var(--bp-accent-dark);
+  --navy: var(--bp-ink);
+  --navy-soft: #1a3a5c;
+  --page: var(--bp-paper);
+  --soft: var(--bp-surface-muted);
+  --muted: var(--bp-line);
+  --text: var(--bp-ink);
+  --brown: var(--bp-body);
+  --white: var(--bp-surface);
+  --border: var(--bp-line);
+  --border-strong: #d8d8d3;
+  --shadow-card: var(--bp-shadow-card);
+  --shadow-strong: var(--bp-shadow-strong);
+  --radius: var(--bp-radius-card);
+}
+
+.bp-text-display {
+  font-family: var(--bp-font-family);
+  font-size: var(--bp-text-display-size);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--bp-ink);
+}
+
+.bp-text-title {
+  font-family: var(--bp-font-family);
+  font-size: var(--bp-text-title-size);
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--bp-ink);
+}
+
+.bp-text-section {
+  font-family: var(--bp-font-family);
+  font-size: var(--bp-text-section-size);
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--bp-ink);
+}
+
+.bp-text-body {
+  font-family: var(--bp-font-family);
+  font-size: var(--bp-text-body-size);
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--bp-body);
+}
+
+.bp-text-caption {
+  font-family: var(--bp-font-family);
+  font-size: var(--bp-text-caption-size);
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--bp-body);
+}
+
+.bp-text-micro {
+  font-family: var(--bp-font-family);
+  font-size: var(--bp-text-micro-size);
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--bp-body);
+}

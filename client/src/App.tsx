@@ -84,6 +84,8 @@ import {
 } from "./segmentAudio";
 import { isMobileLikeClient } from "./uploadEnvironment";
 import ClientBottomTabBar from "./ClientBottomTabBar";
+import ClientShellHeader from "./ClientShellHeader";
+import ClientTopTabNav from "./ClientTopTabNav";
 
 type Step = "idle" | "uploading" | "ready" | "error";
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -1333,80 +1335,39 @@ export default function App() {
   }
 
   return (
-    <div className="client-app min-h-dvh">
-      <div className="mx-auto flex min-h-dvh max-w-3xl flex-col px-4 pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] pt-4 lg:max-w-4xl lg:px-6 lg:pb-6">
-        <header className="mb-4 flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold text-brand-orange">의뢰인 녹취록</p>
-            <h1 className="mt-1 text-2xl font-bold text-brand-navy">
-              {memberName ? `${memberName}님` : GUEST_CLIENT_NAME}
-            </h1>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {(!pushRegistered || pushPermission !== "granted") ? (
-              <button
-                type="button"
-                onClick={() => void handleEnablePush()}
-                disabled={enablingPush}
-                className="rounded-xl border border-brand-orange/40 bg-brand-orange/10 px-3 py-2 text-sm font-medium text-brand-orange transition hover:bg-brand-orange/15 disabled:opacity-50"
-              >
-                {enablingPush ? "알림 설정 중..." : "알림 받기"}
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-xl border border-line px-3 py-2 text-sm font-medium text-brand-navy transition hover:bg-muted hover:text-brand-navy"
-            >
-              로그아웃
-            </button>
-          </div>
-        </header>
+    <div className="client-app client-shell min-h-dvh">
+      <div className="client-shell__inner mx-auto flex min-h-dvh w-full flex-col px-4 pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] pt-4 lg:px-6 lg:pb-6">
+        <ClientShellHeader
+          memberName={memberName}
+          guestLabel={GUEST_CLIENT_NAME}
+          enablingPush={enablingPush}
+          showPushButton={!pushRegistered || pushPermission !== "granted"}
+          onEnablePush={() => void handleEnablePush()}
+          onLogout={handleLogout}
+        />
 
-        <nav className="sticky top-0 z-20 -mx-4 mb-4 border-b border-line bg-white/95 px-4 backdrop-blur lg:-mx-6 lg:px-6">
-          <div className="grid grid-cols-3 gap-1 py-2">
-            {tabs.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
-                    isActive
-                      ? "bg-white text-brand-navy shadow-inner shadow-brand-navy/5"
-                      : "text-brand-brown hover:bg-white hover:text-brand-navy"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-        </nav>
+        <ClientTopTabNav tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
         <main className="flex-1">
           {activeTab === "upload" ? (
-          <section className="rounded-shell border border-line bg-white p-5 shadow-card">
-            <div className="mb-5">
-              <p className="text-sm font-semibold text-brand-orange">파일 업로드</p>
-              <h2 className="mt-1 text-xl font-bold text-brand-navy">새 녹취 의뢰</h2>
-              <p className="mt-2 text-sm text-brand-brown">
+          <section className="bp-card client-upload__page-card">
+            <div className="client-upload__heading">
+              <p className="client-upload__eyebrow">파일 업로드</p>
+              <h2 className="client-upload__title">새 녹취 의뢰</h2>
+              <p className="client-upload__desc">
                 프로젝트를 정한 뒤 파일을 선택하고 파일별 업로드 구간을 설정할 수 있습니다.
               </p>
             </div>
 
-            <div className="mb-4 rounded-2xl border border-line bg-soft p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand-brown/80">업로드 프로젝트</p>
+            <div className="bp-section-box client-upload__project-box">
+              <p className="client-upload__section-label">업로드 프로젝트</p>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => setUploadProjectMode("existing")}
                   disabled={!projects.length}
-                  className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
-                    uploadProjectMode === "existing"
-                      ? "bg-brand-orange/10 text-brand-orange ring-1 ring-brand-orange/40"
-                      : "bg-white text-brand-brown hover:text-brand-navy disabled:opacity-40"
+                  className={`client-upload__project-toggle ${
+                    uploadProjectMode === "existing" ? "is-active" : ""
                   }`}
                 >
                   기존 프로젝트
@@ -1414,10 +1375,8 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setUploadProjectMode("new")}
-                  className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
-                    uploadProjectMode === "new"
-                      ? "bg-brand-orange/10 text-brand-orange ring-1 ring-brand-orange/40"
-                      : "bg-white text-brand-brown hover:text-brand-navy"
+                  className={`client-upload__project-toggle ${
+                    uploadProjectMode === "new" ? "is-active" : ""
                   }`}
                 >
                   새 프로젝트
@@ -1425,12 +1384,12 @@ export default function App() {
               </div>
               {uploadProjectMode === "existing" ? (
                 loadingWorkspace && !projects.length ? (
-                  <p className="mt-3 text-sm text-brand-brown">프로젝트를 불러오는 중입니다.</p>
+                  <p className="client-upload__field-hint">프로젝트를 불러오는 중입니다.</p>
                 ) : projects.length ? (
                   <select
                     value={selectedUploadProjectId}
                     onChange={(event) => setSelectedUploadProjectId(event.target.value)}
-                    className="mt-3 w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-brand-navy outline-none focus:border-brand-orange/55"
+                    className="bp-control-input mt-3"
                   >
                     {projects.map((project) => (
                       <option key={project.project_id} value={project.project_id}>
@@ -1439,22 +1398,22 @@ export default function App() {
                     ))}
                   </select>
                 ) : (
-                  <p className="mt-3 text-sm text-brand-brown">등록된 프로젝트가 없습니다. 새 프로젝트로 업로드하세요.</p>
+                  <p className="client-upload__field-hint">등록된 프로젝트가 없습니다. 새 프로젝트로 업로드하세요.</p>
                 )
               ) : (
                 <div className="mt-3">
-                  <label className="mb-1.5 block text-sm font-medium text-brand-navy">
-                    프로젝트 이름 <span className="text-rose-400">*</span>
+                  <label className="client-upload__field-label">
+                    프로젝트 이름 <span className="text-[var(--bp-save-text)]">*</span>
                   </label>
                   <input
                     value={newProjectTitle}
                     onChange={(event) => setNewProjectTitle(event.target.value)}
                     placeholder="예: ○○사건 통화녹취"
                     required
-                    className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-brand-navy placeholder:text-brand-brown/60 outline-none focus:border-brand-orange/55"
+                    className="bp-control-input"
                   />
                   {!newProjectTitle.trim() ? (
-                    <p className="mt-2 text-xs text-amber-300/90">프로젝트 이름을 입력해야 파일을 선택할 수 있습니다.</p>
+                    <p className="client-upload__field-hint text-amber-700">프로젝트 이름을 입력해야 파일을 선택할 수 있습니다.</p>
                   ) : null}
                 </div>
               )}
@@ -1490,23 +1449,19 @@ export default function App() {
                   setIsDragActive(false);
                 }}
                 onDrop={onDropFiles}
-                className={`flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-10 text-center transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                  !uploadProjectReady
-                    ? "border-line bg-soft/80"
-                    : isDragActive
-                      ? "border-blue-400 bg-white"
-                      : "border-line bg-soft hover:border-blue-400 hover:bg-white"
-                }`}
+                className={`client-upload__dropzone ${isDragActive ? "is-drag-active" : ""}`}
               >
-                <span className="text-4xl">🎙️</span>
-                <span className="mt-3 font-semibold text-brand-navy">
+                <span className="text-4xl" aria-hidden="true">
+                  🎙️
+                </span>
+                <span className="client-upload__dropzone-title">
                   {!uploadProjectReady
                     ? "프로젝트를 먼저 정해 주세요"
                     : selectedFiles.length > 0
                       ? `${selectedFiles.length}개 파일 선택됨`
                       : "음성/영상 파일 선택"}
                 </span>
-                <span className="mt-1 text-sm text-brand-brown">
+                <span className="client-upload__dropzone-desc">
                   {!uploadProjectReady
                     ? uploadProjectMode === "new"
                       ? "위에 프로젝트 이름을 입력하면 파일 선택이 활성화됩니다."
@@ -1519,20 +1474,16 @@ export default function App() {
                 </span>
               </button>
 
-              {uploadStatus ? (
-                <p className="rounded-xl border border-brand-orange/30 bg-brand-orange/10 px-3 py-2 text-sm text-brand-navy">
-                  {uploadStatus}
-                </p>
-              ) : null}
+              {uploadStatus ? <p className="client-upload__status">{uploadStatus}</p> : null}
 
               {step === "uploading" && (
                 <div>
-                  <div className="mb-1 flex justify-between text-sm text-brand-brown">
+                  <div className="mb-1 flex justify-between text-sm text-[var(--bp-body)]">
                     <span>업로드 중...</span>
                     <span>{progress}%</span>
                   </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${progress}%` }} />
+                  <div className="client-upload__progress-track">
+                    <div className="client-upload__progress-bar" style={{ width: `${progress}%` }} />
                   </div>
                 </div>
               )}

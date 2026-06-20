@@ -1,0 +1,51 @@
+{
+  "source": {
+    "figmaFileKey": "7vTP9E1dkG2xDUpQGxdHSw",
+    "pageNodeId": "466:2",
+    "pageName": "UI화면 레이어분리"
+  },
+  "colors": {
+    "ink": "#0D1F3C",
+    "paper": "#FBFBF9",
+    "surface": "#FFFFFF",
+    "surfaceMuted": "#F6F6F3",
+    "line": "#E5E5E0",
+    "bodyText": "#736352",
+    "accent": "#FF6B4A",
+    "accentSoft": "#FFEEE8",
+    "pinterest": "#E60023",
+    "danger": "#E84B3C",
+    "saveText": "#C83E2F",
+    "saveStroke": "#D94F3D",
+    "review": "#5B53DD",
+    "reviewStroke": "#4F46E5",
+    "shareSoft": "#FFF0EC",
+    "pdfSoft": "#FFF7F4",
+    "pdfStroke": "#F2B8AA",
+    "pdfText": "#8F2F25"
+  },
+  "typography": {
+    "fontFamily": "Inter",
+    "display": { "fontWeight": 700, "fontSize": 26 },
+    "title": { "fontWeight": 700, "fontSize": 22 },
+    "section": { "fontWeight": 700, "fontSize": 15 },
+    "body": { "fontWeight": 400, "fontSize": 14 },
+    "caption": { "fontWeight": 400, "fontSize": 12 },
+    "micro": { "fontWeight": 400, "fontSize": 11 },
+    "button": { "fontWeight": 700, "fontSize": 14 }
+  },
+  "radius": {
+    "button": 14,
+    "control": 12,
+    "small": 8,
+    "section": 16,
+    "card": 20
+  },
+  "layout": {
+    "actionButtonHeight": 44,
+    "sectionGapMin": 14,
+    "sectionGapMax": 18,
+    "cardPaddingMin": 16,
+    "cardPaddingMax": 20
+  }
+}

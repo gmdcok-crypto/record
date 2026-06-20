@@ -1,0 +1,91 @@
+/**
+ * Client PWA shell — header, tab nav (Figma unit 1).
+ */
+.client-shell {
+  --client-shell-max: 865px;
+}
+
+.client-shell__inner {
+  max-width: var(--client-shell-max);
+}
+
+.client-shell__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: var(--bp-section-gap);
+}
+
+.client-shell__brand-eyebrow {
+  margin: 0;
+  font-size: var(--bp-text-caption-size);
+  font-weight: 700;
+  color: var(--bp-accent);
+  letter-spacing: 0.02em;
+}
+
+.client-shell__brand-title {
+  margin: 4px 0 0;
+  font-size: var(--bp-text-title-size);
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--bp-ink);
+}
+
+.client-shell__actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.client-shell__tab-nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin: 0 calc(-1 * var(--bp-card-padding)) var(--bp-section-gap);
+  padding: 8px var(--bp-card-padding);
+  border-bottom: 1px solid var(--bp-line);
+  background: color-mix(in srgb, var(--bp-surface) 95%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.client-shell__tab-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.client-shell__tab-grid .bp-tab {
+  width: 100%;
+}
+
+.client-bottom-tab-bar {
+  border-top-color: var(--bp-line);
+  background: color-mix(in srgb, var(--bp-surface) 95%, transparent);
+}
+
+.client-bottom-tab-bar__item {
+  display: flex;
+  min-height: 3.25rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  font-size: var(--bp-text-micro-size);
+  font-weight: 700;
+  color: var(--bp-body);
+  transition: color 0.15s ease;
+}
+
+.client-bottom-tab-bar__item.is-active {
+  color: var(--bp-accent);
+}
+
+.client-bottom-tab-bar__item:not(.is-active):hover {
+  color: var(--bp-ink);
+}

@@ -1,31 +1,19 @@
-:root {
-  --orange: #ff6b4a;
-  --orange-dark: #e85a38;
-  --navy: #0f2748;
-  --navy-soft: #1a3a5c;
-  --page: #fbfbf9;
-  --soft: #f6f6f3;
-  --muted: #e5e5e0;
-  --text: #33332e;
-  --brown: #736352;
-  --white: #ffffff;
-  --border: rgba(15, 39, 72, 0.09);
-  --border-strong: rgba(15, 39, 72, 0.14);
-  --shadow-card: 0 2px 16px rgba(15, 39, 72, 0.07);
-  --shadow-strong: 0 24px 60px rgba(0, 0, 0, 0.34);
-  --radius: 24px;
-}
+@import "./figma-tokens.css";
+@import "./figma-components.css";
+@import "./client-shell.css";
+@import "./client-upload.css";
 
 body {
-  background: var(--page);
-  color: var(--text);
-  font-family: Inter, Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bp-paper);
+  color: var(--bp-ink);
+  font-family: var(--bp-font-family);
 }
 
 .client-app {
   min-height: 100dvh;
-  background: var(--page);
-  color: var(--text);
+  background: var(--bp-paper);
+  color: var(--bp-ink);
+  font-family: var(--bp-font-family);
 }
 
 .client-loading {
@@ -33,9 +21,9 @@ body {
   min-height: 100dvh;
   align-items: center;
   justify-content: center;
-  background: var(--page);
-  color: var(--brown);
-  font-size: 14px;
+  background: var(--bp-paper);
+  color: var(--bp-body);
+  font-size: var(--bp-text-body-size);
   font-weight: 600;
 }
 

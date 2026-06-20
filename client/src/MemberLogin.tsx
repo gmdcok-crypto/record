@@ -37,9 +37,9 @@ export default function MemberLogin({ onSuccess }: MemberLoginProps) {
 
   return (
     <>
-      <div className="client-login">
+      <div className="client-login bp-page">
         <div className="client-login__panel">
-          <p className="client-login__eyebrow">의뢰인 녹취</p>
+          <p className="client-login__eyebrow">불판녹취</p>
           <h1 className="client-login__title">로그인</h1>
           <p className="client-login__desc">가입한 이메일과 비밀번호로 로그인하세요.</p>
 
@@ -73,7 +73,7 @@ export default function MemberLogin({ onSuccess }: MemberLoginProps) {
 
             {error ? <p className="client-login__error">{error}</p> : null}
 
-            <button type="submit" className="client-login__submit" disabled={submitting}>
+            <button type="submit" className="client-login__submit bp-button bp-button-primary" disabled={submitting}>
               {submitting ? "로그인 중…" : "로그인"}
             </button>
           </form>

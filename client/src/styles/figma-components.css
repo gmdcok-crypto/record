@@ -1,0 +1,146 @@
+/**
+ * Bulpan Figma UI handoff — shared component patterns (unit 0).
+ */
+.bp-page {
+  background: var(--bp-paper);
+  color: var(--bp-ink);
+  font-family: var(--bp-font-family);
+}
+
+.bp-card {
+  background: var(--bp-surface);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-radius-card);
+  box-shadow: var(--bp-shadow-card);
+}
+
+.bp-section-box {
+  background: var(--bp-surface-muted);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-radius-section);
+  padding: var(--bp-card-padding);
+}
+
+.bp-control {
+  min-height: var(--bp-action-height);
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-radius-control);
+  background: var(--bp-surface);
+  color: var(--bp-ink);
+  font-size: var(--bp-text-body-size);
+}
+
+.bp-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--bp-radius-small);
+  padding: 4px 8px;
+  font-size: var(--bp-text-micro-size);
+  font-weight: 600;
+}
+
+.bp-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--bp-action-height);
+  padding: 0 16px;
+  border-radius: var(--bp-radius-button);
+  font-family: var(--bp-font-family);
+  font-size: var(--bp-text-button-size);
+  font-weight: 700;
+  line-height: 1.2;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+
+.bp-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.bp-button-primary {
+  background: var(--bp-accent);
+  color: #fff;
+  border: 1px solid var(--bp-accent);
+}
+
+.bp-button-primary:not(:disabled):hover {
+  background: var(--bp-accent-dark);
+  border-color: var(--bp-accent-dark);
+}
+
+.bp-button-outline {
+  background: var(--bp-surface);
+  color: var(--bp-ink);
+  border: 1px solid var(--bp-line);
+}
+
+.bp-button-outline:not(:disabled):hover {
+  background: var(--bp-surface-muted);
+}
+
+.bp-button-soft {
+  background: var(--bp-accent-soft);
+  color: var(--bp-accent);
+  border: 1px solid var(--bp-accent);
+}
+
+.bp-button-soft:not(:disabled):hover {
+  background: #ffe4db;
+}
+
+.bp-button-save {
+  background: var(--bp-surface);
+  color: var(--bp-save-text);
+  border: 1px solid var(--bp-save-stroke);
+}
+
+.bp-button-transcript {
+  background: var(--bp-danger);
+  color: #fff;
+  border: 1px solid var(--bp-danger);
+}
+
+.bp-button-review {
+  background: var(--bp-review);
+  color: #fff;
+  border: 1px solid var(--bp-review-stroke);
+}
+
+.bp-button-share {
+  background: var(--bp-share-soft);
+  color: var(--bp-share-text);
+  border: 1px solid var(--bp-accent);
+}
+
+.bp-button-pdf {
+  background: var(--bp-pdf-soft);
+  color: var(--bp-pdf-text);
+  border: 1px solid var(--bp-pdf-stroke);
+}
+
+.bp-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--bp-action-height);
+  padding: 0 14px;
+  border-radius: var(--bp-radius-button);
+  font-size: var(--bp-text-button-size);
+  font-weight: 700;
+  color: var(--bp-body);
+  background: transparent;
+  border: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.bp-tab.is-active {
+  background: var(--bp-accent);
+  color: #fff;
+}
+
+.bp-button.bp-button-compact {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: var(--bp-text-caption-size);
+}
