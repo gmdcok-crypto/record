@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { loginMember, type MemberProfile } from "./api";
 import "./styles/login.css";
 
@@ -7,7 +7,19 @@ type MemberLoginProps = {
   onSuccess: (member: MemberProfile) => void;
 };
 
+function buildIntroSignupUrl(baseUrl: string): string {
+  try {
+    const url = new URL(baseUrl);
+    url.searchParams.set("signup", "1");
+    return url.toString();
+  } catch {
+    const trimmed = baseUrl.replace(/\/$/, "");
+    return `${trimmed}?signup=1`;
+  }
+}
+
 export default function MemberLogin({ signupUrl, onSuccess }: MemberLoginProps) {
+  const introSignupUrl = useMemo(() => buildIntroSignupUrl(signupUrl), [signupUrl]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -71,7 +83,7 @@ export default function MemberLogin({ signupUrl, onSuccess }: MemberLoginProps) 
 
         <p className="client-login__footer">
           아직 회원이 아니신가요?{" "}
-          <a href={signupUrl} className="client-login__link">
+          <a href={introSignupUrl} className="client-login__link">
             회원가입
           </a>
         </p>

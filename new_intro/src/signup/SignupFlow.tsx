@@ -26,6 +26,21 @@ type SignupFlowContextValue = {
 
 const SignupFlowContext = createContext<SignupFlowContextValue | null>(null);
 
+export function shouldAutoOpenSignupFlow(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  const signup = params.get("signup");
+  if (signup === "1" || signup === "true" || signup === "open") return true;
+  return window.location.hash === "#signup";
+}
+
+function clearSignupAutoOpenParam(): void {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("signup");
+  if (url.hash === "#signup") url.hash = "";
+  const next = `${url.pathname}${url.search}${url.hash}`;
+  window.history.replaceState({}, "", next);
+}
+
 export function useSignupFlow(): SignupFlowContextValue {
   const value = useContext(SignupFlowContext);
   if (!value) {
@@ -489,6 +504,12 @@ export function SignupFlowProvider({ children }: { children: ReactNode }) {
     setSignupOpen(false);
     setTermsOpen(true);
   }, []);
+
+  useEffect(() => {
+    if (!shouldAutoOpenSignupFlow()) return;
+    clearSignupAutoOpenParam();
+    openSignupFlow();
+  }, [openSignupFlow]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
