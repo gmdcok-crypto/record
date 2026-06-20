@@ -348,11 +348,7 @@ export default function UploadBillingPanel({
                 60분 요금에 초과 {quote.extraMinutes}분 x 분당 3,000원이 추가됩니다.
               </p>
             ) : null}
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-white/10 bg-soft px-3 py-3">
-                <p className="text-xs text-brand-brown/80">PDF 기본요금</p>
-                <p className="mt-1 text-lg font-bold text-brand-navy">{formatKrw(quote.totalBaseFee ?? quote.tier?.baseFee ?? 0)}</p>
-              </div>
+            <div className="mt-3">
               <div className="rounded-xl border border-brand-orange/30 bg-brand-orange/10 px-3 py-3">
                 <p className="text-xs text-brand-orange/80">부가세 포함 결제금액</p>
                 <p className="mt-1 text-2xl font-bold text-brand-navy">{formatKrw(quote.totalWithVat ?? quote.tier?.totalWithVat ?? 0)}</p>
