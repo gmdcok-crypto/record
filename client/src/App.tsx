@@ -83,6 +83,7 @@ import {
   resolveSegmentEndMs,
 } from "./segmentAudio";
 import { isMobileLikeClient } from "./uploadEnvironment";
+import ClientBottomTabBar from "./ClientBottomTabBar";
 
 type Step = "idle" | "uploading" | "ready" | "error";
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -1333,7 +1334,7 @@ export default function App() {
 
   return (
     <div className="client-app min-h-dvh">
-      <div className="mx-auto flex min-h-dvh max-w-3xl flex-col px-4 pb-6 pt-4 lg:max-w-4xl lg:px-6">
+      <div className="mx-auto flex min-h-dvh max-w-3xl flex-col px-4 pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] pt-4 lg:max-w-4xl lg:px-6 lg:pb-6">
         <header className="mb-4 flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-semibold text-brand-orange">의뢰인 녹취록</p>
@@ -1362,7 +1363,7 @@ export default function App() {
           </div>
         </header>
 
-        <nav className="sticky top-0 z-20 -mx-4 mb-4 border-b border-line bg-white/95 px-4 backdrop-blur lg:-mx-6 lg:px-6">
+        <nav className="sticky top-0 z-20 -mx-4 mb-4 hidden border-b border-line bg-white/95 px-4 backdrop-blur lg:-mx-6 lg:block lg:px-6">
           <div className="grid grid-cols-3 gap-1 py-2">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
@@ -2016,6 +2017,8 @@ export default function App() {
           onAdd={handleAddSegment}
         />
       </div>
+
+      <ClientBottomTabBar activeTab={activeTab} onChange={setActiveTab} />
     </div>
   );
 }
