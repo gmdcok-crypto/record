@@ -1,7 +1,7 @@
 import { clampHms, msToHms, type HmsTime } from "./quotePricing";
 
 const SELECT_CLASS =
-  "rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-slate-100 outline-none focus:border-cyan-500";
+  "rounded-lg border border-line bg-white px-2 py-2 text-sm text-brand-navy outline-none focus:border-brand-orange";
 
 export default function TimeHmsSelect({
   value,
@@ -24,7 +24,7 @@ export default function TimeHmsSelect({
 
   return (
     <div>
-      <span className="mb-1 block text-xs font-medium text-slate-500">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-brand-brown/80">{label}</span>
       <div className="flex flex-wrap items-center gap-1.5">
         <select
           value={value.hour}
@@ -37,7 +37,7 @@ export default function TimeHmsSelect({
             </option>
           ))}
         </select>
-        <span className="text-xs text-slate-500">시</span>
+        <span className="text-xs text-brand-brown/80">시</span>
         <select
           value={value.minute}
           onChange={(event) => update({ minute: Number(event.target.value) })}
@@ -49,7 +49,7 @@ export default function TimeHmsSelect({
             </option>
           ))}
         </select>
-        <span className="text-xs text-slate-500">분</span>
+        <span className="text-xs text-brand-brown/80">분</span>
         <select
           value={value.second}
           onChange={(event) => update({ second: Number(event.target.value) })}
@@ -61,7 +61,7 @@ export default function TimeHmsSelect({
             </option>
           ))}
         </select>
-        <span className="text-xs text-slate-500">초</span>
+        <span className="text-xs text-brand-brown/80">초</span>
       </div>
     </div>
   );

@@ -28,19 +28,19 @@ export default function ActionNoticeModal({ notice, onClose, accent = "cyan" }: 
         ? "bg-violet-600 text-white hover:bg-violet-500"
         : accent === "blue"
           ? "bg-blue-600 text-white hover:bg-blue-500"
-          : "bg-cyan-500 text-slate-950 hover:bg-cyan-400";
+          : "bg-brand-orange text-white hover:bg-brand-orange-dark";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-2xl shadow-black/40">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-page/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-shell border border-line bg-white p-5 shadow-strong">
         <h3
           className={`text-lg font-semibold ${
-            notice.kind === "error" ? "text-rose-300" : "text-white"
+            notice.kind === "error" ? "text-red-700" : "text-brand-navy"
           }`}
         >
           {notice.title ?? DEFAULT_TITLES[notice.kind]}
         </h3>
-        <p className="mt-3 text-sm leading-6 text-slate-300">{notice.message}</p>
+        <p className="mt-3 text-sm leading-6 text-brand-navy">{notice.message}</p>
         <div className="mt-5 flex justify-end">
           <button
             type="button"

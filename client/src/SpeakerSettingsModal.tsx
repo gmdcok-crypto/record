@@ -38,20 +38,20 @@ export default function SpeakerSettingsModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"
+        className="w-full max-w-md rounded-2xl border border-line bg-white p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-white">화자 설정</h2>
-            <p className="mt-1 text-sm text-slate-400">
+            <h2 className="text-lg font-semibold text-brand-navy">화자 설정</h2>
+            <p className="mt-1 text-sm text-brand-brown">
               표시 이름을 바꾸거나 새 화자를 추가할 수 있습니다.
             </p>
           </div>
           <button
             type="button"
             onClick={onAddSpeaker}
-            className="shrink-0 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+            className="shrink-0 rounded-lg border border-brand-orange/40 bg-brand-orange/10 px-3 py-1.5 text-xs font-semibold text-brand-orange transition hover:bg-brand-orange/15"
           >
             화자 추가
           </button>
@@ -59,11 +59,11 @@ export default function SpeakerSettingsModal({
 
         <div className="mt-4 max-h-64 space-y-3 overflow-y-auto">
           {speakerIds.length === 0 && (
-            <p className="text-sm text-slate-500">등록된 화자가 없습니다. 화자 추가를 눌러 주세요.</p>
+            <p className="text-sm text-brand-brown/80">등록된 화자가 없습니다. 화자 추가를 눌러 주세요.</p>
           )}
           {speakerIds.map((id) => (
             <label key={id} className="block">
-              <span className="mb-1 block text-xs font-medium text-slate-500">
+              <span className="mb-1 block text-xs font-medium text-brand-brown/80">
                 {speakerLabel(id)} (ID: {id})
               </span>
               <input
@@ -71,7 +71,7 @@ export default function SpeakerSettingsModal({
                 value={draft[id] ?? ""}
                 onChange={(e) => setDraft((prev) => ({ ...prev, [id]: e.target.value }))}
                 placeholder={speakerLabel(id)}
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-blue-500"
+                className="w-full rounded-lg border border-line bg-page px-3 py-2 text-sm text-brand-navy outline-none transition focus:border-brand-orange/55"
               />
             </label>
           ))}
@@ -81,7 +81,7 @@ export default function SpeakerSettingsModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:bg-slate-800"
+            className="rounded-lg border border-line px-4 py-2 text-sm text-brand-navy transition hover:bg-muted"
           >
             취소
           </button>

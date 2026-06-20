@@ -17,9 +17,9 @@ type Props = {
 
 function bubbleClass(role: string): string {
   if (role === "admin") {
-    return "border-cyan-500/30 bg-cyan-500/10 text-cyan-50";
+    return "border-brand-orange/30 bg-brand-orange/10 text-brand-navy";
   }
-  return "border-slate-700 bg-slate-950 text-slate-100";
+  return "border-line bg-page text-brand-navy";
 }
 
 export default function ManagerInquiryPanel({
@@ -67,29 +67,29 @@ export default function ManagerInquiryPanel({
   };
 
   const titleColor =
-    accent === "violet" ? "text-violet-300" : accent === "blue" ? "text-blue-300" : "text-cyan-300";
+    accent === "violet" ? "text-brand-navy-soft" : accent === "blue" ? "text-brand-orange" : "text-brand-orange";
   const buttonColor =
     accent === "violet"
       ? "bg-violet-600 hover:bg-violet-500"
       : accent === "blue"
         ? "bg-blue-600 hover:bg-blue-500"
-        : "bg-cyan-600 hover:bg-cyan-500";
+        : "bg-brand-orange hover:bg-brand-orange";
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/80">
-      <div className="border-b border-slate-800 px-4 py-3">
+    <div className="rounded-2xl border border-line bg-soft">
+      <div className="border-b border-line px-4 py-3">
         <h3 className={`text-sm font-semibold ${titleColor}`}>{title}</h3>
-        <p className="mt-1 text-xs text-slate-500">작업 관련 문의는 관리자에게만 전달됩니다.</p>
+        <p className="mt-1 text-xs text-brand-brown/80">작업 관련 문의는 관리자에게만 전달됩니다.</p>
       </div>
 
       <div className="max-h-64 space-y-3 overflow-y-auto px-4 py-3">
-        {loading ? <p className="text-sm text-slate-500">불러오는 중...</p> : null}
-        {!loading && messages.length === 0 ? <p className="text-sm text-slate-500">{emptyMessage}</p> : null}
+        {loading ? <p className="text-sm text-brand-brown/80">불러오는 중...</p> : null}
+        {!loading && messages.length === 0 ? <p className="text-sm text-brand-brown/80">{emptyMessage}</p> : null}
         {messages.map((message) => (
           <div key={message.id} className={`rounded-xl border px-3 py-2 ${bubbleClass(message.sender_role)}`}>
             <div className="flex items-center justify-between gap-3 text-[11px]">
               <span className="font-semibold">{message.sender_name}</span>
-              <span className="text-slate-400">
+              <span className="text-brand-brown">
                 {message.created_at ? formatKstDateTime(message.created_at) : "-"}
               </span>
             </div>
@@ -98,20 +98,20 @@ export default function ManagerInquiryPanel({
         ))}
       </div>
 
-      <div className="border-t border-slate-800 px-4 py-3">
+      <div className="border-t border-line px-4 py-3">
         <textarea
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           rows={3}
           placeholder="관리자에게 전달할 내용을 입력하세요."
-          className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm leading-6 text-slate-100 outline-none transition focus:border-cyan-500"
+          className="w-full rounded-xl border border-line bg-page px-3 py-2 text-sm leading-6 text-brand-navy outline-none transition focus:border-brand-orange"
         />
         <div className="mt-3 flex justify-end">
           <button
             type="button"
             onClick={() => void handleSend()}
             disabled={sending || !draft.trim()}
-            className={`rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-50 ${buttonColor}`}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold text-brand-navy transition disabled:opacity-50 ${buttonColor}`}
           >
             {sending ? "전송 중..." : sendLabel}
           </button>

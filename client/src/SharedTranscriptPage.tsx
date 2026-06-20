@@ -242,34 +242,34 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
   };
 
   if (loading) {
-    return <div className="flex min-h-dvh items-center justify-center bg-slate-950 text-slate-400">링크 확인 중…</div>;
+    return <div className="client-loading">링크 확인 중…</div>;
   }
 
   if (error || !data) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-slate-950 px-4">
-        <div className="w-full max-w-lg rounded-3xl border border-slate-800 bg-slate-900/95 p-6 text-center">
-          <h1 className="text-xl font-bold text-white">공유 링크</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-300">{error || "링크를 확인할 수 없습니다."}</p>
+      <div className="client-app flex min-h-dvh items-center justify-center px-4">
+        <div className="w-full max-w-lg rounded-shell border border-line bg-white p-6 text-center shadow-card">
+          <h1 className="text-xl font-bold text-brand-navy">공유 링크</h1>
+          <p className="mt-3 text-sm leading-6 text-brand-brown">{error || "링크를 확인할 수 없습니다."}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-dvh bg-slate-950 text-slate-100">
+    <div className="client-app min-h-dvh">
       <div className="mx-auto flex min-h-dvh max-w-4xl flex-col px-4 pb-6 pt-4 lg:px-6">
-        <header className="mb-4 rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
-          <p className="text-sm font-semibold text-cyan-300">공유 편집 링크</p>
-          <h1 className="mt-1 text-2xl font-bold text-white">{data.job.title || "공유된 녹취록"}</h1>
-          <p className="mt-2 text-sm text-slate-400">
+        <header className="mb-4 rounded-shell border border-line bg-white p-5 shadow-card">
+          <p className="text-sm font-semibold text-brand-orange">공유 편집 링크</p>
+          <h1 className="mt-1 text-2xl font-bold text-brand-navy">{data.job.title || "공유된 녹취록"}</h1>
+          <p className="mt-2 text-sm text-brand-brown">
             만료 시각: {formatKstDateTime(data.share.expires_at)} · 링크 접속자도 바로 수정하고 저장할 수 있습니다.
           </p>
           {data.share.allow_pdf_download && data.share.final_pdf_url ? (
             <div className="mt-4">
               <a
                 href={resolveUrl(data.share.final_pdf_url)}
-                className="inline-flex rounded-xl bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-white"
+                className="inline-flex rounded-xl border border-line bg-white px-4 py-2 text-sm font-semibold text-brand-navy transition hover:bg-soft"
               >
                 최종 PDF 다운로드
               </a>
@@ -277,10 +277,10 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
           ) : null}
         </header>
 
-        <main className="flex-1 rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
+        <main className="flex-1 rounded-shell border border-line bg-white p-5 shadow-card">
           {data.share.allow_audio && data.job.audio_url ? (
             <div className="mb-5">
-              <label className="mb-1 block text-sm font-medium text-slate-300">원본 음성</label>
+              <label className="mb-1 block text-sm font-medium text-brand-navy">원본 음성</label>
               <audio
                 ref={audioRef}
                 controls
@@ -293,17 +293,17 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
 
           <div>
             <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-              <label className="text-sm font-medium text-slate-300">녹취 초안 / 공유 수정본</label>
+              <label className="text-sm font-medium text-brand-navy">녹취 초안 / 공유 수정본</label>
               <button
                 type="button"
                 onClick={() => setSpeakerSettingsOpen(true)}
                 disabled={saving}
-                className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+                className="rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-semibold text-brand-navy transition hover:bg-soft disabled:opacity-50"
               >
                 화자 설정
               </button>
             </div>
-            <p className="mb-2 text-xs text-slate-500">
+            <p className="mb-2 text-xs text-brand-brown">
               노란 글자는 업로드 시 선택한 구간 밖의 텍스트입니다. PDF에는 선택한 구간만 반영됩니다.
             </p>
             <div className="space-y-2">
@@ -316,10 +316,10 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
                     key={segment.id}
                     className={`rounded-xl border px-3 py-2.5 transition-colors ${
                       segment.omitted
-                        ? "border-slate-600/80 bg-slate-900/50"
+                        ? "border-line-strong/80 bg-white/50"
                         : hasActiveWord
-                        ? "border-cyan-300/70 bg-cyan-400/10"
-                        : "border-slate-700/80 bg-slate-950/80"
+                        ? "border-brand-orange/40 bg-brand-orange/10"
+                        : "border-line/80 bg-soft"
                     }`}
                   >
                     <div
@@ -336,7 +336,7 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
                       className={`mb-1.5 flex w-full min-w-0 items-center gap-2 rounded-lg border border-transparent px-1 py-0.5 text-left transition ${
                         saving || !speakerIds.length
                           ? "cursor-not-allowed opacity-50"
-                          : "cursor-pointer hover:border-cyan-500/30 hover:bg-cyan-500/10"
+                          : "cursor-pointer hover:border-brand-orange/30 hover:bg-brand-orange/10"
                       }`}
                     >
                       <select
@@ -345,7 +345,7 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
                         onMouseDown={(event) => event.stopPropagation()}
                         onChange={(event) => updateSegment(index, { speaker: event.target.value })}
                         disabled={Boolean(segment.omitted)}
-                        className="max-w-[9rem] shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-semibold text-slate-100 outline-none transition focus:border-blue-500 disabled:opacity-60"
+                        className="max-w-[9rem] shrink-0 rounded-lg border border-line bg-white px-2 py-1 text-xs font-semibold text-brand-navy outline-none transition focus:border-brand-orange/55 disabled:opacity-60"
                       >
                         {speakerIds.map((id) => (
                           <option key={id} value={id}>
@@ -353,7 +353,7 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
                           </option>
                         ))}
                       </select>
-                      <span className="text-[11px] text-slate-500">
+                      <span className="text-[11px] text-brand-brown">
                         {formatSegmentTime(segment.start_ms)} - {formatSegmentTime(segment.end_ms)}
                       </span>
                       <button
@@ -363,16 +363,16 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
                           toggleSegmentOmit(index);
                         }}
                         disabled={saving}
-                        className="ml-auto shrink-0 rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-[10px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="ml-auto shrink-0 rounded-lg border border-line bg-white px-2 py-1 text-[10px] font-semibold text-brand-navy transition hover:bg-soft disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {segment.omitted ? "복구" : "구간삭제"}
                       </button>
                       {!segment.omitted ? (
-                        <span className="shrink-0 text-[10px] font-semibold text-cyan-400/80">+ 추가</span>
+                        <span className="shrink-0 text-[10px] font-semibold text-brand-orange/80">+ 추가</span>
                       ) : null}
                     </div>
                     {segment.omitted ? (
-                      <p className="px-1 text-sm font-medium text-slate-400">
+                      <p className="px-1 text-sm font-medium text-brand-brown">
                         {formatSegmentTime(segment.start_ms)} - {formatSegmentTime(segment.end_ms)}{" "}
                         {OMITTED_MARKER}
                       </p>
@@ -398,7 +398,7 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
                 );
               })
             ) : (
-              <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-6 py-14 text-center text-sm text-slate-400">
+              <div className="rounded-2xl border border-dashed border-line bg-soft px-6 py-14 text-center text-sm text-brand-brown">
                 표시할 녹취 구간이 없습니다.
               </div>
             )}
@@ -416,7 +416,7 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
               type="button"
               onClick={onSave}
               disabled={saving}
-              className="rounded-xl bg-cyan-500 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-50"
+              className="rounded-xl bg-brand-orange py-3 text-sm font-semibold text-white transition hover:bg-brand-orange-dark disabled:opacity-50"
             >
               {saving ? "저장 중..." : "공유 링크에서 저장"}
             </button>
@@ -431,7 +431,7 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
             {data.share.allow_pdf_download && data.share.final_pdf_url ? (
               <a
                 href={resolveUrl(data.share.final_pdf_url)}
-                className="inline-flex items-center justify-center rounded-xl bg-slate-200 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-white"
+                className="inline-flex items-center justify-center rounded-xl border border-line bg-white px-4 py-3 text-sm font-semibold text-brand-navy transition hover:bg-soft"
               >
                 최종 PDF 다운로드
               </a>

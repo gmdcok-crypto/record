@@ -308,8 +308,8 @@ export default function UploadBillingPanel({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">파일별 업로드 범위</p>
+      <div className="rounded-2xl border border-line bg-soft p-4">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand-brown/80">파일별 업로드 범위</p>
         <div className="space-y-3">
           {entries.map((entry) => (
             <UploadFileBillingCard
@@ -329,50 +329,50 @@ export default function UploadBillingPanel({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-cyan-500/30 bg-gradient-to-br from-cyan-500/10 to-slate-950 px-4 py-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">결제 견적</p>
+      <div className="rounded-2xl border border-brand-orange/30 bg-gradient-to-br from-brand-orange/10 to-soft px-4 py-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-brand-orange">결제 견적</p>
 
         {entries.some((entry) => entry.loading) ? (
-          <p className="mt-2 text-sm text-slate-400">파일 재생 시간을 확인하는 중입니다…</p>
+          <p className="mt-2 text-sm text-brand-brown">파일 재생 시간을 확인하는 중입니다…</p>
         ) : !billingReady ? (
-          <p className="mt-2 text-sm text-amber-200">
+          <p className="mt-2 text-sm text-amber-700">
             구간 선택 파일은 구간을 추가해야 견적이 완료됩니다.
           </p>
         ) : quote.tier || (quote.totalWithVat ?? 0) > 0 ? (
           <>
-            <p className="mt-2 text-sm text-slate-300">
-              계산 기준 시간: <span className="font-semibold text-white">{formatDurationHuman(quote.durationMs)}</span>
+            <p className="mt-2 text-sm text-brand-navy">
+              계산 기준 시간: <span className="font-semibold text-brand-navy">{formatDurationHuman(quote.durationMs)}</span>
             </p>
-            <p className="mt-1 text-sm text-slate-300">
-              적용 구간: <span className="font-semibold text-white">{quote.label || quote.tier?.label || "-"}</span>
+            <p className="mt-1 text-sm text-brand-navy">
+              적용 구간: <span className="font-semibold text-brand-navy">{quote.label || quote.tier?.label || "-"}</span>
             </p>
             {quote.overLimit && (quote.extraMinutes ?? 0) > 0 ? (
-              <p className="mt-1 text-sm text-amber-200">
+              <p className="mt-1 text-sm text-amber-700">
                 60분 요금에 초과 {quote.extraMinutes}분 x 분당 3,000원이 추가됩니다.
               </p>
             ) : null}
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-3">
-                <p className="text-xs text-slate-500">PDF 기본요금</p>
-                <p className="mt-1 text-lg font-bold text-white">{formatKrw(quote.totalBaseFee ?? quote.tier?.baseFee ?? 0)}</p>
+              <div className="rounded-xl border border-white/10 bg-soft px-3 py-3">
+                <p className="text-xs text-brand-brown/80">PDF 기본요금</p>
+                <p className="mt-1 text-lg font-bold text-brand-navy">{formatKrw(quote.totalBaseFee ?? quote.tier?.baseFee ?? 0)}</p>
               </div>
-              <div className="rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-3 py-3">
-                <p className="text-xs text-cyan-200/80">부가세 포함 결제금액</p>
-                <p className="mt-1 text-2xl font-bold text-cyan-100">{formatKrw(quote.totalWithVat ?? quote.tier?.totalWithVat ?? 0)}</p>
+              <div className="rounded-xl border border-brand-orange/30 bg-brand-orange/10 px-3 py-3">
+                <p className="text-xs text-brand-orange/80">부가세 포함 결제금액</p>
+                <p className="mt-1 text-2xl font-bold text-brand-navy">{formatKrw(quote.totalWithVat ?? quote.tier?.totalWithVat ?? 0)}</p>
               </div>
             </div>
           </>
         ) : null}
 
-        <label className="mt-4 flex items-start gap-3 rounded-xl border border-slate-700/80 bg-slate-950/60 px-3 py-3">
+        <label className="mt-4 flex items-start gap-3 rounded-xl border border-line/80 bg-soft px-3 py-3">
           <input
             type="checkbox"
             checked={purchaseAgreementChecked}
             onChange={(event) => setPurchaseAgreementChecked(event.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-slate-500 bg-slate-900 text-cyan-500 focus:ring-cyan-500"
+            className="mt-0.5 h-4 w-4 rounded border-line-strong bg-white text-brand-orange focus:ring-brand-orange/40"
           />
-          <span className="text-sm leading-6 text-slate-200">
-            <span className="block font-semibold text-white">구매조건 및 결제진행 동의</span>
+          <span className="text-sm leading-6 text-brand-navy">
+            <span className="block font-semibold text-brand-navy">구매조건 및 결제진행 동의</span>
             결제 후 녹취록 작성 작업이 즉시 진행되며, 작업이 시작된 이후에는 단순 취소 및 환불이 어렵습니다. 음질,
             잡음, 대화자 수, 화자 구분 난이도 등에 따라 추가 요금 또는 일정 변경이나 취소 환불이 발생할 수 있음을
             확인하고 동의합니다.
@@ -381,19 +381,19 @@ export default function UploadBillingPanel({
 
         <div className="mt-4 flex flex-wrap gap-2">
           {uploading ? (
-            <span className="inline-flex items-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-100">
+            <span className="inline-flex items-center rounded-xl border border-brand-orange/30 bg-brand-orange/10 px-4 py-2.5 text-sm font-semibold text-brand-navy">
               업로드 진행 중...
             </span>
           ) : paid && billingReady ? (
-            <span className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-200">
+            <span className="inline-flex items-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-700">
               결제 완료
             </span>
           ) : paid && !billingReady && holdPaidState ? (
-            <span className="inline-flex items-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-100">
+            <span className="inline-flex items-center rounded-xl border border-brand-orange/30 bg-brand-orange/10 px-4 py-2.5 text-sm font-semibold text-brand-navy">
               결제 완료 · 업로드 준비 중…
             </span>
           ) : paid && !billingReady ? (
-            <span className="inline-flex items-center rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200">
+            <span className="inline-flex items-center rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-700">
               견적이 변경되어 결제를 다시 진행해 주세요.
             </span>
           ) : (
@@ -401,7 +401,7 @@ export default function UploadBillingPanel({
               type="button"
               onClick={handlePay}
               disabled={!billingReady || (quote.totalWithVat ?? 0) <= 0 || !purchaseAgreementChecked}
-              className="rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+              className="rounded-xl bg-brand-orange px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-orange-dark disabled:cursor-not-allowed disabled:bg-muted disabled:text-brand-brown"
             >
               {(quote.totalWithVat ?? 0) > 0 ? `${formatKrw(quote.totalWithVat ?? 0)} 결제하기` : "결제하기"}
             </button>
@@ -409,7 +409,7 @@ export default function UploadBillingPanel({
         </div>
 
         {paymentError ? (
-          <p className="mt-3 text-xs text-rose-300">{paymentError}</p>
+          <p className="mt-3 text-xs text-red-700">{paymentError}</p>
         ) : null}
       </div>
     </div>
@@ -456,11 +456,11 @@ function UploadFileBillingCard({
   };
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+    <div className="rounded-xl border border-line bg-white/70 p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-white">{entry.file.name}</p>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="truncate text-sm font-semibold text-brand-navy">{entry.file.name}</p>
+          <p className="mt-1 text-xs text-brand-brown/80">
             {formatSize(entry.file.size)}
             {entry.loading
               ? " · 재생 시간 확인 중…"
@@ -475,18 +475,18 @@ function UploadFileBillingCard({
         <button
           type="button"
           onClick={onRemove}
-          className="rounded-lg border border-rose-500/30 px-2.5 py-1.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10"
+          className="rounded-lg border border-rose-500/30 px-2.5 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-rose-500/10"
         >
           제거
         </button>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-slate-800 bg-slate-950/80 p-1">
+      <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-line bg-soft p-1">
         <button
           type="button"
           onClick={() => onModeChange("full")}
           className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
-            entry.mode === "full" ? "bg-cyan-600 text-white" : "text-slate-400 hover:text-slate-200"
+            entry.mode === "full" ? "bg-brand-orange text-white" : "text-brand-brown hover:text-brand-navy"
           }`}
         >
           파일 전체
@@ -495,7 +495,7 @@ function UploadFileBillingCard({
           type="button"
           onClick={() => onModeChange("segments")}
           className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
-            entry.mode === "segments" ? "bg-cyan-600 text-white" : "text-slate-400 hover:text-slate-200"
+            entry.mode === "segments" ? "bg-brand-orange text-white" : "text-brand-brown hover:text-brand-navy"
           }`}
         >
           구간 선택
@@ -503,7 +503,7 @@ function UploadFileBillingCard({
       </div>
 
       {entry.mode === "segments" && entry.durationMs != null && !entry.error ? (
-        <div className="mt-3 space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+        <div className="mt-3 space-y-3 rounded-xl border border-line bg-soft p-3">
           <audio ref={audioRef} controls preload="metadata" src={entry.url} className="w-full rounded-xl" />
           <TimeHmsSelect
             label="시작"
@@ -521,26 +521,26 @@ function UploadFileBillingCard({
             <button
               type="button"
               onClick={() => setCurrentTimeToForm("start")}
-              className="rounded-lg border border-slate-700 px-2.5 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800"
+              className="rounded-lg border border-line px-2.5 py-2 text-xs font-semibold text-brand-navy transition hover:bg-muted"
             >
               현재→시작
             </button>
             <button
               type="button"
               onClick={() => setCurrentTimeToForm("end")}
-              className="rounded-lg border border-slate-700 px-2.5 py-2 text-xs font-semibold text-slate-300 transition hover:bg-slate-800"
+              className="rounded-lg border border-line px-2.5 py-2 text-xs font-semibold text-brand-navy transition hover:bg-muted"
             >
               현재→종료
             </button>
             <button
               type="button"
               onClick={onAddSegment}
-              className="rounded-lg bg-cyan-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-cyan-500"
+              className="rounded-lg bg-brand-orange px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-orange-dark"
             >
               구간 추가
             </button>
           </div>
-          {segmentFormError ? <p className="text-sm text-rose-300">{segmentFormError}</p> : null}
+          {segmentFormError ? <p className="text-sm text-red-700">{segmentFormError}</p> : null}
 
           <div className="space-y-2">
             {entry.segments.length ? (
@@ -549,7 +549,7 @@ function UploadFileBillingCard({
                 return (
                   <div
                     key={segment.id}
-                    className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/80 px-3 py-2"
+                    className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-white px-3 py-2"
                   >
                     <input
                       type="checkbox"
@@ -561,23 +561,23 @@ function UploadFileBillingCard({
                           ),
                         )
                       }
-                      className="h-4 w-4 rounded border-slate-600 bg-slate-950 text-cyan-500"
+                      className="h-4 w-4 rounded border-line-strong bg-page text-brand-orange"
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm text-white">{formatSegmentRange(segment.start_ms, segment.end_ms)}</p>
-                      <p className="text-xs text-slate-500">{formatDurationHuman(segmentDuration)}</p>
+                      <p className="text-sm text-brand-navy">{formatSegmentRange(segment.start_ms, segment.end_ms)}</p>
+                      <p className="text-xs text-brand-brown/80">{formatDurationHuman(segmentDuration)}</p>
                     </div>
                     <button
                       type="button"
                       onClick={() => playSegment(segment.start_ms, segment.end_ms)}
-                      className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-800"
+                      className="rounded-lg border border-line px-2.5 py-1.5 text-xs font-semibold text-brand-navy transition hover:bg-muted"
                     >
                       재생
                     </button>
                     <button
                       type="button"
                       onClick={() => onSegmentsChange(entry.segments.filter((item) => item.id !== segment.id))}
-                      className="rounded-lg border border-rose-500/30 px-2.5 py-1.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10"
+                      className="rounded-lg border border-rose-500/30 px-2.5 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-rose-500/10"
                     >
                       삭제
                     </button>
@@ -585,7 +585,7 @@ function UploadFileBillingCard({
                 );
               })
             ) : (
-              <p className="text-center text-xs text-slate-500">추가할 구간을 선택해 주세요.</p>
+              <p className="text-center text-xs text-brand-brown/80">추가할 구간을 선택해 주세요.</p>
             )}
           </div>
         </div>

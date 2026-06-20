@@ -180,7 +180,64 @@ def _format_time_ms(ms: int | None) -> str:
 def _format_omitted_segment_text(segment: dict) -> str:
     start = segment.get("start_ms")
     end = segment.get("end_ms")
+    return _format_omitted_range_text(start, end)
+
+
+def _format_omitted_range_text(start: int | None, end: int | None) -> str:
     return f"{_format_time_ms(start)} - {_format_time_ms(end)} (생략)"
+
+
+def _segment_ms(segment: dict, key: str) -> int | None:
+    value = segment.get(key)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _segments_for_pdf_render(segments: list[dict]) -> list[dict]:
+    """Merge consecutive omitted segments for PDF output only."""
+    if not segments:
+        return []
+
+    rendered: list[dict] = []
+    index = 0
+    while index < len(segments):
+        segment = segments[index]
+        if not _segment_is_omitted(segment):
+            rendered.append(segment)
+            index += 1
+            continue
+
+        run_start_ms = _segment_ms(segment, "start_ms")
+        run_end_ms = _segment_ms(segment, "end_ms")
+        merged = dict(segment)
+        index += 1
+
+        while index < len(segments) and _segment_is_omitted(segments[index]):
+            next_segment = segments[index]
+            next_start = _segment_ms(next_segment, "start_ms")
+            next_end = _segment_ms(next_segment, "end_ms")
+
+            if next_start is not None:
+                run_start_ms = (
+                    next_start
+                    if run_start_ms is None
+                    else min(run_start_ms, next_start)
+                )
+            if next_end is not None:
+                run_end_ms = next_end if run_end_ms is None else max(run_end_ms, next_end)
+
+            index += 1
+
+        merged["start_ms"] = run_start_ms
+        merged["end_ms"] = run_end_ms
+        merged["omitted"] = True
+        rendered.append(merged)
+
+    return rendered
 
 
 def _segment_is_omitted(segment: dict) -> bool:
@@ -239,7 +296,7 @@ def _render_transcript_body(
         pdf.ln(6)
 
     if segments:
-        for segment in segments:
+        for segment in _segments_for_pdf_render(segments):
             speaker = _speaker_label(str(segment.get("speaker", "")), labels)
             if _segment_is_omitted(segment):
                 text = _format_omitted_segment_text(segment)

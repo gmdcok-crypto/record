@@ -170,15 +170,15 @@ function archiveStatusStyle(status: string): string {
     case "first_done":
     case "review_waiting":
     case "transcriber_review":
-      return "bg-violet-500/15 text-violet-300";
+      return "bg-violet-500/15 text-brand-navy-soft";
     case "client_editing":
-      return "bg-cyan-500/15 text-cyan-300";
+      return "bg-brand-orange/10 text-brand-orange";
     case "final_done":
     case "pdf_sent":
       return "bg-emerald-500/15 text-emerald-300";
     case "assigned":
     case "working":
-      return "bg-blue-500/15 text-blue-300";
+      return "bg-blue-500/15 text-brand-orange";
     default:
       return "bg-amber-500/15 text-amber-300";
   }
@@ -218,9 +218,9 @@ function projectStatusStyle(status: string): string {
     case "completed":
       return "bg-emerald-500/15 text-emerald-300";
     case "client_review":
-      return "bg-violet-500/15 text-violet-300";
+      return "bg-violet-500/15 text-brand-navy-soft";
     case "working":
-      return "bg-blue-500/15 text-blue-300";
+      return "bg-blue-500/15 text-brand-orange";
     default:
       return "bg-amber-500/15 text-amber-300";
   }
@@ -250,7 +250,7 @@ function renderClientInquiryBadge(status?: "reply_pending" | "reply_arrived" | n
   }
   if (status === "reply_arrived") {
     return (
-      <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-200">
+      <span className="rounded-full border border-brand-orange/30 bg-brand-orange/10 px-2.5 py-1 text-[11px] font-semibold text-brand-orange">
         답변 도착
       </span>
     );
@@ -1326,11 +1326,7 @@ export default function App() {
   ];
 
   if (authStatus === "loading") {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-slate-950 text-slate-400">
-        로그인 확인 중…
-      </div>
-    );
+    return <div className="client-loading">로그인 확인 중…</div>;
   }
 
   if (authStatus === "unauthenticated") {
@@ -1338,12 +1334,12 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-dvh bg-slate-950 text-slate-100">
+    <div className="client-app min-h-dvh">
       <div className="mx-auto flex min-h-dvh max-w-3xl flex-col px-4 pb-6 pt-4 lg:max-w-4xl lg:px-6">
         <header className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold text-blue-300">의뢰인 녹취록</p>
-            <h1 className="mt-1 text-2xl font-bold text-white">
+            <p className="text-sm font-semibold text-brand-orange">의뢰인 녹취록</p>
+            <h1 className="mt-1 text-2xl font-bold text-brand-navy">
               {memberName ? `${memberName}님` : GUEST_CLIENT_NAME}
             </h1>
           </div>
@@ -1353,7 +1349,7 @@ export default function App() {
                 type="button"
                 onClick={() => void handleEnablePush()}
                 disabled={enablingPush}
-                className="rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-sm font-medium text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
+                className="rounded-xl border border-brand-orange/40 bg-brand-orange/10 px-3 py-2 text-sm font-medium text-brand-orange transition hover:bg-brand-orange/15 disabled:opacity-50"
               >
                 {enablingPush ? "알림 설정 중..." : "알림 받기"}
               </button>
@@ -1361,14 +1357,14 @@ export default function App() {
             <button
               type="button"
               onClick={handleLogout}
-              className="rounded-xl border border-slate-700 px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+              className="rounded-xl border border-line px-3 py-2 text-sm font-medium text-brand-navy transition hover:bg-muted hover:text-brand-navy"
             >
               로그아웃
             </button>
           </div>
         </header>
 
-        <nav className="sticky top-0 z-20 -mx-4 mb-4 border-b border-slate-800 bg-slate-950/95 px-4 backdrop-blur lg:-mx-6 lg:px-6">
+        <nav className="sticky top-0 z-20 -mx-4 mb-4 border-b border-line bg-white/95 px-4 backdrop-blur lg:-mx-6 lg:px-6">
           <div className="grid grid-cols-3 gap-1 py-2">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
@@ -1379,8 +1375,8 @@ export default function App() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
                     isActive
-                      ? "bg-slate-800 text-white shadow-inner shadow-black/20"
-                      : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
+                      ? "bg-white text-brand-navy shadow-inner shadow-brand-navy/5"
+                      : "text-brand-brown hover:bg-white hover:text-brand-navy"
                   }`}
                 >
                   {tab.label}
@@ -1392,17 +1388,17 @@ export default function App() {
 
         <main className="flex-1">
           {activeTab === "upload" ? (
-          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
+          <section className="rounded-shell border border-line bg-white p-5 shadow-card">
             <div className="mb-5">
-              <p className="text-sm font-semibold text-blue-300">파일 업로드</p>
-              <h2 className="mt-1 text-xl font-bold text-white">새 녹취 의뢰</h2>
-              <p className="mt-2 text-sm text-slate-400">
+              <p className="text-sm font-semibold text-brand-orange">파일 업로드</p>
+              <h2 className="mt-1 text-xl font-bold text-brand-navy">새 녹취 의뢰</h2>
+              <p className="mt-2 text-sm text-brand-brown">
                 프로젝트를 정한 뒤 파일을 선택하고 파일별 업로드 구간을 설정할 수 있습니다.
               </p>
             </div>
 
-            <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">업로드 프로젝트</p>
+            <div className="mb-4 rounded-2xl border border-line bg-soft p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand-brown/80">업로드 프로젝트</p>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -1410,8 +1406,8 @@ export default function App() {
                   disabled={!projects.length}
                   className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
                     uploadProjectMode === "existing"
-                      ? "bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/40"
-                      : "bg-slate-900 text-slate-400 hover:text-slate-200 disabled:opacity-40"
+                      ? "bg-brand-orange/10 text-brand-orange ring-1 ring-brand-orange/40"
+                      : "bg-white text-brand-brown hover:text-brand-navy disabled:opacity-40"
                   }`}
                 >
                   기존 프로젝트
@@ -1421,8 +1417,8 @@ export default function App() {
                   onClick={() => setUploadProjectMode("new")}
                   className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
                     uploadProjectMode === "new"
-                      ? "bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/40"
-                      : "bg-slate-900 text-slate-400 hover:text-slate-200"
+                      ? "bg-brand-orange/10 text-brand-orange ring-1 ring-brand-orange/40"
+                      : "bg-white text-brand-brown hover:text-brand-navy"
                   }`}
                 >
                   새 프로젝트
@@ -1430,12 +1426,12 @@ export default function App() {
               </div>
               {uploadProjectMode === "existing" ? (
                 loadingWorkspace && !projects.length ? (
-                  <p className="mt-3 text-sm text-slate-400">프로젝트를 불러오는 중입니다.</p>
+                  <p className="mt-3 text-sm text-brand-brown">프로젝트를 불러오는 중입니다.</p>
                 ) : projects.length ? (
                   <select
                     value={selectedUploadProjectId}
                     onChange={(event) => setSelectedUploadProjectId(event.target.value)}
-                    className="mt-3 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-cyan-500/50"
+                    className="mt-3 w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-brand-navy outline-none focus:border-brand-orange/55"
                   >
                     {projects.map((project) => (
                       <option key={project.project_id} value={project.project_id}>
@@ -1444,11 +1440,11 @@ export default function App() {
                     ))}
                   </select>
                 ) : (
-                  <p className="mt-3 text-sm text-slate-400">등록된 프로젝트가 없습니다. 새 프로젝트로 업로드하세요.</p>
+                  <p className="mt-3 text-sm text-brand-brown">등록된 프로젝트가 없습니다. 새 프로젝트로 업로드하세요.</p>
                 )
               ) : (
                 <div className="mt-3">
-                  <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                  <label className="mb-1.5 block text-sm font-medium text-brand-navy">
                     프로젝트 이름 <span className="text-rose-400">*</span>
                   </label>
                   <input
@@ -1456,7 +1452,7 @@ export default function App() {
                     onChange={(event) => setNewProjectTitle(event.target.value)}
                     placeholder="예: ○○사건 통화녹취"
                     required
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-cyan-500/50"
+                    className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-brand-navy placeholder:text-brand-brown/60 outline-none focus:border-brand-orange/55"
                   />
                   {!newProjectTitle.trim() ? (
                     <p className="mt-2 text-xs text-amber-300/90">프로젝트 이름을 입력해야 파일을 선택할 수 있습니다.</p>
@@ -1497,21 +1493,21 @@ export default function App() {
                 onDrop={onDropFiles}
                 className={`flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-10 text-center transition disabled:cursor-not-allowed disabled:opacity-50 ${
                   !uploadProjectReady
-                    ? "border-slate-800 bg-slate-950/40"
+                    ? "border-line bg-soft/80"
                     : isDragActive
-                      ? "border-blue-400 bg-slate-900"
-                      : "border-slate-700 bg-slate-950/80 hover:border-blue-400 hover:bg-slate-900"
+                      ? "border-blue-400 bg-white"
+                      : "border-line bg-soft hover:border-blue-400 hover:bg-white"
                 }`}
               >
                 <span className="text-4xl">🎙️</span>
-                <span className="mt-3 font-semibold text-slate-100">
+                <span className="mt-3 font-semibold text-brand-navy">
                   {!uploadProjectReady
                     ? "프로젝트를 먼저 정해 주세요"
                     : selectedFiles.length > 0
                       ? `${selectedFiles.length}개 파일 선택됨`
                       : "음성/영상 파일 선택"}
                 </span>
-                <span className="mt-1 text-sm text-slate-400">
+                <span className="mt-1 text-sm text-brand-brown">
                   {!uploadProjectReady
                     ? uploadProjectMode === "new"
                       ? "위에 프로젝트 이름을 입력하면 파일 선택이 활성화됩니다."
@@ -1525,18 +1521,18 @@ export default function App() {
               </button>
 
               {uploadStatus ? (
-                <p className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-100">
+                <p className="rounded-xl border border-brand-orange/30 bg-brand-orange/10 px-3 py-2 text-sm text-brand-navy">
                   {uploadStatus}
                 </p>
               ) : null}
 
               {step === "uploading" && (
                 <div>
-                  <div className="mb-1 flex justify-between text-sm text-slate-400">
+                  <div className="mb-1 flex justify-between text-sm text-brand-brown">
                     <span>업로드 중...</span>
                     <span>{progress}%</span>
                   </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                  <div className="h-2 overflow-hidden rounded-full bg-muted">
                     <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${progress}%` }} />
                   </div>
                 </div>
@@ -1575,18 +1571,18 @@ export default function App() {
           ) : null}
 
           {activeTab === "archive" ? (
-          <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
+          <section className="rounded-shell border border-line bg-white p-5 shadow-card">
             <div className="mb-5">
               <p className="text-sm font-semibold text-emerald-300">보관함</p>
-              <h2 className="mt-1 text-xl font-bold text-white">프로젝트 보관함</h2>
-              <p className="mt-1 text-sm text-slate-400">
+              <h2 className="mt-1 text-xl font-bold text-brand-navy">프로젝트 보관함</h2>
+              <p className="mt-1 text-sm text-brand-brown">
                 프로젝트(사건)별로 묶여 있습니다. 의뢰인 검토 파일을 누르면 편집 탭으로 이동합니다.
               </p>
             </div>
 
             <div className="space-y-3">
               {loadingWorkspace && !projects.length ? (
-                <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-5 py-10 text-center text-sm text-slate-400">
+                <div className="rounded-2xl border border-dashed border-line bg-soft px-5 py-10 text-center text-sm text-brand-brown">
                   보관함을 불러오는 중입니다.
                 </div>
               ) : projects.length ? (
@@ -1596,16 +1592,16 @@ export default function App() {
                   return (
                     <div
                       key={project.project_id}
-                      className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/60"
+                      className="overflow-hidden rounded-2xl border border-line bg-soft"
                     >
                       <button
                         type="button"
                         onClick={() => toggleProjectExpanded(project.project_id)}
-                        className="flex w-full items-start justify-between gap-3 p-4 text-left transition hover:bg-slate-900"
+                        className="flex w-full items-start justify-between gap-3 p-4 text-left transition hover:bg-white"
                       >
                         <div className="min-w-0">
-                          <p className="truncate font-semibold text-slate-100">{project.title}</p>
-                          <p className="mt-1 text-sm text-slate-400">
+                          <p className="truncate font-semibold text-brand-navy">{project.title}</p>
+                          <p className="mt-1 text-sm text-brand-brown">
                             진행 {project.completed_count}/{project.file_count} · 마감{" "}
                             {formatKstDateTime(project.due_at)}
                           </p>
@@ -1616,18 +1612,18 @@ export default function App() {
                           >
                             {mapProjectStatus(project.status)}
                           </span>
-                          <span className="text-slate-500">{expanded ? "▾" : "▸"}</span>
+                          <span className="text-brand-brown/80">{expanded ? "▾" : "▸"}</span>
                         </div>
                       </button>
                       {expanded && files.length ? (
-                        <div className="space-y-2 border-t border-slate-800 px-4 pb-4 pt-2">
+                        <div className="space-y-2 border-t border-line px-4 pb-4 pt-2">
                           {files.map((file) => {
                             const fileStatus = file.workflow_status ?? file.status;
                             const item = projectFileToArchiveItem(file, memberName || GUEST_CLIENT_NAME);
                             return (
                               <div
                                 key={file.job_id}
-                                className="rounded-xl border border-slate-800 bg-slate-900/80 p-3 transition hover:border-blue-500/50"
+                                className="rounded-xl border border-line bg-white p-3 transition hover:border-brand-orange/50"
                               >
                                 <div className="flex items-start justify-between gap-3">
                                   <button
@@ -1637,8 +1633,8 @@ export default function App() {
                                     disabled={loadingJob}
                                     className="min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-60"
                                   >
-                                    <p className="truncate text-sm font-semibold text-slate-100">{file.filename}</p>
-                                    <p className="mt-1 truncate text-xs text-slate-500">{file.title}</p>
+                                    <p className="truncate text-sm font-semibold text-brand-navy">{file.filename}</p>
+                                    <p className="mt-1 truncate text-xs text-brand-brown/80">{file.title}</p>
                                   </button>
                                   <div className="flex shrink-0 items-center gap-2">
                                     {renderClientInquiryBadge(file.client_inquiry_status)}
@@ -1649,7 +1645,7 @@ export default function App() {
                                     </span>
                                   </div>
                                 </div>
-                                <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                                <div className="mt-2 flex items-center justify-between text-xs text-brand-brown/80">
                                   <span className="font-mono">{file.job_id}</span>
                                   <span>{formatKstDateTime(file.uploaded_at)}</span>
                                 </div>
@@ -1659,13 +1655,13 @@ export default function App() {
                         </div>
                       ) : null}
                       {expanded && !files.length ? (
-                        <p className="border-t border-slate-800 px-4 py-3 text-sm text-slate-500">파일이 없습니다.</p>
+                        <p className="border-t border-line px-4 py-3 text-sm text-brand-brown/80">파일이 없습니다.</p>
                       ) : null}
                     </div>
                   );
                 })
               ) : (
-                <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-5 py-10 text-center text-sm text-slate-400">
+                <div className="rounded-2xl border border-dashed border-line bg-soft px-5 py-10 text-center text-sm text-brand-brown">
                   아직 프로젝트가 없습니다. 업로드 탭에서 파일을 올려 주세요.
                 </div>
               )}
@@ -1674,7 +1670,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => void refreshWorkspace()}
-              className="mt-4 w-full rounded-xl border border-slate-700 bg-slate-950 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-800"
+              className="mt-4 w-full rounded-xl border border-line bg-page py-2.5 text-sm font-semibold text-brand-navy transition hover:bg-muted"
             >
               보관함 새로고침
             </button>
@@ -1682,38 +1678,38 @@ export default function App() {
           ) : null}
 
           {activeTab === "edit" ? (
-          <section className="relative rounded-3xl border border-slate-800 bg-slate-900/95 p-5 shadow-2xl shadow-black/20">
+          <section className="relative rounded-shell border border-line bg-white p-5 shadow-card">
             {loadingJob ? (
-              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl bg-slate-950/75 px-6 backdrop-blur-sm">
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/95 px-6 py-5 text-center shadow-2xl shadow-black/30">
-                  <p className="text-sm font-semibold text-white">작업을 불러오는 중입니다.</p>
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-shell bg-page/80 px-6 backdrop-blur-sm">
+                <div className="rounded-2xl border border-line bg-white px-6 py-5 text-center shadow-strong">
+                  <p className="text-sm font-semibold text-brand-navy">작업을 불러오는 중입니다.</p>
                 </div>
               </div>
             ) : null}
             {submittingTranscriptRequest ? (
-              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl bg-slate-950/75 px-6 backdrop-blur-sm">
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/95 px-6 py-5 text-center shadow-2xl shadow-black/30">
-                  <p className="text-sm font-semibold text-white">녹취록 요청을 접수하는 중입니다.</p>
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-shell bg-page/80 px-6 backdrop-blur-sm">
+                <div className="rounded-2xl border border-line bg-white px-6 py-5 text-center shadow-strong">
+                  <p className="text-sm font-semibold text-brand-navy">녹취록 요청을 접수하는 중입니다.</p>
                 </div>
               </div>
             ) : null}
             {submittingReview ? (
-              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl bg-slate-950/75 px-6 backdrop-blur-sm">
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/95 px-6 py-5 text-center shadow-2xl shadow-black/30">
-                  <p className="text-sm font-semibold text-white">검토 요청을 접수하는 중입니다.</p>
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-shell bg-page/80 px-6 backdrop-blur-sm">
+                <div className="rounded-2xl border border-line bg-white px-6 py-5 text-center shadow-strong">
+                  <p className="text-sm font-semibold text-brand-navy">검토 요청을 접수하는 중입니다.</p>
                 </div>
               </div>
             ) : null}
             <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-violet-300">편집</p>
+                <p className="text-sm font-semibold text-brand-navy-soft">편집</p>
                 {editContext ? (
-                  <p className="mt-1 text-sm text-cyan-300/90">
+                  <p className="mt-1 text-sm text-brand-orange/90">
                     {editContext.projectTitle} &gt; {editContext.filename}
                   </p>
                 ) : null}
-                <h2 className="mt-1 text-xl font-bold text-white">{currentTitle}</h2>
-                <p className="mt-1 text-sm text-slate-400">
+                <h2 className="mt-1 text-xl font-bold text-brand-navy">{currentTitle}</h2>
+                <p className="mt-1 text-sm text-brand-brown">
                   구간 텍스트를 누르면 해당 오디오가 재생되고, 같은 영역에서 바로 수정할 수 있습니다.
                 </p>
               </div>
@@ -1722,20 +1718,20 @@ export default function App() {
                   <button
                     type="button"
                     onClick={scrollToInquiryPanel}
-                    className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+                    className="rounded-xl border border-brand-orange/30 bg-brand-orange/10 px-4 py-2 text-sm font-semibold text-brand-orange transition hover:bg-brand-orange/15"
                   >
                     문의하기
                   </button>
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-400">
+                  <div className="rounded-2xl border border-line bg-page px-3 py-2 text-xs text-brand-brown">
                     <div>작업 ID</div>
-                    <div className="mt-1 font-mono text-[11px] text-slate-100">{job.job_id}</div>
+                    <div className="mt-1 font-mono text-[11px] text-brand-navy">{job.job_id}</div>
                   </div>
                 </div>
               )}
             </div>
 
             {job && !isEditableArchiveStatus(currentWorkflowStatus) ? (
-              <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-5 py-10 text-center text-sm text-slate-400">
+              <div className="rounded-2xl border border-dashed border-line bg-soft px-5 py-10 text-center text-sm text-brand-brown">
                 {currentWorkflowStatus === "assigned" || currentWorkflowStatus === "working" ? (
                   <>
                     속기사가 초벌 작업 중입니다.
@@ -1767,7 +1763,7 @@ export default function App() {
             ) : job ? (
               <div className="space-y-4">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-300">원본 음성</label>
+                  <label className="mb-1 block text-sm font-medium text-brand-navy">원본 음성</label>
                   <audio
                     ref={audioRef}
                     controls
@@ -1779,19 +1775,19 @@ export default function App() {
 
                 <div>
                   <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                    <label className="text-sm font-medium text-slate-300">
+                    <label className="text-sm font-medium text-brand-navy">
                       녹취 초안 / 의뢰인 수정본
                     </label>
                     <button
                       type="button"
                       onClick={() => setSpeakerSettingsOpen(true)}
                       disabled={busy || pdfReceived}
-                      className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+                      className="rounded-lg border border-line bg-page px-3 py-1.5 text-xs font-semibold text-brand-navy transition hover:bg-muted disabled:opacity-50"
                     >
                       화자 설정
                     </button>
                   </div>
-                  <p className="mb-2 text-xs text-slate-500">
+                  <p className="mb-2 text-xs text-brand-brown/80">
                     노란 글자는 업로드 시 선택한 구간 밖의 텍스트입니다. PDF에는 선택한 구간만 반영됩니다.
                   </p>
                   <div className="space-y-2">
@@ -1813,10 +1809,10 @@ export default function App() {
                           key={segment.id}
                           className={`rounded-xl border px-3 py-2.5 transition-colors ${
                             segment.omitted
-                              ? "border-slate-600/80 bg-slate-900/50"
+                              ? "border-line-strong/80 bg-white/50"
                               : hasActiveWord
-                              ? "border-cyan-300/70 bg-cyan-400/10"
-                              : "border-slate-700/80 bg-slate-950/80"
+                              ? "border-brand-orange/40 bg-brand-orange/10"
+                              : "border-line/80 bg-soft"
                           }`}
                         >
                           <div
@@ -1833,7 +1829,7 @@ export default function App() {
                             className={`mb-1.5 flex w-full min-w-0 items-center gap-2 rounded-lg border border-transparent px-1 py-0.5 text-left transition ${
                               busy || pdfReceived || !speakerIds.length
                                 ? "cursor-not-allowed opacity-50"
-                                : "cursor-pointer hover:border-cyan-500/30 hover:bg-cyan-500/10"
+                                : "cursor-pointer hover:border-brand-orange/30 hover:bg-brand-orange/10"
                             }`}
                           >
                             <select
@@ -1842,7 +1838,7 @@ export default function App() {
                               onMouseDown={(event) => event.stopPropagation()}
                               onChange={(e) => updateSegment(index, { speaker: e.target.value })}
                               disabled={pdfReceived || Boolean(segment.omitted)}
-                              className="max-w-[9rem] shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-semibold text-slate-100 outline-none transition focus:border-blue-500 disabled:opacity-60"
+                              className="max-w-[9rem] shrink-0 rounded-lg border border-line bg-white px-2 py-1 text-xs font-semibold text-brand-navy outline-none transition focus:border-brand-orange/55 disabled:opacity-60"
                             >
                               {speakerIds.map((id) => (
                                 <option key={id} value={id}>
@@ -1850,7 +1846,7 @@ export default function App() {
                                 </option>
                               ))}
                             </select>
-                            <span className="text-[11px] text-slate-500">
+                            <span className="text-[11px] text-brand-brown/80">
                               {formatSegmentTime(segment.start_ms)} - {formatSegmentTime(segment.end_ms)}
                             </span>
                             <button
@@ -1860,16 +1856,16 @@ export default function App() {
                                 toggleSegmentOmit(index);
                               }}
                               disabled={busy || pdfReceived}
-                              className="ml-auto shrink-0 rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-[10px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                              className="ml-auto shrink-0 rounded-lg border border-line-strong bg-white px-2 py-1 text-[10px] font-semibold text-brand-navy transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               {segment.omitted ? "복구" : "구간삭제"}
                             </button>
                             {!segment.omitted ? (
-                              <span className="shrink-0 text-[10px] font-semibold text-cyan-400/80">+ 추가</span>
+                              <span className="shrink-0 text-[10px] font-semibold text-brand-orange/80">+ 추가</span>
                             ) : null}
                           </div>
                           {segment.omitted ? (
-                            <p className="px-1 text-sm font-medium text-slate-400">
+                            <p className="px-1 text-sm font-medium text-brand-brown">
                               {formatSegmentTime(segment.start_ms)} - {formatSegmentTime(segment.end_ms)}{" "}
                               {OMITTED_MARKER}
                             </p>
@@ -1895,7 +1891,7 @@ export default function App() {
                         );
                       })
                     ) : (
-                      <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-5 py-10 text-center text-sm text-slate-400">
+                      <div className="rounded-2xl border border-dashed border-line bg-soft px-5 py-10 text-center text-sm text-brand-brown">
                         수정할 대화 구간이 없습니다.
                       </div>
                     )}
@@ -1919,7 +1915,7 @@ export default function App() {
                 </div>
 
                 {(!pushRegistered || pushPermission !== "granted") ? (
-                  <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
+                  <div className="rounded-2xl border border-brand-orange/30 bg-brand-orange/10 px-4 py-3 text-sm text-brand-navy">
                     관리자 답변, PDF 전달, 상태 변경 알림을 받으려면 브라우저 알림을 허용해 주세요.
                   </div>
                 ) : null}
@@ -1935,7 +1931,7 @@ export default function App() {
                     type="button"
                     onClick={onSaveDraft}
                     disabled={busy || pdfReceived}
-                    className="rounded-xl border border-slate-700 bg-slate-950 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+                    className="rounded-xl border border-line bg-page py-3 text-sm font-semibold text-brand-navy transition hover:bg-muted disabled:opacity-50"
                   >
                     저장
                   </button>
@@ -1943,7 +1939,7 @@ export default function App() {
                     type="button"
                     onClick={onSubmitTranscriptRequest}
                     disabled={busy || pdfReceived}
-                    className="rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
+                    className="rounded-xl bg-violet-600 py-3 text-sm font-semibold text-brand-navy transition hover:bg-violet-500 disabled:opacity-50"
                   >
                     녹취록 요청
                   </button>
@@ -1951,7 +1947,7 @@ export default function App() {
                     type="button"
                     onClick={onRequestTranscriberReview}
                     disabled={busy || pdfReceived}
-                    className="rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+                    className="rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-brand-navy transition hover:bg-indigo-500 disabled:opacity-50"
                   >
                     검토요청
                   </button>
@@ -1959,7 +1955,7 @@ export default function App() {
                     type="button"
                     onClick={onCreateShareLink}
                     disabled={busy || creatingShare || pdfReceived}
-                    className="rounded-xl border border-cyan-500/40 bg-cyan-500/10 py-3 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
+                    className="rounded-xl border border-brand-orange/40 bg-brand-orange/10 py-3 text-sm font-semibold text-brand-orange transition hover:bg-brand-orange/15 disabled:opacity-50"
                   >
                     {creatingShare ? "링크 생성 중..." : "공유 링크 만들기"}
                   </button>
@@ -1967,14 +1963,14 @@ export default function App() {
                     type="button"
                     onClick={onDownloadPdf}
                     disabled={busy}
-                    className="rounded-xl bg-slate-200 py-3 text-sm font-semibold text-slate-950 transition hover:bg-white disabled:opacity-50"
+                    className="rounded-xl border border-line bg-white py-3 text-sm font-semibold text-brand-navy transition hover:bg-soft disabled:opacity-50"
                   >
                     PDF 다운로드
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 px-6 py-14 text-center text-sm text-slate-400">
+              <div className="rounded-2xl border border-dashed border-line bg-soft px-6 py-14 text-center text-sm text-brand-brown">
                 보관함에서 의뢰인 검토 항목을 선택하거나 작업번호로 문서를 불러오세요.
               </div>
             )}
@@ -1983,15 +1979,15 @@ export default function App() {
         </main>
 
         {duplicateDialogMessage ? (
-          <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
-            <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-2xl shadow-black/40">
-              <h3 className="text-lg font-semibold text-white">중복 업로드 안내</h3>
-              <p className="mt-3 text-sm leading-6 text-slate-300">{duplicateDialogMessage}</p>
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-page/75 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-shell border border-line bg-white p-5 shadow-strong">
+              <h3 className="text-lg font-semibold text-brand-navy">중복 업로드 안내</h3>
+              <p className="mt-3 text-sm leading-6 text-brand-navy">{duplicateDialogMessage}</p>
               <div className="mt-5 flex justify-end">
                 <button
                   type="button"
                   onClick={closeDuplicateDialog}
-                  className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+                  className="rounded-xl bg-brand-orange px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-orange-dark"
                 >
                   확인
                 </button>

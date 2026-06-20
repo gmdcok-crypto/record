@@ -60,19 +60,19 @@ export default function AddSegmentModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"
+        className="w-full max-w-lg rounded-2xl border border-line bg-white p-5 shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold text-white">대화 추가</h2>
-        <p className="mt-1 text-sm text-slate-400">선택한 대화 바로 다음에 새 구간이 추가됩니다.</p>
+        <h2 className="text-lg font-semibold text-brand-navy">대화 추가</h2>
+        <p className="mt-1 text-sm text-brand-brown">선택한 대화 바로 다음에 새 구간이 추가됩니다.</p>
 
         <div className="mt-4 space-y-4">
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-slate-500">화자</span>
+            <span className="mb-1 block text-xs font-medium text-brand-brown/80">화자</span>
             <select
               value={speaker}
               onChange={(event) => setSpeaker(event.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-blue-500"
+              className="w-full rounded-lg border border-line bg-page px-3 py-2 text-sm text-brand-navy outline-none transition focus:border-brand-orange/55"
             >
               {speakerIds.map((id) => (
                 <option key={id} value={id}>
@@ -83,24 +83,24 @@ export default function AddSegmentModal({
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-slate-500">대화 내용</span>
+            <span className="mb-1 block text-xs font-medium text-brand-brown/80">대화 내용</span>
             <textarea
               value={text}
               onChange={(event) => setText(event.target.value)}
               rows={4}
               placeholder="추가할 대화 내용을 입력하세요."
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm leading-6 text-slate-100 outline-none transition focus:border-blue-500"
+              className="w-full rounded-lg border border-line bg-page px-3 py-2 text-sm leading-6 text-brand-navy outline-none transition focus:border-brand-orange/55"
             />
           </label>
 
-          {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+          {error ? <p className="text-sm text-red-700">{error}</p> : null}
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:bg-slate-800"
+            className="rounded-lg border border-line px-4 py-2 text-sm text-brand-navy transition hover:bg-muted"
           >
             취소
           </button>

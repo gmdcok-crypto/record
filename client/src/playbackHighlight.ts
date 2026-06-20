@@ -100,8 +100,8 @@ function isOutsideSelection(startMs: number, endMs: number, selectedSegments: Se
 
 
 export function activeWordClass(active: boolean, played: boolean, outsideSelection = false): string {
-  if (active) return "rounded-sm bg-white text-slate-950";
-  if (outsideSelection) return played ? "text-amber-300" : "text-amber-400";
-  if (played) return "text-slate-300";
-  return "text-slate-100";
+  if (active) return "rounded-sm bg-brand-orange/20 text-brand-navy";
+  if (outsideSelection) return played ? "text-amber-600" : "text-amber-500";
+  if (played) return "text-brand-brown";
+  return "text-brand-navy";
 }

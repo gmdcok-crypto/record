@@ -4,6 +4,7 @@ import { registerSW } from "virtual:pwa-register";
 import App from "./App";
 import InAppBrowserBanner from "./InAppBrowserBanner";
 import SharedTranscriptPage from "./SharedTranscriptPage";
+import "./styles/client-theme.css";
 import "./index.css";
 
 const shareMatch = window.location.pathname.match(/^\/share\/transcript\/([^/]+)$/);

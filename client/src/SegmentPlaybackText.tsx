@@ -130,7 +130,7 @@ export default function SegmentPlaybackText({
             schedulePlay();
           }
         }}
-        className="w-full cursor-pointer rounded-lg border border-transparent bg-slate-900/60 px-3 py-2 text-sm leading-7 outline-none transition"
+        className="w-full cursor-pointer rounded-lg border border-transparent bg-soft px-3 py-2 text-sm leading-7 outline-none transition"
       >
         <KaraokeWords words={words} playbackMs={playbackMs} isAudioPlaying activeWordRef={activeWordRef} />
       </div>
@@ -166,7 +166,7 @@ export default function SegmentPlaybackText({
       }}
       onBlur={() => setEditing(false)}
       placeholder={placeholder}
-      className="w-full resize-none overflow-hidden rounded-lg border border-transparent bg-slate-900/60 px-3 py-2 text-sm leading-6 text-slate-100 outline-none transition placeholder:text-slate-500 hover:border-slate-700 focus:border-blue-500 focus:bg-slate-900 disabled:opacity-50"
+      className="w-full resize-none overflow-hidden rounded-lg border border-transparent bg-soft px-3 py-2 text-sm leading-6 text-brand-navy outline-none transition placeholder:text-brand-brown/60 hover:border-line focus:border-brand-orange/55 focus:bg-white disabled:opacity-50"
     />
   );
 }
@@ -227,7 +227,7 @@ function ReadOnlyPlaybackText({
       type="button"
       onClick={onPlayRequest}
       disabled={disabled}
-      className="w-full rounded-lg border border-transparent bg-slate-900/60 px-3 py-2 text-left text-sm leading-7 text-slate-100 transition hover:border-white/10 hover:bg-slate-900 disabled:cursor-default disabled:text-slate-400"
+      className="w-full rounded-lg border border-transparent bg-soft px-3 py-2 text-left text-sm leading-7 text-brand-navy transition hover:border-white/10 hover:bg-white disabled:cursor-default disabled:text-brand-brown"
     >
       {showKaraoke ? (
         <KaraokeWords words={words} playbackMs={playbackMs} isAudioPlaying activeWordRef={activeWordRef} />

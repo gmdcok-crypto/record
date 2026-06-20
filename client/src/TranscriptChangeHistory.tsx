@@ -76,28 +76,28 @@ export default function TranscriptChangeHistory({ jobId, refreshKey = 0, loadEnt
   if (!jobId) return null;
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/80">
+    <div className="rounded-2xl border border-line bg-soft">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         className="flex w-full items-center justify-between px-4 py-3 text-left"
       >
-        <span className="text-sm font-semibold text-slate-200">변경 이력</span>
-        <span className="text-xs text-slate-500">{open ? "접기" : "펼치기"}</span>
+        <span className="text-sm font-semibold text-brand-navy">변경 이력</span>
+        <span className="text-xs text-brand-brown/80">{open ? "접기" : "펼치기"}</span>
       </button>
 
       {open ? (
-        <div className="border-t border-slate-800 px-4 py-3">
-          {loading ? <p className="text-sm text-slate-500">불러오는 중...</p> : null}
-          {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+        <div className="border-t border-line px-4 py-3">
+          {loading ? <p className="text-sm text-brand-brown/80">불러오는 중...</p> : null}
+          {error ? <p className="text-sm text-red-700">{error}</p> : null}
           {!loading && !error && entries.length === 0 ? (
-            <p className="text-sm text-slate-500">저장된 변경 이력이 없습니다.</p>
+            <p className="text-sm text-brand-brown/80">저장된 변경 이력이 없습니다.</p>
           ) : null}
           <div className="max-h-72 space-y-3 overflow-y-auto">
             {entries.map((entry) => (
-              <div key={`${entry.version}-${entry.created_at}`} className="rounded-xl border border-slate-800 px-3 py-2.5">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                  <span className="font-semibold text-violet-300">v{entry.version}</span>
+              <div key={`${entry.version}-${entry.created_at}`} className="rounded-xl border border-line px-3 py-2.5">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-brand-brown">
+                  <span className="font-semibold text-brand-navy-soft">v{entry.version}</span>
                   <span>{entry.save_kind_label}</span>
                   <span>·</span>
                   <span>
@@ -110,7 +110,7 @@ export default function TranscriptChangeHistory({ jobId, refreshKey = 0, loadEnt
                     </>
                   ) : null}
                 </div>
-                <ul className="mt-2 space-y-1 text-sm text-slate-200">
+                <ul className="mt-2 space-y-1 text-sm text-brand-navy">
                   {entry.changes.map((change, index) => (
                     <li key={`${entry.version}-${index}`} className="leading-6">
                       {formatChangeLine(change)}
