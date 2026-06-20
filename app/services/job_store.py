@@ -3,7 +3,7 @@ import re
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import func, or_, select
-from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy.exc import DataError, IntegrityError, OperationalError, ProgrammingError, SQLAlchemyError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -1046,18 +1046,23 @@ def record_payment_record(
     pay_method: str | None,
     paid_at: datetime | None,
 ) -> PaymentRecord:
+    safe_payment_id = payment_id.strip()[:120]
+    safe_member_name = (member.name or "").strip()[:100] or "의뢰인"
+    safe_order_name = (order_name or "").strip()[:255] or safe_payment_id
+    safe_pay_method = (pay_method or "").strip()[:50] or None
+
     for attempt in range(2):
         try:
-            record = db.scalar(select(PaymentRecord).where(PaymentRecord.payment_id == payment_id))
+            record = db.scalar(select(PaymentRecord).where(PaymentRecord.payment_id == safe_payment_id))
             if record is None:
-                record = PaymentRecord(payment_id=payment_id)
+                record = PaymentRecord(payment_id=safe_payment_id)
                 db.add(record)
 
             record.member_id = member.id
-            record.member_name = member.name
-            record.order_name = order_name.strip() or payment_id
+            record.member_name = safe_member_name
+            record.order_name = safe_order_name
             record.amount = amount
-            record.pay_method = (pay_method or "").strip() or None
+            record.pay_method = safe_pay_method
             record.paid_at = paid_at
             db.commit()
             db.refresh(record)
@@ -1068,6 +1073,9 @@ def record_payment_record(
             if attempt == 1 or "payment_records" not in message:
                 raise
             _ensure_payment_records_table(db)
+        except (DataError, IntegrityError, SQLAlchemyError):
+            db.rollback()
+            raise
     raise RuntimeError("Failed to record payment record")
 
 

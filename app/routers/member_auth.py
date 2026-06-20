@@ -151,6 +151,33 @@ def _is_portone_payment_paid(payment: dict) -> bool:
     return str(payment.get("status") or "").upper() == "PAID"
 
 
+def _extract_pay_method(payment: dict) -> str | None:
+    raw = payment.get("method")
+    if raw is None:
+        raw = payment.get("payMethod")
+    if raw is None:
+        raw = payment.get("paymentMethod")
+
+    label = ""
+    if isinstance(raw, str):
+        label = raw.strip()
+    elif isinstance(raw, dict):
+        for key in ("type", "method", "payMethod", "provider"):
+            value = raw.get(key)
+            if isinstance(value, str) and value.strip():
+                label = value.strip()
+                break
+    elif raw is not None:
+        text = str(raw).strip()
+        # PortOne may return a dict-like string; avoid storing huge blobs in VARCHAR(50).
+        if text and not text.startswith("{"):
+            label = text
+
+    if not label:
+        return None
+    return label[:50]
+
+
 def _finalize_portone_payment(
     db: Session,
     *,
@@ -160,6 +187,7 @@ def _finalize_portone_payment(
     expected_order_name: str,
     payment: dict | None = None,
 ) -> dict:
+    member_id = member.id
     payment = payment if payment is not None else _fetch_portone_json(f"/payments/{payment_id}")
     if not _is_portone_payment_paid(payment):
         raise HTTPException(status_code=409, detail="결제가 아직 완료되지 않았습니다.")
@@ -182,7 +210,7 @@ def _finalize_portone_payment(
             order_name,
         )
 
-    pay_method = str(payment.get("method") or payment.get("payMethod") or "").strip() or None
+    pay_method = _extract_pay_method(payment)
 
     if settings.payment_records_enabled:
         paid_at_raw = payment.get("paidAt") or payment.get("updatedAt")
@@ -203,12 +231,12 @@ def _finalize_portone_payment(
                 paid_at=paid_at,
             )
         except Exception:
-            logger.exception("payment record save failed payment_id=%s member_id=%s", payment_id, member.id)
+            logger.exception("payment record save failed payment_id=%s member_id=%s", payment_id, member_id)
     else:
         logger.info(
             "payment record save skipped (PAYMENT_RECORDS_ENABLED=false) payment_id=%s member_id=%s",
             payment_id,
-            member.id,
+            member_id,
         )
 
     return {
@@ -216,7 +244,7 @@ def _finalize_portone_payment(
         "payment_id": payment_id,
         "amount": total_amount,
         "order_name": order_name,
-        "member_id": member.id,
+        "member_id": member_id,
     }
 
 
