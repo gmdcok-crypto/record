@@ -168,10 +168,32 @@ def _append_document_end(pdf: FPDF, font: str, bold_available: bool) -> None:
     )
 
 
+def _format_time_ms(ms: int | None) -> str:
+    if ms is None:
+        return "--:--"
+    total = int(ms // 1000)
+    minute = total // 60
+    second = total % 60
+    return f"{minute:02d}:{second:02d}"
+
+
+def _format_omitted_segment_text(segment: dict) -> str:
+    start = segment.get("start_ms")
+    end = segment.get("end_ms")
+    return f"{_format_time_ms(start)} - {_format_time_ms(end)} (생략)"
+
+
+def _segment_is_omitted(segment: dict) -> bool:
+    return bool(segment.get("omitted"))
+
+
 def _format_transcript_text(segments: list[dict], labels: dict) -> str:
     lines = []
     for segment in segments:
         speaker = _speaker_label(str(segment.get("speaker", "")), labels)
+        if _segment_is_omitted(segment):
+            lines.append(f"{speaker}: {_format_omitted_segment_text(segment)}")
+            continue
         text = (segment.get("text") or "").strip()
         if text:
             lines.append(f"{speaker}: {text}")
@@ -219,9 +241,12 @@ def _render_transcript_body(
     if segments:
         for segment in segments:
             speaker = _speaker_label(str(segment.get("speaker", "")), labels)
-            text = (segment.get("text") or "").strip()
-            if not text:
-                continue
+            if _segment_is_omitted(segment):
+                text = _format_omitted_segment_text(segment)
+            else:
+                text = (segment.get("text") or "").strip()
+                if not text:
+                    continue
 
             pdf.set_font(font, size=12)
             pdf.multi_cell(0, 8, speaker, new_x=XPos.LMARGIN, new_y=YPos.NEXT)

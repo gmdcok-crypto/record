@@ -44,9 +44,13 @@ import { formatKstDateTime } from "./formatKstDateTime";
 import {
   createManualSegmentId,
   deriveExtraSpeakerIds,
+  formatSegmentTime,
   insertSegmentAfter,
   mergeSpeakerIds,
   nextSpeakerId,
+  OMITTED_MARKER,
+  segmentsToTranscript,
+  toggleSegmentOmitted,
 } from "./transcriptEditor";
 import UploadBillingPanel, { type BillingRestoreHint } from "./UploadBillingPanel";
 import type { UploadBillingFile } from "./uploadBilling";
@@ -127,39 +131,6 @@ function buildEditableSegments(transcript?: TranscriptJson | null): EditableSegm
         end_ms: null,
       };
     });
-}
-
-function segmentsToTranscript(
-  base: TranscriptJson | null,
-  segments: EditableSegment[],
-  speaker_labels: Record<string, string>,
-): TranscriptJson {
-  const cleaned = segments.map(({ id: _id, ...segment }) => ({
-    ...segment,
-    speaker: segment.speaker.trim() || "1",
-    text: segment.text.trim(),
-  }));
-  const body = cleaned
-    .filter((segment) => segment.text.trim())
-    .map((segment) => `${speakerLabel(segment.speaker, speaker_labels)}: ${segment.text.trim()}`)
-    .join("\n\n");
-
-  return {
-    ...base,
-    text: body,
-    plain_text: body,
-    segments: cleaned,
-    tokens: base?.tokens ?? [],
-    speaker_labels,
-  };
-}
-
-function formatSegmentTime(ms: number | null | undefined): string {
-  if (ms == null) return "--:--";
-  const total = Math.floor(ms / 1000);
-  const minute = Math.floor(total / 60);
-  const second = total % 60;
-  return `${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}`;
 }
 
 function autoResizeTextarea(element: HTMLTextAreaElement) {
@@ -1325,6 +1296,10 @@ export default function App() {
     showNotice("info", `${speakerLabel(id)}이(가) 추가되었습니다. 이름을 입력한 뒤 적용하세요.`);
   };
 
+  const toggleSegmentOmit = (index: number) => {
+    setSegments((prev) => toggleSegmentOmitted(prev, index));
+  };
+
   const openAddSegmentAfter = (index: number) => {
     if (busy || !speakerIds.length) return;
     setAddSegmentAfterIndex(index);
@@ -1837,7 +1812,9 @@ export default function App() {
                         <div
                           key={segment.id}
                           className={`rounded-xl border px-3 py-2.5 transition-colors ${
-                            hasActiveWord
+                            segment.omitted
+                              ? "border-slate-600/80 bg-slate-900/50"
+                              : hasActiveWord
                               ? "border-cyan-300/70 bg-cyan-400/10"
                               : "border-slate-700/80 bg-slate-950/80"
                           }`}
@@ -1864,8 +1841,8 @@ export default function App() {
                               onClick={(event) => event.stopPropagation()}
                               onMouseDown={(event) => event.stopPropagation()}
                               onChange={(e) => updateSegment(index, { speaker: e.target.value })}
-                              disabled={pdfReceived}
-                              className="max-w-[9rem] shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-semibold text-slate-100 outline-none transition focus:border-blue-500"
+                              disabled={pdfReceived || Boolean(segment.omitted)}
+                              className="max-w-[9rem] shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-semibold text-slate-100 outline-none transition focus:border-blue-500 disabled:opacity-60"
                             >
                               {speakerIds.map((id) => (
                                 <option key={id} value={id}>
@@ -1876,8 +1853,27 @@ export default function App() {
                             <span className="text-[11px] text-slate-500">
                               {formatSegmentTime(segment.start_ms)} - {formatSegmentTime(segment.end_ms)}
                             </span>
-                            <span className="ml-auto text-[10px] font-semibold text-cyan-400/80">+ 추가</span>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                toggleSegmentOmit(index);
+                              }}
+                              disabled={busy || pdfReceived}
+                              className="ml-auto shrink-0 rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-[10px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {segment.omitted ? "복구" : "구간삭제"}
+                            </button>
+                            {!segment.omitted ? (
+                              <span className="shrink-0 text-[10px] font-semibold text-cyan-400/80">+ 추가</span>
+                            ) : null}
                           </div>
+                          {segment.omitted ? (
+                            <p className="px-1 text-sm font-medium text-slate-400">
+                              {formatSegmentTime(segment.start_ms)} - {formatSegmentTime(segment.end_ms)}{" "}
+                              {OMITTED_MARKER}
+                            </p>
+                          ) : (
                           <SegmentPlaybackText
                             value={segment.text}
                             segment={segment}
@@ -1894,6 +1890,7 @@ export default function App() {
                             onEditStart={() => audioRef.current?.pause()}
                             onAutoResize={autoResizeTextarea}
                           />
+                          )}
                         </div>
                         );
                       })

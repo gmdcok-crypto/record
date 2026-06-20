@@ -1,7 +1,78 @@
-import type { TranscriptSegment } from "./api";
-import { collectSpeakerIds } from "./api";
+import type { TranscriptJson, TranscriptSegment } from "./api";
+import { collectSpeakerIds, speakerLabel } from "./api";
 
 export type EditableSegment = TranscriptSegment & { id: string };
+
+export const OMITTED_MARKER = "(생략)";
+
+export function formatSegmentTime(ms: number | null | undefined): string {
+  if (ms == null) return "--:--";
+  const total = Math.floor(ms / 1000);
+  const minute = Math.floor(total / 60);
+  const second = total % 60;
+  return `${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}`;
+}
+
+export function formatSegmentTimeRange(
+  startMs: number | null | undefined,
+  endMs: number | null | undefined,
+): string {
+  return `${formatSegmentTime(startMs)} - ${formatSegmentTime(endMs)}`;
+}
+
+export function formatOmittedDocumentText(
+  startMs: number | null | undefined,
+  endMs: number | null | undefined,
+): string {
+  return `${formatSegmentTimeRange(startMs, endMs)} ${OMITTED_MARKER}`;
+}
+
+export function isSegmentOmitted(segment: TranscriptSegment): boolean {
+  return Boolean(segment.omitted);
+}
+
+export function segmentDocumentLine(
+  segment: TranscriptSegment,
+  speakerLabels: Record<string, string>,
+): string {
+  const label = speakerLabel(segment.speaker, speakerLabels);
+  if (isSegmentOmitted(segment)) {
+    return `${label}: ${formatOmittedDocumentText(segment.start_ms, segment.end_ms)}`;
+  }
+  return `${label}: ${segment.text.trim()}`;
+}
+
+export function segmentsToTranscript(
+  base: TranscriptJson | null,
+  segments: EditableSegment[],
+  speaker_labels: Record<string, string>,
+): TranscriptJson {
+  const cleaned = segments.map(({ id: _id, ...segment }) => {
+    const normalized: TranscriptSegment = {
+      speaker: segment.speaker.trim() || "1",
+      text: segment.text.trim(),
+      start_ms: segment.start_ms,
+      end_ms: segment.end_ms,
+    };
+    if (segment.omitted) {
+      normalized.omitted = true;
+    }
+    return normalized;
+  });
+  const body = cleaned
+    .filter((segment) => isSegmentOmitted(segment) || segment.text.trim())
+    .map((segment) => segmentDocumentLine(segment, speaker_labels))
+    .join("\n\n");
+
+  return {
+    ...base,
+    text: body,
+    plain_text: body,
+    segments: cleaned,
+    tokens: base?.tokens ?? [],
+    speaker_labels,
+  };
+}
 
 export function sortSpeakerIds(ids: string[]): string[] {
   return [...ids].sort((a, b) => {
@@ -92,4 +163,10 @@ export function insertSegmentAfter<T extends EditableSegment>(
   const next = [...segments];
   next.splice(insertAt, 0, segment);
   return next;
+}
+
+export function toggleSegmentOmitted(segments: EditableSegment[], index: number): EditableSegment[] {
+  return segments.map((segment, currentIndex) =>
+    currentIndex === index ? { ...segment, omitted: !segment.omitted } : segment,
+  );
 }

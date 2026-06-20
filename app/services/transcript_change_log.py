@@ -118,9 +118,33 @@ def compute_transcript_changes(old: dict | None, new: dict | None) -> list[dict]
         if old_segment is None or new_segment is None:
             continue
 
+        old_omitted = bool(old_segment.get("omitted"))
+        new_omitted = bool(new_segment.get("omitted"))
+        if old_omitted != new_omitted:
+            if new_omitted:
+                changes.append(
+                    {
+                        "type": "segment_omitted",
+                        "segment_index": index,
+                        "speaker": _norm(new_segment.get("speaker") or old_segment.get("speaker")),
+                        "before": _norm(old_segment.get("text")),
+                        "after": _segment_time_range_label(new_segment),
+                    }
+                )
+            else:
+                changes.append(
+                    {
+                        "type": "segment_restored",
+                        "segment_index": index,
+                        "speaker": _norm(new_segment.get("speaker") or old_segment.get("speaker")),
+                        "before": _segment_time_range_label(old_segment),
+                        "after": _norm(new_segment.get("text")),
+                    }
+                )
+
         old_speaker = _norm(old_segment.get("speaker"))
         new_speaker = _norm(new_segment.get("speaker"))
-        if old_speaker != new_speaker:
+        if old_speaker != new_speaker and not old_omitted and not new_omitted:
             changes.append(
                 {
                     "type": "segment_speaker",
@@ -132,7 +156,7 @@ def compute_transcript_changes(old: dict | None, new: dict | None) -> list[dict]
 
         old_text = _norm(old_segment.get("text"))
         new_text = _norm(new_segment.get("text"))
-        if old_text != new_text:
+        if old_text != new_text and not old_omitted and not new_omitted:
             changes.append(
                 {
                     "type": "segment_text",
@@ -144,6 +168,24 @@ def compute_transcript_changes(old: dict | None, new: dict | None) -> list[dict]
             )
 
     return changes
+
+
+def _format_time_ms(ms: Any) -> str:
+    if ms is None:
+        return "--:--"
+    try:
+        total = int(float(ms) // 1000)
+    except (TypeError, ValueError):
+        return "--:--"
+    minute = total // 60
+    second = total % 60
+    return f"{minute:02d}:{second:02d}"
+
+
+def _segment_time_range_label(segment: dict) -> str:
+    start = segment.get("start_ms")
+    end = segment.get("end_ms")
+    return f"{_format_time_ms(start)} - {_format_time_ms(end)} (생략)"
 
 
 def resolve_editor(

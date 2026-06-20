@@ -22,6 +22,7 @@ export type TranscriptSegment = {
   text: string;
   start_ms: number | null;
   end_ms: number | null;
+  omitted?: boolean;
 };
 
 export type TranscriptJson = {

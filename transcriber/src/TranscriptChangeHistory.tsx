@@ -23,6 +23,10 @@ function formatChangeLine(change: TranscriptChangeEntry["changes"][number]): str
       return `${segmentNo} 추가: ${change.after || ""}`;
     case "segment_removed":
       return `${segmentNo} 삭제: ${change.before || ""}`;
+    case "segment_omitted":
+      return `${segmentNo} 생략: "${change.before || "(없음)"}" → ${change.after || "(생략)"}`;
+    case "segment_restored":
+      return `${segmentNo} 복구: ${change.before || "(생략)"} → "${change.after || "(없음)"}"`;
     default:
       return JSON.stringify(change);
   }

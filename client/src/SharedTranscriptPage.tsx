@@ -8,7 +8,6 @@ import {
   speakerLabel,
   submitSharedReviewRequest,
   type SharedJobResponse,
-  type TranscriptJson,
   type TranscriptSegment,
 } from "./api";
 import AddSegmentModal, { type AddSegmentDraft } from "./AddSegmentModal";
@@ -24,7 +23,17 @@ import {
   playSegmentAudio,
   resolveSegmentEndMs,
 } from "./segmentAudio";
-import { createManualSegmentId, deriveExtraSpeakerIds, insertSegmentAfter, mergeSpeakerIds, nextSpeakerId } from "./transcriptEditor";
+import {
+  createManualSegmentId,
+  deriveExtraSpeakerIds,
+  formatSegmentTime,
+  insertSegmentAfter,
+  mergeSpeakerIds,
+  nextSpeakerId,
+  OMITTED_MARKER,
+  segmentsToTranscript,
+  toggleSegmentOmitted,
+} from "./transcriptEditor";
 
 type EditableSegment = TranscriptSegment & { id: string };
 
@@ -54,42 +63,9 @@ function buildEditableSegments(transcript?: SharedJobResponse["job"]["transcript
     });
 }
 
-function formatSegmentTime(ms: number | null | undefined): string {
-  if (ms == null) return "--:--";
-  const total = Math.floor(ms / 1000);
-  const minute = Math.floor(total / 60);
-  const second = total % 60;
-  return `${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}`;
-}
-
 function autoResizeTextarea(element: HTMLTextAreaElement) {
   element.style.height = "auto";
   element.style.height = `${element.scrollHeight}px`;
-}
-
-function segmentsToTranscript(
-  base: TranscriptJson | null,
-  segments: EditableSegment[],
-  speakerLabels: Record<string, string>,
-): TranscriptJson {
-  const cleaned = segments.map(({ id: _id, ...segment }) => ({
-    ...segment,
-    speaker: segment.speaker.trim() || "1",
-    text: segment.text.trim(),
-  }));
-  const body = cleaned
-    .filter((segment) => segment.text.trim())
-    .map((segment) => `${speakerLabel(segment.speaker, speakerLabels)}: ${segment.text.trim()}`)
-    .join("\n\n");
-
-  return {
-    ...base,
-    text: body,
-    plain_text: body,
-    segments: cleaned,
-    tokens: base?.tokens ?? [],
-    speaker_labels: speakerLabels,
-  };
 }
 
 export default function SharedTranscriptPage({ token }: { token: string }) {
@@ -215,6 +191,10 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
     showNotice("info", `${speakerLabel(id)}이(가) 추가되었습니다. 이름을 입력한 뒤 적용하세요.`);
   };
 
+  const toggleSegmentOmit = (index: number) => {
+    setSegments((prev) => toggleSegmentOmitted(prev, index));
+  };
+
   const openAddSegmentAfter = (index: number) => {
     if (saving || !speakerIds.length) return;
     setAddSegmentAfterIndex(index);
@@ -335,7 +315,11 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
                   <div
                     key={segment.id}
                     className={`rounded-xl border px-3 py-2.5 transition-colors ${
-                      hasActiveWord ? "border-cyan-300/70 bg-cyan-400/10" : "border-slate-700/80 bg-slate-950/80"
+                      segment.omitted
+                        ? "border-slate-600/80 bg-slate-900/50"
+                        : hasActiveWord
+                        ? "border-cyan-300/70 bg-cyan-400/10"
+                        : "border-slate-700/80 bg-slate-950/80"
                     }`}
                   >
                     <div
@@ -360,7 +344,8 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
                         onClick={(event) => event.stopPropagation()}
                         onMouseDown={(event) => event.stopPropagation()}
                         onChange={(event) => updateSegment(index, { speaker: event.target.value })}
-                        className="max-w-[9rem] shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-semibold text-slate-100 outline-none transition focus:border-blue-500"
+                        disabled={Boolean(segment.omitted)}
+                        className="max-w-[9rem] shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs font-semibold text-slate-100 outline-none transition focus:border-blue-500 disabled:opacity-60"
                       >
                         {speakerIds.map((id) => (
                           <option key={id} value={id}>
@@ -371,8 +356,27 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
                       <span className="text-[11px] text-slate-500">
                         {formatSegmentTime(segment.start_ms)} - {formatSegmentTime(segment.end_ms)}
                       </span>
-                      <span className="ml-auto text-[10px] font-semibold text-cyan-400/80">+ 추가</span>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleSegmentOmit(index);
+                        }}
+                        disabled={saving}
+                        className="ml-auto shrink-0 rounded-lg border border-slate-600 bg-slate-900 px-2 py-1 text-[10px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {segment.omitted ? "복구" : "구간삭제"}
+                      </button>
+                      {!segment.omitted ? (
+                        <span className="shrink-0 text-[10px] font-semibold text-cyan-400/80">+ 추가</span>
+                      ) : null}
                     </div>
+                    {segment.omitted ? (
+                      <p className="px-1 text-sm font-medium text-slate-400">
+                        {formatSegmentTime(segment.start_ms)} - {formatSegmentTime(segment.end_ms)}{" "}
+                        {OMITTED_MARKER}
+                      </p>
+                    ) : (
                     <SegmentPlaybackText
                       value={segment.text}
                       segment={segment}
@@ -389,6 +393,7 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
                       onEditStart={() => audioRef.current?.pause()}
                       onAutoResize={autoResizeTextarea}
                     />
+                    )}
                   </div>
                 );
               })
