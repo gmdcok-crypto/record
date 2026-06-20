@@ -1,6 +1,10 @@
 import { useState, type FormEvent } from "react";
 import ClientSignupFlow from "./ClientSignupFlow";
 import { loginMember, type MemberProfile } from "./api";
+import {
+  clearPortOneIdentityVerificationIdFromUrl,
+  readPortOneIdentityVerificationIdFromUrl,
+} from "./identityVerification";
 import "./styles/login.css";
 
 type MemberLoginProps = {
@@ -12,7 +16,10 @@ export default function MemberLogin({ onSuccess }: MemberLoginProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [signupOpen, setSignupOpen] = useState(false);
+  const [signupOpen, setSignupOpen] = useState(() => Boolean(readPortOneIdentityVerificationIdFromUrl()));
+  const [pendingIdentityVerificationId, setPendingIdentityVerificationId] = useState<string | null>(() =>
+    readPortOneIdentityVerificationIdFromUrl(),
+  );
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -86,6 +93,11 @@ export default function MemberLogin({ onSuccess }: MemberLoginProps) {
         onSuccess={(member) => {
           setSignupOpen(false);
           onSuccess(member);
+        }}
+        initialIdentityVerificationId={pendingIdentityVerificationId}
+        onIdentityVerificationHandled={() => {
+          clearPortOneIdentityVerificationIdFromUrl();
+          setPendingIdentityVerificationId(null);
         }}
       />
     </>

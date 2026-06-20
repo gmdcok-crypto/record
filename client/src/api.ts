@@ -759,6 +759,7 @@ export async function signupMember(payload: {
   name: string;
   email: string;
   password: string;
+  identityVerificationId?: string;
 }): Promise<MemberProfile> {
   const res = await fetch(`${apiBase()}/api/member/auth/signup`, {
     method: "POST",
@@ -767,6 +768,7 @@ export async function signupMember(payload: {
       name: payload.name.trim(),
       email: payload.email.trim().toLowerCase(),
       password: payload.password,
+      identityVerificationId: payload.identityVerificationId,
     }),
   });
   const data = await res.json().catch(() => ({}));
@@ -778,6 +780,25 @@ export async function signupMember(payload: {
   }
   localStorage.setItem(MEMBER_TOKEN_KEY, data.access_token);
   return data.member as MemberProfile;
+}
+
+export async function lookupMemberIdentityVerification(identityVerificationId: string): Promise<{
+  name: string | null;
+  phone: string | null;
+}> {
+  const res = await fetch(`${apiBase()}/api/member/auth/identity-verifications/lookup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ identityVerificationId }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data) || "본인인증 결과를 불러오지 못했습니다.");
+  }
+  return {
+    name: typeof data.name === "string" ? data.name : null,
+    phone: typeof data.phone === "string" ? data.phone : null,
+  };
 }
 
 export type PortOnePublicConfig = {

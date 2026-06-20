@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import * as PortOne from "@portone/browser-sdk/v2";
 import {
   EMAIL_PATTERN,
   PASSWORD_PATTERN,
   checkEmailAvailability,
+  fetchPortOnePublicConfig,
+  lookupMemberIdentityVerification,
   signupMember,
   type MemberProfile,
 } from "./api";
+import {
+  createIdentityVerificationId,
+  formatVerifiedPhone,
+} from "./identityVerification";
 import "./styles/signup-modal.css";
 
 type TermsKey = "service" | "privacy" | "collection";
@@ -16,6 +23,8 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onSuccess: (member: MemberProfile) => void;
+  initialIdentityVerificationId?: string | null;
+  onIdentityVerificationHandled?: () => void;
 };
 
 function useBodyScrollLock(locked: boolean) {
@@ -324,10 +333,14 @@ function SignupModal({
   open,
   onClose,
   onSuccess,
+  initialIdentityVerificationId,
+  onIdentityVerificationHandled,
 }: {
   open: boolean;
   onClose: () => void;
   onSuccess: (member: MemberProfile) => void;
+  initialIdentityVerificationId?: string | null;
+  onIdentityVerificationHandled?: () => void;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -339,9 +352,42 @@ function SignupModal({
   const [error, setError] = useState("");
   const [checkingEmail, setCheckingEmail] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [verifyingIdentity, setVerifyingIdentity] = useState(false);
+  const [identityRequired, setIdentityRequired] = useState(false);
+  const [verifiedPhone, setVerifiedPhone] = useState("");
+  const [identityVerificationId, setIdentityVerificationId] = useState("");
 
   useEffect(() => {
     if (!open) return;
+    void fetchPortOnePublicConfig()
+      .then((config) => setIdentityRequired(Boolean(config.portoneIdentityEnabled)))
+      .catch(() => setIdentityRequired(false));
+  }, [open]);
+
+  useEffect(() => {
+    const pendingId = initialIdentityVerificationId;
+    if (!open || !pendingId) return;
+
+    setVerifyingIdentity(true);
+    void lookupMemberIdentityVerification(pendingId)
+      .then((verified) => {
+        setIdentityVerificationId(pendingId);
+        setVerifiedPhone(verified.phone ?? "");
+        setName((current) => current.trim() || verified.name || "");
+        setError("");
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "본인인증 결과를 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        onIdentityVerificationHandled?.();
+        setVerifyingIdentity(false);
+      });
+  }, [open, initialIdentityVerificationId, onIdentityVerificationHandled]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (initialIdentityVerificationId) return;
     setName("");
     setEmail("");
     setPassword("");
@@ -350,9 +396,43 @@ function SignupModal({
     setShowPasswordConfirm(false);
     setEmailHint(null);
     setError("");
-  }, [open]);
+    setVerifiedPhone("");
+    setIdentityVerificationId("");
+  }, [open, initialIdentityVerificationId]);
 
   if (!open) return null;
+
+  const verifyIdentity = async () => {
+    setError("");
+    setVerifyingIdentity(true);
+    try {
+      const config = await fetchPortOnePublicConfig();
+      if (!config.portoneIdentityEnabled || !config.portoneStoreId || !config.portoneIdentityChannelKey) {
+        throw new Error("포트원 본인인증 설정이 아직 완료되지 않았습니다.");
+      }
+      const nextIdentityVerificationId = createIdentityVerificationId();
+      const response = await PortOne.requestIdentityVerification({
+        storeId: config.portoneStoreId,
+        identityVerificationId: nextIdentityVerificationId,
+        channelKey: config.portoneIdentityChannelKey,
+        redirectUrl: window.location.href,
+      });
+      if (!response) return;
+      if (response.code !== undefined) {
+        throw new Error(response.message || "본인인증이 취소되었습니다.");
+      }
+      const verified = await lookupMemberIdentityVerification(nextIdentityVerificationId);
+      setIdentityVerificationId(nextIdentityVerificationId);
+      setVerifiedPhone(verified.phone ?? "");
+      if (verified.name && !name.trim()) {
+        setName(verified.name);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "본인인증에 실패했습니다.");
+    } finally {
+      setVerifyingIdentity(false);
+    }
+  };
 
   const handleCheckEmail = async () => {
     const normalized = email.trim().toLowerCase();
@@ -394,6 +474,10 @@ function SignupModal({
       setError("비밀번호가 일치하지 않습니다.");
       return;
     }
+    if (identityRequired && (!verifiedPhone || !identityVerificationId)) {
+      setError("회원가입 전에 본인인증을 완료해 주세요.");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -401,6 +485,7 @@ function SignupModal({
         name: trimmedName,
         email: normalizedEmail,
         password,
+        identityVerificationId: identityVerificationId || undefined,
       });
       onSuccess(member);
     } catch (err) {
@@ -525,10 +610,22 @@ function SignupModal({
           <p className="signup-rule">✓ 영문, 숫자, 특수문자 (#?!@$%^&*-) 포함 8~16자리</p>
 
           <div className="signup-identity" aria-label="본인인증">
-            <button type="button" className="signup-side-btn" disabled>
-              본인인증
+            <button
+              type="button"
+              className="signup-side-btn"
+              disabled={verifyingIdentity || !identityRequired}
+              onClick={() => void verifyIdentity()}
+            >
+              {verifyingIdentity ? "인증 중…" : verifiedPhone ? "재인증" : "본인인증"}
             </button>
           </div>
+          {verifiedPhone ? (
+            <p className="signup-hint signup-hint--ok">
+              인증된 휴대폰: {formatVerifiedPhone(verifiedPhone)}
+            </p>
+          ) : identityRequired ? (
+            <p className="signup-hint">회원가입 전 포트원 본인인증을 완료해 주세요.</p>
+          ) : null}
 
           {error ? <p className="signup-error">{error}</p> : null}
 
@@ -546,7 +643,13 @@ function SignupModal({
   );
 }
 
-export default function ClientSignupFlow({ open, onClose, onSuccess }: Props) {
+export default function ClientSignupFlow({
+  open,
+  onClose,
+  onSuccess,
+  initialIdentityVerificationId,
+  onIdentityVerificationHandled,
+}: Props) {
   const [termsOpen, setTermsOpen] = useState(false);
   const [signupOpen, setSignupOpen] = useState(false);
 
@@ -565,9 +668,14 @@ export default function ClientSignupFlow({ open, onClose, onSuccess }: Props) {
       setSignupOpen(false);
       return;
     }
+    if (initialIdentityVerificationId) {
+      setTermsOpen(false);
+      setSignupOpen(true);
+      return;
+    }
     setSignupOpen(false);
     setTermsOpen(true);
-  }, [open]);
+  }, [open, initialIdentityVerificationId]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -596,7 +704,13 @@ export default function ClientSignupFlow({ open, onClose, onSuccess }: Props) {
           setSignupOpen(true);
         }}
       />
-      <SignupModal open={signupOpen} onClose={closeAll} onSuccess={handleSuccess} />
+      <SignupModal
+        open={signupOpen}
+        onClose={closeAll}
+        onSuccess={handleSuccess}
+        initialIdentityVerificationId={initialIdentityVerificationId}
+        onIdentityVerificationHandled={onIdentityVerificationHandled}
+      />
     </>
   );
 }

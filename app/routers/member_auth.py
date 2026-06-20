@@ -28,6 +28,7 @@ from app.services.member_auth import (
     serialize_member,
     validate_email,
 )
+from app.services.portone_identity import parse_portone_identity_verification
 from app.services.web_push import (
     deactivate_member_push_subscription,
     send_admin_member_signup_web_push,
@@ -43,6 +44,15 @@ class MemberSignupRequest(BaseModel):
     password: str = Field(min_length=8, max_length=16)
     name: str
     phone: str | None = None
+    identity_verification_id: str | None = Field(default=None, alias="identityVerificationId")
+
+    model_config = {"populate_by_name": True}
+
+
+class PortOneIdentityLookupRequest(BaseModel):
+    identity_verification_id: str = Field(alias="identityVerificationId", min_length=1)
+
+    model_config = {"populate_by_name": True}
 
 
 class MemberLoginRequest(BaseModel):
@@ -270,6 +280,35 @@ def check_email_available(
     return {"available": not taken, "email": normalized}
 
 
+def _resolve_member_signup_phone(body: MemberSignupRequest) -> str | None:
+    if not settings.portone_identity_enabled:
+        return body.phone
+
+    verification_id = (body.identity_verification_id or "").strip()
+    if not verification_id:
+        raise HTTPException(status_code=400, detail="본인인증을 완료해 주세요.")
+
+    verification = _fetch_portone_json(f"/identity-verifications/{verification_id}")
+    parsed = parse_portone_identity_verification(verification)
+    phone = parsed.get("phone")
+    if not phone:
+        raise HTTPException(status_code=400, detail="본인인증 정보에서 휴대폰 번호를 확인하지 못했습니다.")
+    return phone
+
+
+@router.post("/identity-verifications/lookup")
+def lookup_member_identity_verification(body: PortOneIdentityLookupRequest) -> dict:
+    verification = _fetch_portone_json(f"/identity-verifications/{body.identity_verification_id}")
+    parsed = parse_portone_identity_verification(verification)
+    return {
+        "ok": True,
+        "identity_verification_id": body.identity_verification_id,
+        "verified_customer": parsed["verified_customer"],
+        "name": parsed["name"],
+        "phone": parsed["phone"],
+    }
+
+
 def _notify_admins_member_signup(db: Session, member: Member) -> None:
     publish_admin_event(
         "member_created",
@@ -294,12 +333,13 @@ def member_signup(body: MemberSignupRequest, db: Annotated[Session, Depends(get_
         raise HTTPException(status_code=503, detail="JWT is not configured")
 
     try:
+        signup_phone = _resolve_member_signup_phone(body)
         member = register_member(
             db,
             email=body.email,
             password=body.password,
             name=body.name,
-            phone=body.phone,
+            phone=signup_phone,
         )
     except MemberAuthError as exc:
         raise _auth_error_to_http(exc) from exc

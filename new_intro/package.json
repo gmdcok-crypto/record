@@ -9,6 +9,7 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
+    "@portone/browser-sdk": "^0.1.8",
     "@vitejs/plugin-react": "5.1.2",
     "vite": "7.3.5",
     "typescript": "5.9.3",

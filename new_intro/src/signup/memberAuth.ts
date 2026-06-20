@@ -87,11 +87,17 @@ export async function signupMember(payload: {
   name: string;
   email: string;
   password: string;
+  identityVerificationId?: string;
 }): Promise<{ ok: true; token: string } | { ok: false; message: string }> {
   const res = await memberFetch(`${getApiBase()}/api/member/auth/signup`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      name: payload.name,
+      email: payload.email,
+      password: payload.password,
+      identityVerificationId: payload.identityVerificationId,
+    }),
   });
   let data: Record<string, unknown>;
   try {
