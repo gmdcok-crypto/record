@@ -1363,7 +1363,7 @@ export default function App() {
           </div>
         </header>
 
-        <nav className="sticky top-0 z-20 -mx-4 mb-4 hidden border-b border-line bg-white/95 px-4 backdrop-blur lg:-mx-6 lg:block lg:px-6">
+        <nav className="sticky top-0 z-20 -mx-4 mb-4 border-b border-line bg-white/95 px-4 backdrop-blur lg:-mx-6 lg:px-6">
           <div className="grid grid-cols-3 gap-1 py-2">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
