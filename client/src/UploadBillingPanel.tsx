@@ -341,9 +341,6 @@ export default function UploadBillingPanel({
         ) : quote.tier || (quote.totalWithVat ?? 0) > 0 ? (
           <>
             <p className="mt-2 text-sm text-brand-navy">
-              계산 기준 시간: <span className="font-semibold text-brand-navy">{formatDurationHuman(quote.durationMs)}</span>
-            </p>
-            <p className="mt-1 text-sm text-brand-navy">
               적용 구간: <span className="font-semibold text-brand-navy">{quote.label || quote.tier?.label || "-"}</span>
             </p>
             {quote.overLimit && (quote.extraMinutes ?? 0) > 0 ? (
