@@ -37,7 +37,7 @@ import {
   hasRegisteredAdminPushSubscription,
 } from "./webPush";
 import { ADMIN_ROLES, adminRoleLabel, canAccessMenu, defaultMenuForRole } from "./permissions";
-import { formatKstDateTime, formatKstDateTimeCompact } from "./formatKstDateTime";
+import { formatKstDateTime, formatKstDateTimeCompact, getKstDateKey, todayKstDateKey } from "./formatKstDateTime";
 import { isMobileLikeAdmin } from "./mobileEnvironment";
 
 type AuthStatus = "loading" | "guest" | "authed";
@@ -216,6 +216,7 @@ type SalesItem = {
   amount: number;
   payMethod: string;
   paidAt: string;
+  paidAtKey: string | null;
   status: string;
 };
 
@@ -557,6 +558,8 @@ function App() {
   const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [editingAdminId, setEditingAdminId] = useState<number | null>(null);
   const [adminForm, setAdminForm] = useState<AdminForm>(EMPTY_ADMIN_FORM);
+  const [salesDateFrom, setSalesDateFrom] = useState(() => todayKstDateKey());
+  const [salesDateTo, setSalesDateTo] = useState(() => todayKstDateKey());
 
   useEffect(() => {
     void (async () => {
@@ -889,9 +892,34 @@ function App() {
       amount: item.amount,
       payMethod: item.pay_method || "-",
       paidAt: item.paid_at ? formatKstDateTime(item.paid_at) : "-",
+      paidAtKey: getKstDateKey(item.paid_at),
       status: item.status,
     }));
   }, [overview]);
+
+  const filteredSales = useMemo(() => {
+    return sales.filter((item) => {
+      if (!item.paidAtKey) return false;
+      return item.paidAtKey >= salesDateFrom && item.paidAtKey <= salesDateTo;
+    });
+  }, [sales, salesDateFrom, salesDateTo]);
+
+  const salesSummaryMetrics = useMemo(() => {
+    const dailyDateKey = salesDateFrom === salesDateTo ? salesDateFrom : salesDateTo;
+    const monthPrefix = dailyDateKey.slice(0, 7);
+    let dailyTotal = 0;
+    let monthlyTotal = 0;
+    for (const item of sales) {
+      if (!item.paidAtKey) continue;
+      if (item.paidAtKey === dailyDateKey) {
+        dailyTotal += item.amount;
+      }
+      if (item.paidAtKey.startsWith(monthPrefix)) {
+        monthlyTotal += item.amount;
+      }
+    }
+    return { dailyTotal, monthlyTotal };
+  }, [sales, salesDateFrom, salesDateTo]);
 
   const runAdminAction = async (successMessage: string, action: () => Promise<void>) => {
     try {
@@ -1975,23 +2003,15 @@ function App() {
   );
 
   const renderSales = () => (
-    <SectionCard
-      title="매출 관리"
-      subtitle="결제 완료된 매출 데이터만 모아 봅니다."
-    >
-      <div className="mb-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryChip label="결제건수" value={`${sales.length}건`} />
-        <SummaryChip label="월 매출" value={formatCurrency(dashboardStats.totalSales)} tone="cyan" />
-        <SummaryChip label="결제완료" value={`${sales.filter((item) => item.status === "paid").length}건`} tone="emerald" />
-        <SummaryChip
-          label="최근 결제"
-          value={sales[0]?.paidAt || "-"}
-          tone="slate"
-        />
+    <section className="rounded-2xl border border-slate-800 bg-slate-900/92 p-4 shadow-[0_10px_30px_rgba(2,6,23,0.28)]">
+      <div className="mb-4 grid gap-2 md:grid-cols-3">
+        <SummaryChip label="결제건수" value={`${filteredSales.length}건`} />
+        <SummaryChip label="일매출" value={formatCurrency(salesSummaryMetrics.dailyTotal)} tone="cyan" />
+        <SummaryChip label="월매출" value={formatCurrency(salesSummaryMetrics.monthlyTotal)} tone="slate" />
       </div>
       <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/70">
-        {sales.length === 0 ? (
-          <EmptyState message="매출 데이터가 없습니다." />
+        {filteredSales.length === 0 ? (
+          <EmptyState message="선택한 기간에 매출 데이터가 없습니다." />
         ) : (
           <table className="w-full min-w-[1180px] border-collapse text-[13px]">
             <thead>
@@ -2006,7 +2026,7 @@ function App() {
               </tr>
             </thead>
             <tbody>
-              {sales.map((item) => (
+              {filteredSales.map((item) => (
                 <tr key={item.paymentId} className="border-t border-slate-800 bg-slate-950/40 text-slate-300 hover:bg-slate-900/50">
                   <td className="px-3 py-2 font-medium text-white">{item.memberName}</td>
                   <td className="px-3 py-2">{item.orderName}</td>
@@ -2025,7 +2045,7 @@ function App() {
           </table>
         )}
       </div>
-    </SectionCard>
+    </section>
   );
 
   const renderReports = () => (
@@ -2220,6 +2240,43 @@ function App() {
                   </h2>
                 </div>
                 <div className="flex flex-col items-stretch gap-2 xl:items-end">
+                  {activeMenu === "sales" ? (
+                    <div className="flex flex-wrap items-end gap-2">
+                      <label className="flex flex-col gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        조회 시작
+                        <input
+                          type="date"
+                          value={salesDateFrom}
+                          max={salesDateTo}
+                          onChange={(event) => {
+                            const nextFrom = event.target.value;
+                            setSalesDateFrom(nextFrom);
+                            if (nextFrom > salesDateTo) {
+                              setSalesDateTo(nextFrom);
+                            }
+                          }}
+                          className="rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1.5 text-[12px] font-normal normal-case tracking-normal text-slate-200"
+                        />
+                      </label>
+                      <span className="pb-2 text-xs text-slate-500">~</span>
+                      <label className="flex flex-col gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        조회 종료
+                        <input
+                          type="date"
+                          value={salesDateTo}
+                          min={salesDateFrom}
+                          onChange={(event) => {
+                            const nextTo = event.target.value;
+                            setSalesDateTo(nextTo);
+                            if (nextTo < salesDateFrom) {
+                              setSalesDateFrom(nextTo);
+                            }
+                          }}
+                          className="rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1.5 text-[12px] font-normal normal-case tracking-normal text-slate-200"
+                        />
+                      </label>
+                    </div>
+                  ) : null}
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1 text-[11px] text-slate-300">
                       {adminProfile.role_label} · {adminProfile.name}

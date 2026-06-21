@@ -42,3 +42,16 @@ export function formatKstDateTimeCompact(value: string | null | undefined): stri
     return value;
   }
 }
+
+export function todayKstDateKey(reference = new Date()): string {
+  return reference.toLocaleDateString("en-CA", { timeZone: KST_TIMEZONE });
+}
+
+export function getKstDateKey(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    return parseServerDateTime(value).toLocaleDateString("en-CA", { timeZone: KST_TIMEZONE });
+  } catch {
+    return null;
+  }
+}
