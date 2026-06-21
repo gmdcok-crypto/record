@@ -106,11 +106,8 @@ def _frontend_version(directory: Path) -> str | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    bootstrap_task = asyncio.create_task(asyncio.to_thread(_bootstrap_database))
+    await asyncio.to_thread(_bootstrap_database)
     yield
-    bootstrap_task.cancel()
-    with suppress(asyncio.CancelledError):
-        await bootstrap_task
 
 
 app = FastAPI(

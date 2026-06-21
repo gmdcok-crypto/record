@@ -15,6 +15,24 @@ logger = logging.getLogger(__name__)
 engine = None
 SessionLocal: Optional[sessionmaker[Session]] = None
 _init_lock = Lock()
+_migrations_done = False
+
+
+def _run_startup_migrations_once() -> None:
+    global _migrations_done
+    if _migrations_done or engine is None:
+        return
+    with _init_lock:
+        if _migrations_done or engine is None:
+            return
+        from app.services.database_migrate import ensure_expense_tables_on_engine, run_startup_migrations
+
+        try:
+            run_startup_migrations(engine)
+            ensure_expense_tables_on_engine(engine)
+            _migrations_done = True
+        except Exception:
+            logger.exception("Startup migrations failed")
 
 
 class Base(DeclarativeBase):
@@ -55,6 +73,7 @@ def ensure_db_initialized() -> None:
             return
         init_db(settings.resolved_database_url)
         create_tables()
+        _run_startup_migrations_once()
 
 
 def get_engine():
