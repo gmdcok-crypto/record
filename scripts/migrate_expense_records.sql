@@ -1,5 +1,7 @@
 -- 지출 내역(expense_records) 테이블 사전 생성
 -- prerequisite: expense_categories 테이블이 있어야 category FK가 붙습니다.
+-- expense_categories가 SQLAlchemy create_all()로 INT id로 생성된 경우 FK 타입 불일치가 납니다.
+-- CREATE 후 ALTER로 id를 BIGINT로 맞춘 뒤 expense_records를 생성하세요.
 -- 수동 실행 예:
 --   python scripts/run_migration.py scripts/migrate_expense_records.sql
 
@@ -11,6 +13,9 @@ CREATE TABLE IF NOT EXISTS expense_categories (
   UNIQUE KEY uk_expense_categories_name (name),
   KEY idx_expense_categories_sort (sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE expense_categories
+  MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT;
 
 CREATE TABLE IF NOT EXISTS expense_records (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,

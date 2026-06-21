@@ -55,72 +55,11 @@ def _ensure_expense_categories_table(db: Session) -> None:
 
 
 def _ensure_expense_records_table(db: Session) -> None:
+    from app.services.database_migrate import _create_expense_records_table
+
     bind = db.get_bind()
     db.rollback()
-    records_exists = db.execute(
-        text(
-            """
-            SELECT 1
-            FROM information_schema.TABLES
-            WHERE TABLE_SCHEMA = DATABASE()
-              AND TABLE_NAME = 'expense_records'
-            LIMIT 1
-            """
-        )
-    ).first()
-    if records_exists:
-        return
-
-    ddl_with_admin_fk = """
-        CREATE TABLE expense_records (
-          id BIGINT AUTO_INCREMENT PRIMARY KEY,
-          category_id BIGINT NOT NULL,
-          amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
-          expense_date DATE NOT NULL,
-          note VARCHAR(255) NULL,
-          source_type VARCHAR(30) NULL,
-          source_id VARCHAR(120) NULL,
-          created_by_admin_id BIGINT NULL,
-          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          KEY idx_expense_records_date (expense_date),
-          KEY idx_expense_records_category_id (category_id),
-          KEY idx_expense_records_source (source_type, source_id),
-          CONSTRAINT fk_expense_records_category
-            FOREIGN KEY (category_id) REFERENCES expense_categories(id)
-            ON UPDATE CASCADE ON DELETE RESTRICT,
-          CONSTRAINT fk_expense_records_admin
-            FOREIGN KEY (created_by_admin_id) REFERENCES admin_users(id)
-            ON UPDATE CASCADE ON DELETE SET NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    """
-    ddl_without_admin_fk = """
-        CREATE TABLE expense_records (
-          id BIGINT AUTO_INCREMENT PRIMARY KEY,
-          category_id BIGINT NOT NULL,
-          amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
-          expense_date DATE NOT NULL,
-          note VARCHAR(255) NULL,
-          source_type VARCHAR(30) NULL,
-          source_id VARCHAR(120) NULL,
-          created_by_admin_id BIGINT NULL,
-          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          KEY idx_expense_records_date (expense_date),
-          KEY idx_expense_records_category_id (category_id),
-          KEY idx_expense_records_source (source_type, source_id),
-          CONSTRAINT fk_expense_records_category
-            FOREIGN KEY (category_id) REFERENCES expense_categories(id)
-            ON UPDATE CASCADE ON DELETE RESTRICT
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    """
-    try:
-        with bind.begin() as conn:
-            conn.execute(text(ddl_with_admin_fk))
-    except Exception:
-        logger.warning("Creating expense_records without admin_users FK fallback")
-        with bind.begin() as conn:
-            conn.execute(text(ddl_without_admin_fk))
+    _create_expense_records_table(bind)
 
 
 def _ensure_expense_storage(db: Session) -> None:

@@ -56,6 +56,34 @@ def _table_exists(conn, table_name: str) -> bool:
     )
 
 
+def _get_column_type(conn, table_name: str, column_name: str) -> str | None:
+    return conn.execute(
+        text(
+            """
+            SELECT COLUMN_TYPE
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :table_name
+              AND COLUMN_NAME = :column_name
+            LIMIT 1
+            """
+        ),
+        {"table_name": table_name, "column_name": column_name},
+    ).scalar()
+
+
+def _integer_sql_type(column_type: str | None, *, default: str = "BIGINT") -> str:
+    normalized = str(column_type or "").lower().replace(" ", "")
+    if not normalized:
+        return default
+    unsigned = "unsigned" in normalized
+    if "bigint" in normalized:
+        return "BIGINT UNSIGNED" if unsigned else "BIGINT"
+    if "int" in normalized:
+        return "INT UNSIGNED" if unsigned else "INT"
+    return default
+
+
 _EXPENSE_CATEGORIES_DDL = """
 CREATE TABLE expense_categories (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -67,40 +95,26 @@ CREATE TABLE expense_categories (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 """
 
-_EXPENSE_RECORDS_DDL_WITH_ADMIN_FK = """
-CREATE TABLE expense_records (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  category_id BIGINT NOT NULL,
-  amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
-  expense_date DATE NOT NULL,
-  note VARCHAR(255) NULL,
-  source_type VARCHAR(30) NULL,
-  source_id VARCHAR(120) NULL,
-  created_by_admin_id BIGINT NULL,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  KEY idx_expense_records_date (expense_date),
-  KEY idx_expense_records_category_id (category_id),
-  KEY idx_expense_records_source (source_type, source_id),
-  CONSTRAINT fk_expense_records_category
-    FOREIGN KEY (category_id) REFERENCES expense_categories(id)
-    ON UPDATE CASCADE ON DELETE RESTRICT,
+
+def _build_expense_records_ddl(conn, *, with_admin_fk: bool) -> str:
+    category_id_type = _integer_sql_type(_get_column_type(conn, "expense_categories", "id"))
+    admin_id_type = _integer_sql_type(_get_column_type(conn, "admin_users", "id"))
+    admin_fk_sql = ""
+    if with_admin_fk and _table_exists(conn, "admin_users"):
+        admin_fk_sql = f"""
   CONSTRAINT fk_expense_records_admin
     FOREIGN KEY (created_by_admin_id) REFERENCES admin_users(id)
-    ON UPDATE CASCADE ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-"""
-
-_EXPENSE_RECORDS_DDL_WITHOUT_ADMIN_FK = """
+    ON UPDATE CASCADE ON DELETE SET NULL"""
+    return f"""
 CREATE TABLE expense_records (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  category_id BIGINT NOT NULL,
+  category_id {category_id_type} NOT NULL,
   amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
   expense_date DATE NOT NULL,
   note VARCHAR(255) NULL,
   source_type VARCHAR(30) NULL,
   source_id VARCHAR(120) NULL,
-  created_by_admin_id BIGINT NULL,
+  created_by_admin_id {admin_id_type} NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_expense_records_date (expense_date),
@@ -108,7 +122,7 @@ CREATE TABLE expense_records (
   KEY idx_expense_records_source (source_type, source_id),
   CONSTRAINT fk_expense_records_category
     FOREIGN KEY (category_id) REFERENCES expense_categories(id)
-    ON UPDATE CASCADE ON DELETE RESTRICT
+    ON UPDATE CASCADE ON DELETE RESTRICT{admin_fk_sql}
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 """
 
@@ -118,13 +132,13 @@ def _create_expense_records_table(engine: Engine) -> None:
         with engine.begin() as conn:
             if _table_exists(conn, "expense_records"):
                 return
-            conn.execute(text(_EXPENSE_RECORDS_DDL_WITH_ADMIN_FK))
+            conn.execute(text(_build_expense_records_ddl(conn, with_admin_fk=True)))
     except Exception as exc:
         logger.warning("Creating expense_records without admin_users FK fallback: %s", exc)
         with engine.begin() as conn:
             if _table_exists(conn, "expense_records"):
                 return
-            conn.execute(text(_EXPENSE_RECORDS_DDL_WITHOUT_ADMIN_FK))
+            conn.execute(text(_build_expense_records_ddl(conn, with_admin_fk=False)))
 
 
 def ensure_expense_tables_on_engine(engine: Engine) -> None:
