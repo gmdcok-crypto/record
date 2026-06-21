@@ -2,7 +2,6 @@ CREATE TABLE IF NOT EXISTS expense_categories (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   sort_order INT NOT NULL DEFAULT 0,
-  is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uk_expense_categories_name (name),
   KEY idx_expense_categories_sort (sort_order)
@@ -30,10 +29,10 @@ CREATE TABLE IF NOT EXISTS expense_records (
     ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT IGNORE INTO expense_categories (name, sort_order, is_active) VALUES
-  ('속기사비용', 1, 1),
-  ('광고비', 2, 1),
-  ('사이트운영비', 3, 1),
-  ('API비용', 4, 1),
-  ('결제수수료', 5, 1),
-  ('부가세예수금', 6, 1);
+INSERT IGNORE INTO expense_categories (name, sort_order) VALUES
+  ('속기사비용', 1),
+  ('광고비', 2),
+  ('사이트운영비', 3),
+  ('API비용', 4),
+  ('결제수수료', 5),
+  ('부가세예수금', 6);

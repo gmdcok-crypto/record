@@ -388,7 +388,6 @@ export type ExpenseCategory = {
   id: number;
   name: string;
   sort_order: number;
-  is_active: boolean;
   created_at: string | null;
 };
 
@@ -485,7 +484,7 @@ export async function createExpenseCategory(payload: {
 
 export async function updateExpenseCategory(
   categoryId: number,
-  payload: { name?: string; sort_order?: number; is_active?: boolean },
+  payload: { name?: string; sort_order?: number },
 ): Promise<ExpenseCategory> {
   const res = await adminFetch(`${apiBase()}/api/admin/expenses/categories/${categoryId}`, {
     method: "PATCH",

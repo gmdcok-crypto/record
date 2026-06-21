@@ -36,7 +36,6 @@ class ExpenseCategoryCreateRequest(BaseModel):
 class ExpenseCategoryUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     sort_order: int | None = None
-    is_active: bool | None = None
 
 
 class ExpenseRecordCreateRequest(BaseModel):
@@ -116,7 +115,7 @@ def post_expense_category(
         row = create_expense_category(db, name=body.name, sort_order=body.sort_order)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"category": {"id": row.id, "name": row.name, "sort_order": row.sort_order, "is_active": bool(row.is_active)}}
+    return {"category": {"id": row.id, "name": row.name, "sort_order": row.sort_order}}
 
 
 @router.patch("/categories/{category_id}")
@@ -139,7 +138,6 @@ def patch_expense_category(
             "id": row.id,
             "name": row.name,
             "sort_order": row.sort_order,
-            "is_active": bool(row.is_active),
         }
     }
 

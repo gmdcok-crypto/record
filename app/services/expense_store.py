@@ -45,7 +45,6 @@ def _ensure_expense_categories_table(db: Session) -> None:
                   id BIGINT AUTO_INCREMENT PRIMARY KEY,
                   name VARCHAR(100) NOT NULL,
                   sort_order INT NOT NULL DEFAULT 0,
-                  is_active TINYINT(1) NOT NULL DEFAULT 1,
                   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                   UNIQUE KEY uk_expense_categories_name (name),
                   KEY idx_expense_categories_sort (sort_order)
@@ -138,8 +137,8 @@ def seed_default_expense_categories(db: Session) -> None:
             conn.execute(
                 text(
                     """
-                    INSERT IGNORE INTO expense_categories (name, sort_order, is_active)
-                    VALUES (:name, :sort_order, 1)
+                    INSERT IGNORE INTO expense_categories (name, sort_order)
+                    VALUES (:name, :sort_order)
                     """
                 ),
                 {"name": name, "sort_order": sort_order},
@@ -159,7 +158,6 @@ def _serialize_category(row: ExpenseCategory) -> dict:
         "id": row.id,
         "name": row.name,
         "sort_order": row.sort_order,
-        "is_active": bool(row.is_active),
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 
@@ -208,7 +206,7 @@ def list_expense_categories(db: Session) -> list[dict]:
         result = db.execute(
             text(
                 """
-                SELECT id, name, sort_order, is_active, created_at
+                SELECT id, name, sort_order, created_at
                 FROM expense_categories
                 ORDER BY sort_order ASC, id ASC
                 """
@@ -222,7 +220,6 @@ def list_expense_categories(db: Session) -> list[dict]:
                     "id": int(row["id"]),
                     "name": row["name"],
                     "sort_order": int(row["sort_order"] or 0),
-                    "is_active": bool(row["is_active"]),
                     "created_at": created_at.isoformat() if created_at else None,
                 }
             )
@@ -240,7 +237,7 @@ def create_expense_category(db: Session, *, name: str, sort_order: int | None = 
     if sort_order is None:
         max_order = db.scalar(select(ExpenseCategory.sort_order).order_by(ExpenseCategory.sort_order.desc()).limit(1))
         sort_order = int(max_order or 0) + 1
-    row = ExpenseCategory(name=safe_name, sort_order=sort_order, is_active=1)
+    row = ExpenseCategory(name=safe_name, sort_order=sort_order)
     db.add(row)
     try:
         db.commit()
@@ -257,7 +254,6 @@ def update_expense_category(
     *,
     name: str | None = None,
     sort_order: int | None = None,
-    is_active: bool | None = None,
 ) -> ExpenseCategory:
     if name is not None:
         safe_name = name.strip()[:100]
@@ -266,8 +262,6 @@ def update_expense_category(
         category.name = safe_name
     if sort_order is not None:
         category.sort_order = sort_order
-    if is_active is not None:
-        category.is_active = 1 if is_active else 0
     try:
         db.commit()
     except IntegrityError as exc:
@@ -283,9 +277,7 @@ def delete_expense_category(db: Session, category: ExpenseCategory) -> None:
         select(ExpenseRecord.id).where(ExpenseRecord.category_id == category.id).limit(1)
     )
     if linked is not None:
-        category.is_active = 0
-        db.commit()
-        raise ValueError("사용 중인 지출항목은 삭제할 수 없어 비활성 처리했습니다.")
+        raise ValueError("사용 중인 지출항목은 삭제할 수 없습니다.")
     db.delete(category)
     db.commit()
 
@@ -337,7 +329,7 @@ def create_expense_record(
 ) -> ExpenseRecord:
     _ensure_expense_records_table(db)
     category = get_expense_category(db, category_id)
-    if category is None or not category.is_active:
+    if category is None:
         raise ValueError("지출항목을 찾을 수 없습니다.")
     if amount <= 0:
         raise ValueError("지출 금액은 0보다 커야 합니다.")
@@ -375,7 +367,7 @@ def update_expense_record(
 ) -> ExpenseRecord:
     if category_id is not None:
         category = get_expense_category(db, category_id)
-        if category is None or not category.is_active:
+        if category is None:
             raise ValueError("지출항목을 찾을 수 없습니다.")
         record.category_id = category.id
         record.category = category

@@ -28,6 +28,7 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_settlement_payments.sql",
     SCRIPTS_DIR / "migrate_payment_records.sql",
     SCRIPTS_DIR / "migrate_expenses.sql",
+    SCRIPTS_DIR / "migrate_expense_categories_drop_is_active.sql",
     SCRIPTS_DIR / "migrate_member_push_subscriptions.sql",
     SCRIPTS_DIR / "migrate_admin_push_subscriptions.sql",
     SCRIPTS_DIR / "migrate_admin_auth.sql",
@@ -306,7 +307,6 @@ def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) ->
                           id BIGINT AUTO_INCREMENT PRIMARY KEY,
                           name VARCHAR(100) NOT NULL,
                           sort_order INT NOT NULL DEFAULT 0,
-                          is_active TINYINT(1) NOT NULL DEFAULT 1,
                           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                           UNIQUE KEY uk_expense_categories_name (name),
                           KEY idx_expense_categories_sort (sort_order)
@@ -364,12 +364,31 @@ def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) ->
                 conn.execute(
                     text(
                         """
-                        INSERT IGNORE INTO expense_categories (name, sort_order, is_active)
-                        VALUES (:name, :sort_order, 1)
+                        INSERT IGNORE INTO expense_categories (name, sort_order)
+                        VALUES (:name, :sort_order)
                         """
                     ),
                     {"name": name, "sort_order": sort_order},
                 )
+        logger.info("Railway-safe migration applied: %s", sql_path.name)
+        return True
+
+    if sql_path.name == "migrate_expense_categories_drop_is_active.sql":
+        with engine.begin() as conn:
+            column_exists = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'expense_categories'
+                      AND COLUMN_NAME = 'is_active'
+                    LIMIT 1
+                    """
+                )
+            ).first()
+            if column_exists:
+                conn.execute(text("ALTER TABLE expense_categories DROP COLUMN is_active"))
         logger.info("Railway-safe migration applied: %s", sql_path.name)
         return True
 

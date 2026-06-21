@@ -65,11 +65,6 @@ export default function ExpenseManagement() {
   const [editRecordDate, setEditRecordDate] = useState("");
   const [editRecordNote, setEditRecordNote] = useState("");
 
-  const activeCategories = useMemo(
-    () => categories.filter((item) => item.is_active),
-    [categories],
-  );
-
   const periodTotal = useMemo(
     () => records.reduce((sum, item) => sum + item.amount, 0),
     [records],
@@ -115,9 +110,9 @@ export default function ExpenseManagement() {
 
   useEffect(() => {
     if (formCategoryId !== "") return;
-    const first = activeCategories[0];
+    const first = categories[0];
     if (first) setFormCategoryId(first.id);
-  }, [activeCategories, formCategoryId]);
+  }, [categories, formCategoryId]);
 
   const handleAddCategory = async () => {
     const name = newCategoryName.trim();
@@ -147,15 +142,6 @@ export default function ExpenseManagement() {
       await loadCategories();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "지출항목 수정 실패");
-    }
-  };
-
-  const handleToggleCategory = async (category: ExpenseCategory) => {
-    try {
-      await updateExpenseCategory(category.id, { is_active: !category.is_active });
-      await loadCategories();
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : "지출항목 상태 변경 실패");
     }
   };
 
@@ -243,10 +229,7 @@ export default function ExpenseManagement() {
     <div className="space-y-4">
       <section className="rounded-2xl border border-slate-800 bg-slate-900/92 p-4 shadow-[0_10px_30px_rgba(2,6,23,0.28)]">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-white">지출항목 관리</h3>
-            <p className="mt-1 text-xs text-slate-400">기본 6개 항목 외에도 항목을 추가·수정할 수 있습니다.</p>
-          </div>
+          <h3 className="text-base font-semibold text-white">지출항목 관리</h3>
           <div className="flex flex-wrap items-center gap-2">
             <input
               type="text"
@@ -270,19 +253,18 @@ export default function ExpenseManagement() {
           </p>
         ) : null}
         <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/70">
-          <table className="w-full min-w-[640px] border-collapse text-[13px]">
+          <table className="w-full min-w-[480px] border-collapse text-[13px]">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-950 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                 <th className="px-3 py-2">항목명</th>
                 <th className="px-3 py-2">순서</th>
-                <th className="px-3 py-2">상태</th>
                 <th className="px-3 py-2">작업</th>
               </tr>
             </thead>
             <tbody>
               {categories.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-3 py-6 text-center text-slate-500">
+                  <td colSpan={3} className="px-3 py-6 text-center text-slate-500">
                     {loading ? "불러오는 중..." : "등록된 지출항목이 없습니다."}
                   </td>
                 </tr>
@@ -298,23 +280,10 @@ export default function ExpenseManagement() {
                           className="w-full rounded-md border border-slate-700 bg-slate-950/70 px-2 py-1 text-sm text-white"
                         />
                       ) : (
-                        <span className={category.is_active ? "text-white" : "text-slate-500 line-through"}>
-                          {category.name}
-                        </span>
+                        <span className="text-white">{category.name}</span>
                       )}
                     </td>
                     <td className="px-3 py-2">{category.sort_order}</td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ${
-                          category.is_active
-                            ? "bg-emerald-500/15 text-emerald-300"
-                            : "bg-slate-700/50 text-slate-400"
-                        }`}
-                      >
-                        {category.is_active ? "사용" : "비활성"}
-                      </span>
-                    </td>
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap gap-2">
                         {editingCategoryId === category.id ? (
@@ -348,13 +317,6 @@ export default function ExpenseManagement() {
                               className="rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-300"
                             >
                               수정
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void handleToggleCategory(category)}
-                              className="rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-300"
-                            >
-                              {category.is_active ? "비활성" : "활성"}
                             </button>
                             <button
                               type="button"
@@ -434,10 +396,10 @@ export default function ExpenseManagement() {
                 onChange={(event) => setFormCategoryId(Number(event.target.value))}
                 className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-2 text-sm text-slate-200"
               >
-                {activeCategories.length === 0 ? (
+                {categories.length === 0 ? (
                   <option value="">항목 없음</option>
                 ) : (
-                  activeCategories.map((category) => (
+                  categories.map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.name}
                     </option>
@@ -479,7 +441,7 @@ export default function ExpenseManagement() {
               <button
                 type="button"
                 onClick={() => void handleSubmitRecord()}
-                disabled={activeCategories.length === 0}
+                disabled={categories.length === 0}
                 className="w-full rounded-md border border-cyan-500/40 bg-cyan-500/15 px-3 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 지출 등록
@@ -527,7 +489,7 @@ export default function ExpenseManagement() {
                           onChange={(event) => setEditRecordCategoryId(Number(event.target.value))}
                           className="rounded-md border border-slate-700 bg-slate-950/70 px-2 py-1 text-sm"
                         >
-                          {activeCategories.map((category) => (
+                          {categories.map((category) => (
                             <option key={category.id} value={category.id}>
                               {category.name}
                             </option>
