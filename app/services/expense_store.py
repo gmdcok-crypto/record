@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime
 
 from sqlalchemy import select, text
@@ -7,6 +8,8 @@ from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.admin_models import AdminUser, ExpenseCategory, ExpenseRecord
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_EXPENSE_CATEGORIES: tuple[tuple[str, int], ...] = (
     ("속기사비용", 1),
@@ -18,7 +21,7 @@ DEFAULT_EXPENSE_CATEGORIES: tuple[tuple[str, int], ...] = (
 )
 
 
-def _ensure_expense_storage(db: Session) -> None:
+def _ensure_expense_categories_table(db: Session) -> None:
     bind = db.get_bind()
     db.rollback()
     with bind.begin() as conn:
@@ -33,22 +36,29 @@ def _ensure_expense_storage(db: Session) -> None:
                 """
             )
         ).first()
-        if not categories_exists:
-            conn.execute(
-                text(
-                    """
-                    CREATE TABLE expense_categories (
-                      id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                      name VARCHAR(100) NOT NULL,
-                      sort_order INT NOT NULL DEFAULT 0,
-                      is_active TINYINT(1) NOT NULL DEFAULT 1,
-                      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                      UNIQUE KEY uk_expense_categories_name (name),
-                      KEY idx_expense_categories_sort (sort_order)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                    """
-                )
+        if categories_exists:
+            return
+        conn.execute(
+            text(
+                """
+                CREATE TABLE expense_categories (
+                  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                  name VARCHAR(100) NOT NULL,
+                  sort_order INT NOT NULL DEFAULT 0,
+                  is_active TINYINT(1) NOT NULL DEFAULT 1,
+                  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  UNIQUE KEY uk_expense_categories_name (name),
+                  KEY idx_expense_categories_sort (sort_order)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """
             )
+        )
+
+
+def _ensure_expense_records_table(db: Session) -> None:
+    bind = db.get_bind()
+    db.rollback()
+    with bind.begin() as conn:
         records_exists = conn.execute(
             text(
                 """
@@ -60,43 +70,65 @@ def _ensure_expense_storage(db: Session) -> None:
                 """
             )
         ).first()
-        if not records_exists:
-            conn.execute(
-                text(
-                    """
-                    CREATE TABLE expense_records (
-                      id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                      category_id BIGINT NOT NULL,
-                      amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
-                      expense_date DATE NOT NULL,
-                      note VARCHAR(255) NULL,
-                      source_type VARCHAR(30) NULL,
-                      source_id VARCHAR(120) NULL,
-                      created_by_admin_id BIGINT NULL,
-                      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                      KEY idx_expense_records_date (expense_date),
-                      KEY idx_expense_records_category_id (category_id),
-                      KEY idx_expense_records_source (source_type, source_id),
-                      CONSTRAINT fk_expense_records_category
-                        FOREIGN KEY (category_id) REFERENCES expense_categories(id)
-                        ON UPDATE CASCADE ON DELETE RESTRICT,
-                      CONSTRAINT fk_expense_records_admin
-                        FOREIGN KEY (created_by_admin_id) REFERENCES admin_users(id)
-                        ON UPDATE CASCADE ON DELETE SET NULL
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                    """
-                )
+        if records_exists:
+            return
+        conn.execute(
+            text(
+                """
+                CREATE TABLE expense_records (
+                  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                  category_id BIGINT NOT NULL,
+                  amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+                  expense_date DATE NOT NULL,
+                  note VARCHAR(255) NULL,
+                  source_type VARCHAR(30) NULL,
+                  source_id VARCHAR(120) NULL,
+                  created_by_admin_id BIGINT NULL,
+                  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                  KEY idx_expense_records_date (expense_date),
+                  KEY idx_expense_records_category_id (category_id),
+                  KEY idx_expense_records_source (source_type, source_id),
+                  CONSTRAINT fk_expense_records_category
+                    FOREIGN KEY (category_id) REFERENCES expense_categories(id)
+                    ON UPDATE CASCADE ON DELETE RESTRICT,
+                  CONSTRAINT fk_expense_records_admin
+                    FOREIGN KEY (created_by_admin_id) REFERENCES admin_users(id)
+                    ON UPDATE CASCADE ON DELETE SET NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """
             )
+        )
+
+
+def _ensure_expense_storage(db: Session) -> None:
+    _ensure_expense_categories_table(db)
+    _ensure_expense_records_table(db)
 
 
 def seed_default_expense_categories(db: Session) -> None:
-    _ensure_expense_storage(db)
-    for name, sort_order in DEFAULT_EXPENSE_CATEGORIES:
-        existing = db.scalar(select(ExpenseCategory).where(ExpenseCategory.name == name))
-        if existing is None:
-            db.add(ExpenseCategory(name=name, sort_order=sort_order, is_active=1))
-    db.commit()
+    _ensure_expense_categories_table(db)
+    bind = db.get_bind()
+    db.rollback()
+    with bind.begin() as conn:
+        for name, sort_order in DEFAULT_EXPENSE_CATEGORIES:
+            conn.execute(
+                text(
+                    """
+                    INSERT IGNORE INTO expense_categories (name, sort_order, is_active)
+                    VALUES (:name, :sort_order, 1)
+                    """
+                ),
+                {"name": name, "sort_order": sort_order},
+            )
+    db.expire_all()
+
+
+def ensure_default_expense_data(db: Session) -> None:
+    try:
+        seed_default_expense_categories(db)
+    except Exception:
+        logger.exception("Failed to seed default expense categories")
 
 
 def _serialize_category(row: ExpenseCategory) -> dict:
@@ -128,7 +160,6 @@ def _serialize_record(row: ExpenseRecord) -> dict:
 def list_expense_categories(db: Session) -> list[dict]:
     for attempt in range(2):
         try:
-            _ensure_expense_storage(db)
             seed_default_expense_categories(db)
             rows = db.scalars(
                 select(ExpenseCategory).order_by(ExpenseCategory.sort_order.asc(), ExpenseCategory.id.asc())
@@ -138,12 +169,12 @@ def list_expense_categories(db: Session) -> list[dict]:
             db.rollback()
             if attempt == 1 or "expense_" not in str(exc).lower():
                 raise
-            _ensure_expense_storage(db)
+            _ensure_expense_categories_table(db)
     return []
 
 
 def create_expense_category(db: Session, *, name: str, sort_order: int | None = None) -> ExpenseCategory:
-    _ensure_expense_storage(db)
+    _ensure_expense_categories_table(db)
     safe_name = name.strip()[:100]
     if not safe_name:
         raise ValueError("지출항목 이름을 입력해 주세요.")
@@ -188,6 +219,7 @@ def update_expense_category(
 
 
 def delete_expense_category(db: Session, category: ExpenseCategory) -> None:
+    _ensure_expense_records_table(db)
     linked = db.scalar(
         select(ExpenseRecord.id).where(ExpenseRecord.category_id == category.id).limit(1)
     )
@@ -200,7 +232,7 @@ def delete_expense_category(db: Session, category: ExpenseCategory) -> None:
 
 
 def get_expense_category(db: Session, category_id: int) -> ExpenseCategory | None:
-    _ensure_expense_storage(db)
+    _ensure_expense_categories_table(db)
     return db.scalar(select(ExpenseCategory).where(ExpenseCategory.id == category_id))
 
 
@@ -213,7 +245,7 @@ def list_expense_records(
 ) -> list[dict]:
     for attempt in range(2):
         try:
-            _ensure_expense_storage(db)
+            _ensure_expense_records_table(db)
             query = select(ExpenseRecord).options(joinedload(ExpenseRecord.category))
             if date_from is not None:
                 query = query.where(ExpenseRecord.expense_date >= date_from)
@@ -227,7 +259,7 @@ def list_expense_records(
             db.rollback()
             if attempt == 1 or "expense_" not in str(exc).lower():
                 raise
-            _ensure_expense_storage(db)
+            _ensure_expense_records_table(db)
     return []
 
 
@@ -240,7 +272,7 @@ def create_expense_record(
     note: str | None,
     admin: AdminUser | None,
 ) -> ExpenseRecord:
-    _ensure_expense_storage(db)
+    _ensure_expense_records_table(db)
     category = get_expense_category(db, category_id)
     if category is None or not category.is_active:
         raise ValueError("지출항목을 찾을 수 없습니다.")
@@ -261,7 +293,7 @@ def create_expense_record(
 
 
 def get_expense_record(db: Session, record_id: int) -> ExpenseRecord | None:
-    _ensure_expense_storage(db)
+    _ensure_expense_records_table(db)
     return db.scalar(
         select(ExpenseRecord)
         .options(joinedload(ExpenseRecord.category))

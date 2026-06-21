@@ -353,6 +353,23 @@ def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) ->
                         """
                     )
                 )
+            for name, sort_order in (
+                ("속기사비용", 1),
+                ("광고비", 2),
+                ("사이트운영비", 3),
+                ("API비용", 4),
+                ("결제수수료", 5),
+                ("부가세예수금", 6),
+            ):
+                conn.execute(
+                    text(
+                        """
+                        INSERT IGNORE INTO expense_categories (name, sort_order, is_active)
+                        VALUES (:name, :sort_order, 1)
+                        """
+                    ),
+                    {"name": name, "sort_order": sort_order},
+                )
         logger.info("Railway-safe migration applied: %s", sql_path.name)
         return True
 

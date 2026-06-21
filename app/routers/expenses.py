@@ -1,8 +1,10 @@
 from datetime import date
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -21,6 +23,7 @@ from app.services.expense_store import (
     update_expense_record,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin/expenses", tags=["admin-expenses"])
 
 ExpensesAdminAuth = Annotated[AdminUser, Depends(require_admin_permission("menu:expenses"))]
@@ -58,9 +61,21 @@ def get_expenses_overview(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
 ) -> dict:
+    try:
+        categories = list_expense_categories(db)
+    except SQLAlchemyError as exc:
+        logger.exception("Failed to load expense categories")
+        raise HTTPException(status_code=500, detail="지출항목을 불러올 수 없습니다.") from exc
+
+    try:
+        records = list_expense_records(db, date_from=date_from, date_to=date_to)
+    except SQLAlchemyError as exc:
+        logger.exception("Failed to load expense records")
+        raise HTTPException(status_code=500, detail="지출 내역을 불러올 수 없습니다.") from exc
+
     return {
-        "categories": list_expense_categories(db),
-        "records": list_expense_records(db, date_from=date_from, date_to=date_to),
+        "categories": categories,
+        "records": records,
     }
 
 
