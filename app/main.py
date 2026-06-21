@@ -1,7 +1,7 @@
 import asyncio
 import hashlib
 import logging
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
