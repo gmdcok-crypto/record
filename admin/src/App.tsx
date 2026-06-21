@@ -734,6 +734,13 @@ function App() {
   }, [authStatus, activeMenu]);
 
   useEffect(() => {
+    if (activeMenu !== "sales") return;
+    const today = todayKstDateKey();
+    setSalesDateFrom(today);
+    setSalesDateTo(today);
+  }, [activeMenu]);
+
+  useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
     const handler = (
       event: MessageEvent<{ type?: string; payload?: { jobId?: string | null; kind?: string } }>,
