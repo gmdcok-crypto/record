@@ -127,43 +127,76 @@ CREATE TABLE expense_records (
 """
 
 
+def _build_expense_records_ddl_no_fk(conn) -> str:
+    category_id_type = _integer_sql_type(_get_column_type(conn, "expense_categories", "id"))
+    admin_id_type = _integer_sql_type(_get_column_type(conn, "admin_users", "id"))
+    return f"""
+CREATE TABLE expense_records (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  category_id {category_id_type} NOT NULL,
+  amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+  expense_date DATE NOT NULL,
+  note VARCHAR(255) NULL,
+  source_type VARCHAR(30) NULL,
+  source_id VARCHAR(120) NULL,
+  created_by_admin_id {admin_id_type} NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_expense_records_date (expense_date),
+  KEY idx_expense_records_category_id (category_id),
+  KEY idx_expense_records_source (source_type, source_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+
 def _create_expense_records_table(engine: Engine) -> None:
-    try:
-        with engine.begin() as conn:
-            if _table_exists(conn, "expense_records"):
-                return
-            conn.execute(text(_build_expense_records_ddl(conn, with_admin_fk=True)))
-    except Exception as exc:
-        logger.warning("Creating expense_records without admin_users FK fallback: %s", exc)
-        with engine.begin() as conn:
-            if _table_exists(conn, "expense_records"):
-                return
-            conn.execute(text(_build_expense_records_ddl(conn, with_admin_fk=False)))
+    attempts: list[tuple[str, bool | None]] = [
+        ("with admin FK", True),
+        ("without admin FK", False),
+        ("without FK constraints", None),
+    ]
+    for label, with_admin_fk in attempts:
+        try:
+            with engine.begin() as conn:
+                if _table_exists(conn, "expense_records"):
+                    return
+                if with_admin_fk is None:
+                    ddl = _build_expense_records_ddl_no_fk(conn)
+                else:
+                    ddl = _build_expense_records_ddl(conn, with_admin_fk=with_admin_fk)
+                conn.execute(text(ddl))
+            return
+        except Exception as exc:
+            logger.warning("Creating expense_records %s failed: %s", label, exc)
+    logger.error("Could not create expense_records table after all fallbacks")
 
 
 def ensure_expense_tables_on_engine(engine: Engine) -> None:
-    with engine.begin() as conn:
-        if not _table_exists(conn, "expense_categories"):
-            conn.execute(text(_EXPENSE_CATEGORIES_DDL))
-        for name, sort_order in (
-            ("속기사비용", 1),
-            ("광고비", 2),
-            ("사이트운영비", 3),
-            ("API비용", 4),
-            ("결제수수료", 5),
-            ("부가세예수금", 6),
-        ):
-            conn.execute(
-                text(
-                    """
-                    INSERT IGNORE INTO expense_categories (name, sort_order)
-                    VALUES (:name, :sort_order)
-                    """
-                ),
-                {"name": name, "sort_order": sort_order},
-            )
-    _create_expense_records_table(engine)
-    logger.info("Ensured expense_categories and expense_records tables")
+    try:
+        with engine.begin() as conn:
+            if not _table_exists(conn, "expense_categories"):
+                conn.execute(text(_EXPENSE_CATEGORIES_DDL))
+            for name, sort_order in (
+                ("속기사비용", 1),
+                ("광고비", 2),
+                ("사이트운영비", 3),
+                ("API비용", 4),
+                ("결제수수료", 5),
+                ("부가세예수금", 6),
+            ):
+                conn.execute(
+                    text(
+                        """
+                        INSERT IGNORE INTO expense_categories (name, sort_order)
+                        VALUES (:name, :sort_order)
+                        """
+                    ),
+                    {"name": name, "sort_order": sort_order},
+                )
+        _create_expense_records_table(engine)
+        logger.info("Ensured expense_categories and expense_records tables")
+    except Exception:
+        logger.exception("Failed to ensure expense tables")
 
 
 def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) -> bool:

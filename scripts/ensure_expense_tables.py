@@ -15,12 +15,17 @@ from app.services.database_migrate import ensure_expense_tables_on_engine
 
 
 def main() -> None:
-    ensure_db_initialized()
-    engine = get_engine()
-    if engine is None:
-        raise SystemExit("Database engine is not available. Check DATABASE_URL on the API service.")
-    ensure_expense_tables_on_engine(engine)
-    print("expense tables ensured")
+    try:
+        ensure_db_initialized()
+        engine = get_engine()
+        if engine is None:
+            print("Database engine is not available. Check DATABASE_URL on the API service.", file=sys.stderr)
+            return
+        ensure_expense_tables_on_engine(engine)
+        print("expense tables ensured")
+    except Exception as exc:
+        print(f"expense tables ensure failed: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":

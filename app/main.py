@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import hashlib
 import logging
 from contextlib import asynccontextmanager
@@ -12,7 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
 from app.db import SessionLocal, ensure_db_initialized, get_engine
-from app.services.database_migrate import ensure_expense_tables_on_engine, ensure_jobs_status_column, run_startup_migrations
+from app.services.database_migrate import ensure_jobs_status_column
 from app.services.database_reset import purge_all_data
 from app.routers import admin_auth, admin_users, expenses, jobs, member_auth, projects, transcribe, transcriber_auth, upload
 
@@ -69,9 +70,6 @@ def _bootstrap_database() -> None:
         ensure_jobs_status_column(db_engine)
         if settings.purge_db_on_startup.lower() in {"1", "true", "yes"}:
             purge_all_data(db_engine)
-        run_startup_migrations(db_engine)
-        ensure_expense_tables_on_engine(db_engine)
-        ensure_jobs_status_column(db_engine)
     except Exception:
         logger.exception("Database startup tasks failed")
 
@@ -106,8 +104,18 @@ def _frontend_version(directory: Path) -> str | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await asyncio.to_thread(_bootstrap_database)
+    async def _run_bootstrap() -> None:
+        try:
+            await asyncio.to_thread(_bootstrap_database)
+        except Exception:
+            logger.exception("Background database bootstrap failed")
+
+    bootstrap_task = asyncio.create_task(_run_bootstrap())
     yield
+    if not bootstrap_task.done():
+        bootstrap_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await bootstrap_task
 
 
 app = FastAPI(

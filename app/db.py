@@ -29,7 +29,6 @@ def _run_startup_migrations_once() -> None:
 
         try:
             run_startup_migrations(engine)
-            ensure_expense_tables_on_engine(engine)
             _migrations_done = True
         except Exception:
             logger.exception("Startup migrations failed")

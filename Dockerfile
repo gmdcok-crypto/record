@@ -51,4 +51,4 @@ COPY --from=client-build /app/client/dist ./client/dist
 COPY --from=admin-build /app/admin/dist ./admin/dist
 COPY --from=transcriber-build /app/transcriber/dist ./transcriber/dist
 
-CMD ["sh", "-c", "python scripts/ensure_expense_tables.py && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
