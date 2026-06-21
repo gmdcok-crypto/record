@@ -81,10 +81,11 @@ def _bootstrap_database() -> None:
         db = SessionLocal()
         try:
             from app.services.admin_auth import ensure_admin_bootstrap_password
-            from app.services.expense_store import ensure_default_expense_data
+            from app.services.expense_store import ensure_default_expense_data, ensure_expense_storage
 
             ensure_admin_bootstrap_password(db)
             ensure_default_expense_data(db)
+            ensure_expense_storage(db)
         finally:
             db.close()
     except Exception:

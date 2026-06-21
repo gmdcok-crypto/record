@@ -146,6 +146,30 @@ def seed_default_expense_categories(db: Session) -> None:
     db.expire_all()
 
 
+def _expense_records_table_exists(db: Session) -> bool:
+    return (
+        db.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'expense_records'
+                LIMIT 1
+                """
+            )
+        ).first()
+        is not None
+    )
+
+
+def ensure_expense_storage(db: Session) -> None:
+    try:
+        _ensure_expense_storage(db)
+    except Exception:
+        logger.exception("Failed to ensure expense storage")
+
+
 def ensure_default_expense_data(db: Session) -> None:
     try:
         seed_default_expense_categories(db)
@@ -272,10 +296,11 @@ def update_expense_category(
 
 
 def delete_expense_category(db: Session, category: ExpenseCategory) -> None:
-    _ensure_expense_records_table(db)
-    linked = db.scalar(
-        select(ExpenseRecord.id).where(ExpenseRecord.category_id == category.id).limit(1)
-    )
+    linked = None
+    if _expense_records_table_exists(db):
+        linked = db.scalar(
+            select(ExpenseRecord.id).where(ExpenseRecord.category_id == category.id).limit(1)
+        )
     if linked is not None:
         raise ValueError("사용 중인 지출항목은 삭제할 수 없습니다.")
     db.delete(category)
@@ -294,9 +319,11 @@ def list_expense_records(
     date_to: date | None = None,
     limit: int = 200,
 ) -> list[dict]:
+    if not _expense_records_table_exists(db):
+        return []
+
     for attempt in range(2):
         try:
-            _ensure_expense_records_table(db)
             query = select(ExpenseRecord).options(joinedload(ExpenseRecord.category))
             if date_from is not None:
                 query = query.where(ExpenseRecord.expense_date >= date_from)
@@ -311,7 +338,6 @@ def list_expense_records(
             if attempt == 1 or "expense_" not in str(exc).lower():
                 logger.exception("Failed to query expense records")
                 return []
-            _ensure_expense_records_table(db)
         except Exception:
             logger.exception("Failed to query expense records")
             return []

@@ -94,7 +94,11 @@ export default function ExpenseManagement() {
     } catch (err) {
       console.error(err);
       setRecords([]);
-      setRecordsError(err instanceof Error ? err.message : "지출 내역을 불러올 수 없습니다.");
+      const message = err instanceof Error ? err.message : "지출 내역을 불러올 수 없습니다.";
+      const isGatewayTimeout = /HTTP 50[234]/.test(message);
+      if (!isGatewayTimeout) {
+        setRecordsError(message);
+      }
     } finally {
       setRecordsLoading(false);
     }
