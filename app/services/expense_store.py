@@ -58,47 +58,70 @@ def _ensure_expense_categories_table(db: Session) -> None:
 def _ensure_expense_records_table(db: Session) -> None:
     bind = db.get_bind()
     db.rollback()
-    with bind.begin() as conn:
-        records_exists = conn.execute(
-            text(
-                """
-                SELECT 1
-                FROM information_schema.TABLES
-                WHERE TABLE_SCHEMA = DATABASE()
-                  AND TABLE_NAME = 'expense_records'
-                LIMIT 1
-                """
-            )
-        ).first()
-        if records_exists:
-            return
-        conn.execute(
-            text(
-                """
-                CREATE TABLE expense_records (
-                  id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                  category_id BIGINT NOT NULL,
-                  amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
-                  expense_date DATE NOT NULL,
-                  note VARCHAR(255) NULL,
-                  source_type VARCHAR(30) NULL,
-                  source_id VARCHAR(120) NULL,
-                  created_by_admin_id BIGINT NULL,
-                  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                  KEY idx_expense_records_date (expense_date),
-                  KEY idx_expense_records_category_id (category_id),
-                  KEY idx_expense_records_source (source_type, source_id),
-                  CONSTRAINT fk_expense_records_category
-                    FOREIGN KEY (category_id) REFERENCES expense_categories(id)
-                    ON UPDATE CASCADE ON DELETE RESTRICT,
-                  CONSTRAINT fk_expense_records_admin
-                    FOREIGN KEY (created_by_admin_id) REFERENCES admin_users(id)
-                    ON UPDATE CASCADE ON DELETE SET NULL
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                """
-            )
+    records_exists = db.execute(
+        text(
+            """
+            SELECT 1
+            FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'expense_records'
+            LIMIT 1
+            """
         )
+    ).first()
+    if records_exists:
+        return
+
+    ddl_with_admin_fk = """
+        CREATE TABLE expense_records (
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          category_id BIGINT NOT NULL,
+          amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+          expense_date DATE NOT NULL,
+          note VARCHAR(255) NULL,
+          source_type VARCHAR(30) NULL,
+          source_id VARCHAR(120) NULL,
+          created_by_admin_id BIGINT NULL,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          KEY idx_expense_records_date (expense_date),
+          KEY idx_expense_records_category_id (category_id),
+          KEY idx_expense_records_source (source_type, source_id),
+          CONSTRAINT fk_expense_records_category
+            FOREIGN KEY (category_id) REFERENCES expense_categories(id)
+            ON UPDATE CASCADE ON DELETE RESTRICT,
+          CONSTRAINT fk_expense_records_admin
+            FOREIGN KEY (created_by_admin_id) REFERENCES admin_users(id)
+            ON UPDATE CASCADE ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """
+    ddl_without_admin_fk = """
+        CREATE TABLE expense_records (
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          category_id BIGINT NOT NULL,
+          amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+          expense_date DATE NOT NULL,
+          note VARCHAR(255) NULL,
+          source_type VARCHAR(30) NULL,
+          source_id VARCHAR(120) NULL,
+          created_by_admin_id BIGINT NULL,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          KEY idx_expense_records_date (expense_date),
+          KEY idx_expense_records_category_id (category_id),
+          KEY idx_expense_records_source (source_type, source_id),
+          CONSTRAINT fk_expense_records_category
+            FOREIGN KEY (category_id) REFERENCES expense_categories(id)
+            ON UPDATE CASCADE ON DELETE RESTRICT
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """
+    try:
+        with bind.begin() as conn:
+            conn.execute(text(ddl_with_admin_fk))
+    except Exception:
+        logger.warning("Creating expense_records without admin_users FK fallback")
+        with bind.begin() as conn:
+            conn.execute(text(ddl_without_admin_fk))
 
 
 def _ensure_expense_storage(db: Session) -> None:
@@ -160,6 +183,12 @@ def _serialize_record(row: ExpenseRecord) -> dict:
 def list_expense_categories(db: Session) -> list[dict]:
     for attempt in range(2):
         try:
+            _ensure_expense_categories_table(db)
+            rows = db.scalars(
+                select(ExpenseCategory).order_by(ExpenseCategory.sort_order.asc(), ExpenseCategory.id.asc())
+            ).all()
+            if rows:
+                return [_serialize_category(row) for row in rows]
             seed_default_expense_categories(db)
             rows = db.scalars(
                 select(ExpenseCategory).order_by(ExpenseCategory.sort_order.asc(), ExpenseCategory.id.asc())
@@ -168,9 +197,39 @@ def list_expense_categories(db: Session) -> list[dict]:
         except (OperationalError, ProgrammingError) as exc:
             db.rollback()
             if attempt == 1 or "expense_" not in str(exc).lower():
-                raise
+                break
             _ensure_expense_categories_table(db)
-    return []
+        except Exception:
+            logger.exception("ORM expense category query failed")
+            break
+
+    try:
+        _ensure_expense_categories_table(db)
+        result = db.execute(
+            text(
+                """
+                SELECT id, name, sort_order, is_active, created_at
+                FROM expense_categories
+                ORDER BY sort_order ASC, id ASC
+                """
+            )
+        )
+        rows = []
+        for row in result.mappings():
+            created_at = row["created_at"]
+            rows.append(
+                {
+                    "id": int(row["id"]),
+                    "name": row["name"],
+                    "sort_order": int(row["sort_order"] or 0),
+                    "is_active": bool(row["is_active"]),
+                    "created_at": created_at.isoformat() if created_at else None,
+                }
+            )
+        return rows
+    except Exception:
+        logger.exception("Raw SQL expense category query failed")
+        raise
 
 
 def create_expense_category(db: Session, *, name: str, sort_order: int | None = None) -> ExpenseCategory:
@@ -258,8 +317,12 @@ def list_expense_records(
         except (OperationalError, ProgrammingError) as exc:
             db.rollback()
             if attempt == 1 or "expense_" not in str(exc).lower():
-                raise
+                logger.exception("Failed to query expense records")
+                return []
             _ensure_expense_records_table(db)
+        except Exception:
+            logger.exception("Failed to query expense records")
+            return []
     return []
 
 

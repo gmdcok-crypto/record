@@ -5,7 +5,8 @@ import {
   createExpenseRecord,
   deleteExpenseCategory,
   deleteExpenseRecord,
-  fetchExpensesOverview,
+  fetchExpenseCategories,
+  fetchExpenseRecords,
   updateExpenseCategory,
   updateExpenseRecord,
   type ExpenseCategory,
@@ -42,8 +43,11 @@ function SummaryChip({
 
 export default function ExpenseManagement() {
   const [loading, setLoading] = useState(true);
+  const [recordsLoading, setRecordsLoading] = useState(false);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [records, setRecords] = useState<ExpenseRecord[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [recordsError, setRecordsError] = useState<string | null>(null);
   const [dateFrom, setDateFrom] = useState(() => todayKstDateKey());
   const [dateTo, setDateTo] = useState(() => todayKstDateKey());
 
@@ -71,23 +75,43 @@ export default function ExpenseManagement() {
     [records],
   );
 
-  const loadData = useCallback(async () => {
+  const loadCategories = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
-      const data = await fetchExpensesOverview({ dateFrom, dateTo });
-      setCategories(data.categories);
-      setRecords(data.records);
+      const rows = await fetchExpenseCategories();
+      setCategories(rows);
     } catch (err) {
       console.error(err);
-      window.alert(err instanceof Error ? err.message : "지출 데이터를 불러올 수 없습니다.");
+      setCategories([]);
+      setLoadError(err instanceof Error ? err.message : "지출항목을 불러올 수 없습니다.");
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const loadRecords = useCallback(async () => {
+    setRecordsLoading(true);
+    setRecordsError(null);
+    try {
+      const rows = await fetchExpenseRecords({ dateFrom, dateTo });
+      setRecords(rows);
+    } catch (err) {
+      console.error(err);
+      setRecords([]);
+      setRecordsError(err instanceof Error ? err.message : "지출 내역을 불러올 수 없습니다.");
+    } finally {
+      setRecordsLoading(false);
     }
   }, [dateFrom, dateTo]);
 
   useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    void loadCategories();
+  }, [loadCategories]);
+
+  useEffect(() => {
+    void loadRecords();
+  }, [loadRecords]);
 
   useEffect(() => {
     if (formCategoryId !== "") return;
@@ -104,7 +128,7 @@ export default function ExpenseManagement() {
     try {
       await createExpenseCategory({ name });
       setNewCategoryName("");
-      await loadData();
+      await loadCategories();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "지출항목 추가 실패");
     }
@@ -120,7 +144,7 @@ export default function ExpenseManagement() {
       await updateExpenseCategory(categoryId, { name });
       setEditingCategoryId(null);
       setEditingCategoryName("");
-      await loadData();
+      await loadCategories();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "지출항목 수정 실패");
     }
@@ -129,7 +153,7 @@ export default function ExpenseManagement() {
   const handleToggleCategory = async (category: ExpenseCategory) => {
     try {
       await updateExpenseCategory(category.id, { is_active: !category.is_active });
-      await loadData();
+      await loadCategories();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "지출항목 상태 변경 실패");
     }
@@ -139,10 +163,10 @@ export default function ExpenseManagement() {
     if (!window.confirm(`「${category.name}」 항목을 삭제하시겠습니까?`)) return;
     try {
       await deleteExpenseCategory(category.id);
-      await loadData();
+      await loadCategories();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "지출항목 삭제 실패");
-      await loadData();
+      await loadCategories();
     }
   };
 
@@ -166,7 +190,7 @@ export default function ExpenseManagement() {
       setFormAmount("");
       setFormNote("");
       setFormDate(todayKstDateKey());
-      await loadData();
+      await loadRecords();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "지출 입력 실패");
     }
@@ -195,7 +219,7 @@ export default function ExpenseManagement() {
         note: editRecordNote.trim(),
       });
       setEditingRecordId(null);
-      await loadData();
+      await loadRecords();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "지출 수정 실패");
     }
@@ -209,7 +233,7 @@ export default function ExpenseManagement() {
     if (!window.confirm("이 지출 내역을 삭제하시겠습니까?")) return;
     try {
       await deleteExpenseRecord(record.id);
-      await loadData();
+      await loadRecords();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "지출 삭제 실패");
     }
@@ -240,6 +264,11 @@ export default function ExpenseManagement() {
             </button>
           </div>
         </div>
+        {loadError ? (
+          <p className="mb-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+            {loadError}
+          </p>
+        ) : null}
         <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/70">
           <table className="w-full min-w-[640px] border-collapse text-[13px]">
             <thead>
@@ -389,6 +418,11 @@ export default function ExpenseManagement() {
           <SummaryChip label="조회 건수" value={`${records.length}건`} />
           <SummaryChip label="기간 합계" value={formatCurrency(periodTotal)} tone="cyan" />
         </div>
+        {recordsError ? (
+          <p className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+            {recordsError}
+          </p>
+        ) : null}
 
         <div className="mb-4 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
           <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">새 지출 입력</p>
@@ -457,7 +491,7 @@ export default function ExpenseManagement() {
         <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/70">
           {records.length === 0 ? (
             <p className="px-3 py-6 text-center text-sm text-slate-500">
-              {loading ? "불러오는 중..." : "선택한 기간에 지출 내역이 없습니다."}
+              {recordsLoading ? "불러오는 중..." : "선택한 기간에 지출 내역이 없습니다."}
             </p>
           ) : (
             <table className="w-full min-w-[920px] border-collapse text-[13px]">

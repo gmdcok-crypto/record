@@ -4,7 +4,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -55,6 +54,7 @@ class ExpenseRecordUpdateRequest(BaseModel):
 
 
 @router.get("")
+@router.get("/overview")
 def get_expenses_overview(
     db: Annotated[Session, Depends(get_db)],
     _admin: ExpensesAdminAuth,
@@ -63,19 +63,46 @@ def get_expenses_overview(
 ) -> dict:
     try:
         categories = list_expense_categories(db)
-    except SQLAlchemyError as exc:
+    except Exception as exc:
         logger.exception("Failed to load expense categories")
         raise HTTPException(status_code=500, detail="지출항목을 불러올 수 없습니다.") from exc
 
+    records: list[dict] = []
+    records_error: str | None = None
     try:
         records = list_expense_records(db, date_from=date_from, date_to=date_to)
-    except SQLAlchemyError as exc:
+    except Exception as exc:
         logger.exception("Failed to load expense records")
-        raise HTTPException(status_code=500, detail="지출 내역을 불러올 수 없습니다.") from exc
+        records_error = "지출 내역을 불러올 수 없습니다."
 
     return {
         "categories": categories,
         "records": records,
+        "records_error": records_error,
+    }
+
+
+@router.get("/categories")
+def get_expense_categories(
+    db: Annotated[Session, Depends(get_db)],
+    _admin: ExpensesAdminAuth,
+) -> dict:
+    try:
+        return {"categories": list_expense_categories(db)}
+    except Exception as exc:
+        logger.exception("Failed to load expense categories")
+        raise HTTPException(status_code=500, detail="지출항목을 불러올 수 없습니다.") from exc
+
+
+@router.get("/records")
+def get_expense_records(
+    db: Annotated[Session, Depends(get_db)],
+    _admin: ExpensesAdminAuth,
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+) -> dict:
+    return {
+        "records": list_expense_records(db, date_from=date_from, date_to=date_to),
     }
 
 

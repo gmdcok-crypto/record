@@ -409,13 +409,55 @@ export type ExpenseRecord = {
 export type ExpensesOverview = {
   categories: ExpenseCategory[];
   records: ExpenseRecord[];
+  records_error?: string | null;
 };
+
+function formatApiDetail(detail: unknown): string | undefined {
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "msg" in item) {
+          return String((item as { msg?: string }).msg ?? "");
+        }
+        return "";
+      })
+      .filter(Boolean);
+    if (messages.length > 0) return messages.join("\n");
+  }
+  return undefined;
+}
+
+export async function fetchExpenseCategories(): Promise<ExpenseCategory[]> {
+  const res = await adminFetch(`${apiBase()}/api/admin/expenses/categories`);
+  if (!res.ok) {
+    throw await parseApiError(res, "지출항목을 불러올 수 없습니다");
+  }
+  const data = (await res.json()) as { categories?: ExpenseCategory[] };
+  return data.categories ?? [];
+}
+
+export async function fetchExpenseRecords(params?: {
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<ExpenseRecord[]> {
+  const url = new URL(`${apiBase()}/api/admin/expenses/records`);
+  if (params?.dateFrom) url.searchParams.set("date_from", params.dateFrom);
+  if (params?.dateTo) url.searchParams.set("date_to", params.dateTo);
+  const res = await adminFetch(url.toString());
+  if (!res.ok) {
+    throw await parseApiError(res, "지출 내역을 불러올 수 없습니다");
+  }
+  const data = (await res.json()) as { records?: ExpenseRecord[] };
+  return data.records ?? [];
+}
 
 export async function fetchExpensesOverview(params?: {
   dateFrom?: string;
   dateTo?: string;
 }): Promise<ExpensesOverview> {
-  const url = new URL(`${apiBase()}/api/admin/expenses`);
+  const url = new URL(`${apiBase()}/api/admin/expenses/overview`);
   if (params?.dateFrom) url.searchParams.set("date_from", params.dateFrom);
   if (params?.dateTo) url.searchParams.set("date_to", params.dateTo);
   const res = await adminFetch(url.toString());
@@ -518,14 +560,17 @@ async function parseApiError(res: Response, fallback: string): Promise<Error> {
   const contentType = res.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
     const err = await res.json().catch(() => ({}));
-    return new Error(err.detail || fallback);
+    return new Error(formatApiDetail(err.detail) || fallback);
   }
 
   const text = await res.text().catch(() => "");
   if (text.trimStart().startsWith("<!doctype") || text.trimStart().startsWith("<html")) {
     return new Error("API 대신 HTML이 반환되었습니다. VITE_API_URL 또는 배포 라우팅을 확인하세요.");
   }
-  return new Error(fallback);
+  if (text.trim()) {
+    return new Error(text.trim().slice(0, 200));
+  }
+  return new Error(`${fallback} (HTTP ${res.status})`);
 }
 
 export function resolveUrl(path: string): string {
