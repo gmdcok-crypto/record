@@ -23,10 +23,7 @@ CREATE TABLE IF NOT EXISTS expense_records (
   KEY idx_expense_records_source (source_type, source_id),
   CONSTRAINT fk_expense_records_category
     FOREIGN KEY (category_id) REFERENCES expense_categories(id)
-    ON UPDATE CASCADE ON DELETE RESTRICT,
-  CONSTRAINT fk_expense_records_admin
-    FOREIGN KEY (created_by_admin_id) REFERENCES admin_users(id)
-    ON UPDATE CASCADE ON DELETE SET NULL
+    ON UPDATE CASCADE ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT IGNORE INTO expense_categories (name, sort_order) VALUES

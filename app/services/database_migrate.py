@@ -38,6 +38,120 @@ STARTUP_MIGRATIONS = [
 ]
 
 
+def _table_exists(conn, table_name: str) -> bool:
+    return (
+        conn.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = :table_name
+                LIMIT 1
+                """
+            ),
+            {"table_name": table_name},
+        ).first()
+        is not None
+    )
+
+
+_EXPENSE_CATEGORIES_DDL = """
+CREATE TABLE expense_categories (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_expense_categories_name (name),
+  KEY idx_expense_categories_sort (sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+_EXPENSE_RECORDS_DDL_WITH_ADMIN_FK = """
+CREATE TABLE expense_records (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  category_id BIGINT NOT NULL,
+  amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+  expense_date DATE NOT NULL,
+  note VARCHAR(255) NULL,
+  source_type VARCHAR(30) NULL,
+  source_id VARCHAR(120) NULL,
+  created_by_admin_id BIGINT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_expense_records_date (expense_date),
+  KEY idx_expense_records_category_id (category_id),
+  KEY idx_expense_records_source (source_type, source_id),
+  CONSTRAINT fk_expense_records_category
+    FOREIGN KEY (category_id) REFERENCES expense_categories(id)
+    ON UPDATE CASCADE ON DELETE RESTRICT,
+  CONSTRAINT fk_expense_records_admin
+    FOREIGN KEY (created_by_admin_id) REFERENCES admin_users(id)
+    ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+_EXPENSE_RECORDS_DDL_WITHOUT_ADMIN_FK = """
+CREATE TABLE expense_records (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  category_id BIGINT NOT NULL,
+  amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+  expense_date DATE NOT NULL,
+  note VARCHAR(255) NULL,
+  source_type VARCHAR(30) NULL,
+  source_id VARCHAR(120) NULL,
+  created_by_admin_id BIGINT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_expense_records_date (expense_date),
+  KEY idx_expense_records_category_id (category_id),
+  KEY idx_expense_records_source (source_type, source_id),
+  CONSTRAINT fk_expense_records_category
+    FOREIGN KEY (category_id) REFERENCES expense_categories(id)
+    ON UPDATE CASCADE ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+
+def _create_expense_records_table(engine: Engine) -> None:
+    try:
+        with engine.begin() as conn:
+            if _table_exists(conn, "expense_records"):
+                return
+            conn.execute(text(_EXPENSE_RECORDS_DDL_WITH_ADMIN_FK))
+    except Exception as exc:
+        logger.warning("Creating expense_records without admin_users FK fallback: %s", exc)
+        with engine.begin() as conn:
+            if _table_exists(conn, "expense_records"):
+                return
+            conn.execute(text(_EXPENSE_RECORDS_DDL_WITHOUT_ADMIN_FK))
+
+
+def ensure_expense_tables_on_engine(engine: Engine) -> None:
+    with engine.begin() as conn:
+        if not _table_exists(conn, "expense_categories"):
+            conn.execute(text(_EXPENSE_CATEGORIES_DDL))
+        for name, sort_order in (
+            ("속기사비용", 1),
+            ("광고비", 2),
+            ("사이트운영비", 3),
+            ("API비용", 4),
+            ("결제수수료", 5),
+            ("부가세예수금", 6),
+        ):
+            conn.execute(
+                text(
+                    """
+                    INSERT IGNORE INTO expense_categories (name, sort_order)
+                    VALUES (:name, :sort_order)
+                    """
+                ),
+                {"name": name, "sort_order": sort_order},
+            )
+    _create_expense_records_table(engine)
+    logger.info("Ensured expense_categories and expense_records tables")
+
+
 def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) -> bool:
     lowered = message.lower()
     sql = sql_path.read_text(encoding="utf-8").strip()
@@ -287,186 +401,8 @@ def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) ->
         logger.info("Railway-safe migration applied: %s", sql_path.name)
         return True
 
-    if sql_path.name == "migrate_expenses.sql":
-        with engine.begin() as conn:
-            categories_exists = conn.execute(
-                text(
-                    """
-                    SELECT 1
-                    FROM information_schema.TABLES
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'expense_categories'
-                    LIMIT 1
-                    """
-                )
-            ).first()
-            if not categories_exists:
-                conn.execute(
-                    text(
-                        """
-                        CREATE TABLE expense_categories (
-                          id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                          name VARCHAR(100) NOT NULL,
-                          sort_order INT NOT NULL DEFAULT 0,
-                          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                          UNIQUE KEY uk_expense_categories_name (name),
-                          KEY idx_expense_categories_sort (sort_order)
-                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                        """
-                    )
-                )
-            records_exists = conn.execute(
-                text(
-                    """
-                    SELECT 1
-                    FROM information_schema.TABLES
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'expense_records'
-                    LIMIT 1
-                    """
-                )
-            ).first()
-            if not records_exists:
-                conn.execute(
-                    text(
-                        """
-                        CREATE TABLE expense_records (
-                          id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                          category_id BIGINT NOT NULL,
-                          amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
-                          expense_date DATE NOT NULL,
-                          note VARCHAR(255) NULL,
-                          source_type VARCHAR(30) NULL,
-                          source_id VARCHAR(120) NULL,
-                          created_by_admin_id BIGINT NULL,
-                          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                          KEY idx_expense_records_date (expense_date),
-                          KEY idx_expense_records_category_id (category_id),
-                          KEY idx_expense_records_source (source_type, source_id),
-                          CONSTRAINT fk_expense_records_category
-                            FOREIGN KEY (category_id) REFERENCES expense_categories(id)
-                            ON UPDATE CASCADE ON DELETE RESTRICT,
-                          CONSTRAINT fk_expense_records_admin
-                            FOREIGN KEY (created_by_admin_id) REFERENCES admin_users(id)
-                            ON UPDATE CASCADE ON DELETE SET NULL
-                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                        """
-                    )
-                )
-            for name, sort_order in (
-                ("속기사비용", 1),
-                ("광고비", 2),
-                ("사이트운영비", 3),
-                ("API비용", 4),
-                ("결제수수료", 5),
-                ("부가세예수금", 6),
-            ):
-                conn.execute(
-                    text(
-                        """
-                        INSERT IGNORE INTO expense_categories (name, sort_order)
-                        VALUES (:name, :sort_order)
-                        """
-                    ),
-                    {"name": name, "sort_order": sort_order},
-                )
-        logger.info("Railway-safe migration applied: %s", sql_path.name)
-        return True
-
-    if sql_path.name == "migrate_expense_records.sql":
-        with engine.begin() as conn:
-            categories_exists = conn.execute(
-                text(
-                    """
-                    SELECT 1
-                    FROM information_schema.TABLES
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'expense_categories'
-                    LIMIT 1
-                    """
-                )
-            ).first()
-            if not categories_exists:
-                conn.execute(
-                    text(
-                        """
-                        CREATE TABLE expense_categories (
-                          id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                          name VARCHAR(100) NOT NULL,
-                          sort_order INT NOT NULL DEFAULT 0,
-                          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                          UNIQUE KEY uk_expense_categories_name (name),
-                          KEY idx_expense_categories_sort (sort_order)
-                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                        """
-                    )
-                )
-            records_exists = conn.execute(
-                text(
-                    """
-                    SELECT 1
-                    FROM information_schema.TABLES
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = 'expense_records'
-                    LIMIT 1
-                    """
-                )
-            ).first()
-            if not records_exists:
-                try:
-                    conn.execute(
-                        text(
-                            """
-                            CREATE TABLE expense_records (
-                              id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                              category_id BIGINT NOT NULL,
-                              amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
-                              expense_date DATE NOT NULL,
-                              note VARCHAR(255) NULL,
-                              source_type VARCHAR(30) NULL,
-                              source_id VARCHAR(120) NULL,
-                              created_by_admin_id BIGINT NULL,
-                              created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                              updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                              KEY idx_expense_records_date (expense_date),
-                              KEY idx_expense_records_category_id (category_id),
-                              KEY idx_expense_records_source (source_type, source_id),
-                              CONSTRAINT fk_expense_records_category
-                                FOREIGN KEY (category_id) REFERENCES expense_categories(id)
-                                ON UPDATE CASCADE ON DELETE RESTRICT,
-                              CONSTRAINT fk_expense_records_admin
-                                FOREIGN KEY (created_by_admin_id) REFERENCES admin_users(id)
-                                ON UPDATE CASCADE ON DELETE SET NULL
-                            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                            """
-                        )
-                    )
-                except Exception:
-                    conn.execute(
-                        text(
-                            """
-                            CREATE TABLE expense_records (
-                              id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                              category_id BIGINT NOT NULL,
-                              amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
-                              expense_date DATE NOT NULL,
-                              note VARCHAR(255) NULL,
-                              source_type VARCHAR(30) NULL,
-                              source_id VARCHAR(120) NULL,
-                              created_by_admin_id BIGINT NULL,
-                              created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                              updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                              KEY idx_expense_records_date (expense_date),
-                              KEY idx_expense_records_category_id (category_id),
-                              KEY idx_expense_records_source (source_type, source_id),
-                              CONSTRAINT fk_expense_records_category
-                                FOREIGN KEY (category_id) REFERENCES expense_categories(id)
-                                ON UPDATE CASCADE ON DELETE RESTRICT
-                            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                            """
-                        )
-                    )
+    if sql_path.name in {"migrate_expenses.sql", "migrate_expense_records.sql"}:
+        ensure_expense_tables_on_engine(engine)
         logger.info("Railway-safe migration applied: %s", sql_path.name)
         return True
 
@@ -614,3 +550,7 @@ def run_startup_migrations(engine: Engine) -> None:
             run_sql_migration(engine, sql_path)
         except Exception:
             logger.exception("Startup migration failed: %s", sql_path.name)
+    try:
+        ensure_expense_tables_on_engine(engine)
+    except Exception:
+        logger.exception("Failed to ensure expense tables on startup")

@@ -12,7 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
 from app.db import SessionLocal, ensure_db_initialized, get_engine
-from app.services.database_migrate import ensure_jobs_status_column, run_startup_migrations
+from app.services.database_migrate import ensure_expense_tables_on_engine, ensure_jobs_status_column, run_startup_migrations
 from app.services.database_reset import purge_all_data
 from app.routers import admin_auth, admin_users, expenses, jobs, member_auth, projects, transcribe, transcriber_auth, upload
 
@@ -70,6 +70,7 @@ def _bootstrap_database() -> None:
         if settings.purge_db_on_startup.lower() in {"1", "true", "yes"}:
             purge_all_data(db_engine)
         run_startup_migrations(db_engine)
+        ensure_expense_tables_on_engine(db_engine)
         ensure_jobs_status_column(db_engine)
     except Exception:
         logger.exception("Database startup tasks failed")

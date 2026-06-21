@@ -1,5 +1,5 @@
 -- 지출 내역(expense_records) 테이블 사전 생성
--- prerequisite: expense_categories, admin_users 테이블이 있어야 FK가 붙습니다.
+-- prerequisite: expense_categories 테이블이 있어야 category FK가 붙습니다.
 -- 수동 실행 예:
 --   python scripts/run_migration.py scripts/migrate_expense_records.sql
 
@@ -28,8 +28,5 @@ CREATE TABLE IF NOT EXISTS expense_records (
   KEY idx_expense_records_source (source_type, source_id),
   CONSTRAINT fk_expense_records_category
     FOREIGN KEY (category_id) REFERENCES expense_categories(id)
-    ON UPDATE CASCADE ON DELETE RESTRICT,
-  CONSTRAINT fk_expense_records_admin
-    FOREIGN KEY (created_by_admin_id) REFERENCES admin_users(id)
-    ON UPDATE CASCADE ON DELETE SET NULL
+    ON UPDATE CASCADE ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
