@@ -29,13 +29,13 @@ export default function AdminLogin({ onSuccess }: AdminLoginProps) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-10 text-slate-100">
       <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/95 p-6 shadow-2xl">
-        <div className="mb-6 flex items-center gap-3">
+        <div className="mb-6 flex items-center gap-5">
           <img
             src="/bulpen-logo.png"
             alt="BULPEN"
-            className="h-12 w-12 shrink-0 rounded-xl bg-white object-contain p-0.5"
+            className="h-16 w-16 shrink-0 rounded-xl bg-white object-contain p-1"
           />
-          <div>
+          <div className="pl-1">
             <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-300">Bulpen Admin</p>
             <h1 className="mt-1 text-2xl font-semibold text-white">관리자 로그인</h1>
           </div>

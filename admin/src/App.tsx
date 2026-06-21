@@ -2152,13 +2152,13 @@ function App() {
         <div className="relative mx-auto grid min-h-screen max-w-[1880px] gap-4 px-3 py-3 lg:grid-cols-[232px_minmax(0,1fr)] lg:px-4">
           <aside className="rounded-2xl border border-slate-800 bg-slate-950/95 p-4">
             <div className="border-b border-slate-800 pb-4">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 <img
                   src="/bulpen-logo.png"
                   alt="BULPEN"
-                  className="h-10 w-10 shrink-0 rounded-xl bg-white object-contain p-0.5"
+                  className="h-14 w-14 shrink-0 rounded-xl bg-white object-contain p-1"
                 />
-                <div>
+                <div className="min-w-0 pl-1">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-300">Bulpen Admin</p>
                   <h1 className="mt-1 text-base font-semibold text-white">Operations Console</h1>
                 </div>
