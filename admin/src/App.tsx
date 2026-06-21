@@ -2216,119 +2216,121 @@ function App() {
 
           <main className={`space-y-4 ${!adminPushRegistered ? "pb-28 lg:pb-0" : ""}`}>
             <section className="rounded-2xl border border-slate-800 bg-slate-900/92 px-4 py-3">
-              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Workspace</p>
-                  <h2 className="mt-1 text-lg font-semibold text-white">
-                    {activeMenu === "jobs"
-                      ? "작업 운영 시트"
-                      : activeMenu === "dashboard"
-                        ? "운영 대시보드"
-                        : activeMenu === "transcribers"
-                          ? "속기사 관리"
-                          : activeMenu === "members"
-                            ? "회원 관리"
-                            : activeMenu === "progress"
-                              ? "진행 현황"
-                            : activeMenu === "sales"
-                                  ? "매출 관리"
-                                  : activeMenu === "reports"
-                                    ? "집계"
-                                    : activeMenu === "admins"
-                                      ? "관리자 관리"
-                                    : "분석"}
-                  </h2>
-                </div>
-                <div className="flex flex-col items-stretch gap-2 xl:items-end">
-                  {activeMenu === "sales" ? (
-                    <div className="flex flex-wrap items-end gap-2">
-                      <label className="flex flex-col gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                        조회 시작
-                        <input
-                          type="date"
-                          value={salesDateFrom}
-                          max={salesDateTo}
-                          onChange={(event) => {
-                            const nextFrom = event.target.value;
-                            setSalesDateFrom(nextFrom);
-                            if (nextFrom > salesDateTo) {
-                              setSalesDateTo(nextFrom);
-                            }
-                          }}
-                          className="rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1.5 text-[12px] font-normal normal-case tracking-normal text-slate-200"
-                        />
-                      </label>
-                      <span className="pb-2 text-xs text-slate-500">~</span>
-                      <label className="flex flex-col gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                        조회 종료
-                        <input
-                          type="date"
-                          value={salesDateTo}
-                          min={salesDateFrom}
-                          onChange={(event) => {
-                            const nextTo = event.target.value;
-                            setSalesDateTo(nextTo);
-                            if (nextTo < salesDateFrom) {
-                              setSalesDateFrom(nextTo);
-                            }
-                          }}
-                          className="rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1.5 text-[12px] font-normal normal-case tracking-normal text-slate-200"
-                        />
-                      </label>
-                    </div>
-                  ) : null}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1 text-[11px] text-slate-300">
-                      {adminProfile.role_label} · {adminProfile.name}
-                    </span>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Workspace</p>
+              <div
+                className={`mt-1 gap-3 ${
+                  activeMenu === "sales"
+                    ? "grid lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center"
+                    : "flex flex-col xl:flex-row xl:items-center xl:justify-between"
+                }`}
+              >
+                <h2 className="text-lg font-semibold text-white">
+                  {activeMenu === "jobs"
+                    ? "작업 운영 시트"
+                    : activeMenu === "dashboard"
+                      ? "운영 대시보드"
+                      : activeMenu === "transcribers"
+                        ? "속기사 관리"
+                        : activeMenu === "members"
+                          ? "회원 관리"
+                          : activeMenu === "progress"
+                            ? "진행 현황"
+                          : activeMenu === "sales"
+                                ? "매출 관리"
+                                : activeMenu === "reports"
+                                  ? "집계"
+                                  : activeMenu === "admins"
+                                    ? "관리자 관리"
+                                  : "분석"}
+                </h2>
+                {activeMenu === "sales" ? (
+                  <div className="flex flex-wrap items-center justify-center gap-2 lg:px-4">
+                    <label className="flex items-center gap-2 text-[11px] text-slate-400">
+                      <span className="shrink-0">조회 시작</span>
+                      <input
+                        type="date"
+                        value={salesDateFrom}
+                        max={salesDateTo}
+                        onChange={(event) => {
+                          const nextFrom = event.target.value;
+                          setSalesDateFrom(nextFrom);
+                          if (nextFrom > salesDateTo) {
+                            setSalesDateTo(nextFrom);
+                          }
+                        }}
+                        className="rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1.5 text-[12px] text-slate-200"
+                      />
+                    </label>
+                    <span className="text-xs text-slate-500">~</span>
+                    <label className="flex items-center gap-2 text-[11px] text-slate-400">
+                      <span className="shrink-0">조회 종료</span>
+                      <input
+                        type="date"
+                        value={salesDateTo}
+                        min={salesDateFrom}
+                        onChange={(event) => {
+                          const nextTo = event.target.value;
+                          setSalesDateTo(nextTo);
+                          if (nextTo < salesDateFrom) {
+                            setSalesDateFrom(nextTo);
+                          }
+                        }}
+                        className="rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1.5 text-[12px] text-slate-200"
+                      />
+                    </label>
+                  </div>
+                ) : null}
+                <div className={`flex flex-wrap items-center gap-2 ${activeMenu === "sales" ? "lg:justify-end" : "xl:justify-end"}`}>
+                  <span className="rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1 text-[11px] text-slate-300">
+                    {adminProfile.role_label} · {adminProfile.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="rounded-md border border-slate-700 bg-slate-900/90 px-3 py-1.5 text-[11px] font-semibold text-slate-200 transition hover:bg-slate-800"
+                  >
+                    로그아웃
+                  </button>
+                  {activeMenu === "admins" ? (
                     <button
                       type="button"
-                      onClick={handleLogout}
-                      className="rounded-md border border-slate-700 bg-slate-900/90 px-3 py-1.5 text-[11px] font-semibold text-slate-200 transition hover:bg-slate-800"
+                      onClick={() => void openCreateAdminModal()}
+                      className="rounded-md bg-cyan-500 px-3 py-1.5 text-[11px] font-semibold text-slate-950 transition hover:bg-cyan-400"
                     >
-                      로그아웃
+                      관리자 추가
                     </button>
-                    {activeMenu === "admins" ? (
+                  ) : null}
+                  {activeMenu === "transcribers" ? (
+                    <>
                       <button
                         type="button"
-                        onClick={() => void openCreateAdminModal()}
+                        onClick={() => void openGradeRateModal()}
+                        className="rounded-md border border-slate-700 bg-slate-900/90 px-3 py-1.5 text-[11px] font-semibold text-slate-200 transition hover:bg-slate-800"
+                      >
+                        등급별 요율 관리
+                      </button>
+                      <button
+                        type="button"
+                        onClick={openCreateTranscriberModal}
                         className="rounded-md bg-cyan-500 px-3 py-1.5 text-[11px] font-semibold text-slate-950 transition hover:bg-cyan-400"
                       >
-                        관리자 추가
+                        추가
                       </button>
-                    ) : null}
-                    {activeMenu === "transcribers" ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => void openGradeRateModal()}
-                          className="rounded-md border border-slate-700 bg-slate-900/90 px-3 py-1.5 text-[11px] font-semibold text-slate-200 transition hover:bg-slate-800"
-                        >
-                          등급별 요율 관리
-                        </button>
-                        <button
-                          type="button"
-                          onClick={openCreateTranscriberModal}
-                          className="rounded-md bg-cyan-500 px-3 py-1.5 text-[11px] font-semibold text-slate-950 transition hover:bg-cyan-400"
-                        >
-                          추가
-                        </button>
-                      </>
-                    ) : null}
-                    <span className="hidden rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1 text-[11px] text-slate-400 lg:inline">
-                      관리자 알림: {adminPushRegistered ? "웹푸시 등록됨" : adminPushPermission === "denied" ? "권한 차단" : "미등록"}
-                    </span>
-                    {!adminPushRegistered ? (
-                      <button
-                        type="button"
-                        onClick={() => void enableAdminPushNotifications()}
-                        disabled={adminPushLoading || adminPushPermission === "unsupported"}
-                        className="hidden rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-semibold text-cyan-300 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50 lg:inline-flex"
-                      >
-                        {adminPushLoading ? "등록 중..." : "관리자 알림 받기"}
-                      </button>
-                    ) : null}
-                  </div>
+                    </>
+                  ) : null}
+                  <span className="hidden rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1 text-[11px] text-slate-400 lg:inline">
+                    관리자 알림: {adminPushRegistered ? "웹푸시 등록됨" : adminPushPermission === "denied" ? "권한 차단" : "미등록"}
+                  </span>
+                  {!adminPushRegistered ? (
+                    <button
+                      type="button"
+                      onClick={() => void enableAdminPushNotifications()}
+                      disabled={adminPushLoading || adminPushPermission === "unsupported"}
+                      className="hidden rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-semibold text-cyan-300 transition hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50 lg:inline-flex"
+                    >
+                      {adminPushLoading ? "등록 중..." : "관리자 알림 받기"}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </section>
