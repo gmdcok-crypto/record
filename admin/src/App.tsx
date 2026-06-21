@@ -2153,11 +2153,13 @@ function App() {
           <aside className="rounded-2xl border border-slate-800 bg-slate-950/95 p-4">
             <div className="border-b border-slate-800 pb-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/15 text-base font-bold text-cyan-300">
-                  BC
-                </div>
+                <img
+                  src="/bulpen-logo.png"
+                  alt="BULPEN"
+                  className="h-10 w-10 shrink-0 rounded-xl bg-white object-contain p-0.5"
+                />
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-300">Bluecom Admin</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-300">Bulpen Admin</p>
                   <h1 className="mt-1 text-base font-semibold text-white">Operations Console</h1>
                 </div>
               </div>

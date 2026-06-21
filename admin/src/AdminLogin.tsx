@@ -29,11 +29,18 @@ export default function AdminLogin({ onSuccess }: AdminLoginProps) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-10 text-slate-100">
       <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/95 p-6 shadow-2xl">
-        <div className="mb-6">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-300">Bluecom Admin</p>
-          <h1 className="mt-2 text-2xl font-semibold text-white">관리자 로그인</h1>
-          <p className="mt-2 text-sm text-slate-400">등급별 권한이 적용된 운영 콘솔입니다.</p>
+        <div className="mb-6 flex items-center gap-3">
+          <img
+            src="/bulpen-logo.png"
+            alt="BULPEN"
+            className="h-12 w-12 shrink-0 rounded-xl bg-white object-contain p-0.5"
+          />
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-300">Bulpen Admin</p>
+            <h1 className="mt-1 text-2xl font-semibold text-white">관리자 로그인</h1>
+          </div>
         </div>
+        <p className="mb-6 text-sm text-slate-400">등급별 권한이 적용된 운영 콘솔입니다.</p>
 
         <form className="grid gap-3" onSubmit={onSubmit}>
           <label className="grid gap-1.5 text-sm">
