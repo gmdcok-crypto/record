@@ -14,7 +14,7 @@ from app.config import settings
 from app.db import SessionLocal, ensure_db_initialized, get_engine
 from app.services.database_migrate import ensure_jobs_status_column, run_startup_migrations
 from app.services.database_reset import purge_all_data
-from app.routers import admin_auth, admin_users, jobs, member_auth, projects, transcribe, transcriber_auth, upload
+from app.routers import admin_auth, admin_users, expenses, jobs, member_auth, projects, transcribe, transcriber_auth, upload
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "client" / "dist"
 ADMIN_DIR = Path(__file__).resolve().parent.parent / "admin" / "dist"
@@ -133,6 +133,7 @@ app.include_router(admin_users.router)
 app.include_router(member_auth.router)
 app.include_router(jobs.router)
 app.include_router(projects.router)
+app.include_router(expenses.router)
 
 
 @app.get("/health", include_in_schema=False)

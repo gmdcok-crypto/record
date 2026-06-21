@@ -3,6 +3,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import ActionNoticeModal, { type ActionNotice } from "./ActionNoticeModal";
 import AdminLogin from "./AdminLogin";
 import AdminTranscriptEditor from "./AdminTranscriptEditor";
+import ExpenseManagement from "./ExpenseManagement";
 import {
   assignProject,
   clearAdminSession,
@@ -49,6 +50,7 @@ type MenuKey =
   | "members"
   | "progress"
   | "sales"
+  | "expenses"
   | "reports"
   | "analytics"
   | "admins";
@@ -232,6 +234,7 @@ const MENU_BASE: Array<Omit<MenuItem, "count">> = [
   { key: "members", label: "회원 관리" },
   { key: "progress", label: "진행 현황" },
   { key: "sales", label: "매출 관리" },
+  { key: "expenses", label: "지출 관리" },
   { key: "reports", label: "집계" },
   { key: "analytics", label: "분석" },
   { key: "admins", label: "관리자 관리" },
@@ -2123,6 +2126,8 @@ function App() {
         return renderProgress();
       case "sales":
         return renderSales();
+      case "expenses":
+        return <ExpenseManagement />;
       case "reports":
         return renderReports();
       case "analytics":
@@ -2246,6 +2251,8 @@ function App() {
                             ? "진행 현황"
                           : activeMenu === "sales"
                                 ? "매출 관리"
+                                : activeMenu === "expenses"
+                                  ? "지출 관리"
                                 : activeMenu === "reports"
                                   ? "집계"
                                   : activeMenu === "admins"

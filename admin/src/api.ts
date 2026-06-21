@@ -384,6 +384,136 @@ export async function deactivateAdminUser(adminId: number): Promise<AdminAccount
   return data.admin;
 }
 
+export type ExpenseCategory = {
+  id: number;
+  name: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string | null;
+};
+
+export type ExpenseRecord = {
+  id: number;
+  category_id: number;
+  category_name: string;
+  amount: number;
+  expense_date: string;
+  note: string;
+  source_type: string | null;
+  source_id: string | null;
+  created_by_admin_id: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type ExpensesOverview = {
+  categories: ExpenseCategory[];
+  records: ExpenseRecord[];
+};
+
+export async function fetchExpensesOverview(params?: {
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<ExpensesOverview> {
+  const url = new URL(`${apiBase()}/api/admin/expenses`);
+  if (params?.dateFrom) url.searchParams.set("date_from", params.dateFrom);
+  if (params?.dateTo) url.searchParams.set("date_to", params.dateTo);
+  const res = await adminFetch(url.toString());
+  if (!res.ok) {
+    throw await parseApiError(res, "지출 데이터를 불러올 수 없습니다");
+  }
+  return (await res.json()) as ExpensesOverview;
+}
+
+export async function createExpenseCategory(payload: {
+  name: string;
+  sort_order?: number;
+}): Promise<ExpenseCategory> {
+  const res = await adminFetch(`${apiBase()}/api/admin/expenses/categories`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "지출항목 추가 실패");
+  }
+  const data = (await res.json()) as { category: ExpenseCategory };
+  return data.category;
+}
+
+export async function updateExpenseCategory(
+  categoryId: number,
+  payload: { name?: string; sort_order?: number; is_active?: boolean },
+): Promise<ExpenseCategory> {
+  const res = await adminFetch(`${apiBase()}/api/admin/expenses/categories/${categoryId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "지출항목 수정 실패");
+  }
+  const data = (await res.json()) as { category: ExpenseCategory };
+  return data.category;
+}
+
+export async function deleteExpenseCategory(categoryId: number): Promise<void> {
+  const res = await adminFetch(`${apiBase()}/api/admin/expenses/categories/${categoryId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "지출항목 삭제 실패");
+  }
+}
+
+export async function createExpenseRecord(payload: {
+  category_id: number;
+  amount: number;
+  expense_date: string;
+  note?: string;
+}): Promise<ExpenseRecord> {
+  const res = await adminFetch(`${apiBase()}/api/admin/expenses/records`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "지출 입력 실패");
+  }
+  const data = (await res.json()) as { record: ExpenseRecord };
+  return data.record;
+}
+
+export async function updateExpenseRecord(
+  recordId: number,
+  payload: {
+    category_id?: number;
+    amount?: number;
+    expense_date?: string;
+    note?: string;
+  },
+): Promise<ExpenseRecord> {
+  const res = await adminFetch(`${apiBase()}/api/admin/expenses/records/${recordId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "지출 수정 실패");
+  }
+  const data = (await res.json()) as { record: ExpenseRecord };
+  return data.record;
+}
+
+export async function deleteExpenseRecord(recordId: number): Promise<void> {
+  const res = await adminFetch(`${apiBase()}/api/admin/expenses/records/${recordId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "지출 삭제 실패");
+  }
+}
+
 async function parseApiError(res: Response, fallback: string): Promise<Error> {
   const contentType = res.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {

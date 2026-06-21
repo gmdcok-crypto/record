@@ -27,6 +27,7 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_transcriber_grade_rates.sql",
     SCRIPTS_DIR / "migrate_settlement_payments.sql",
     SCRIPTS_DIR / "migrate_payment_records.sql",
+    SCRIPTS_DIR / "migrate_expenses.sql",
     SCRIPTS_DIR / "migrate_member_push_subscriptions.sql",
     SCRIPTS_DIR / "migrate_admin_push_subscriptions.sql",
     SCRIPTS_DIR / "migrate_admin_auth.sql",
@@ -276,6 +277,77 @@ def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) ->
                           KEY idx_payment_records_paid_at (paid_at),
                           CONSTRAINT fk_payment_records_member
                             FOREIGN KEY (member_id) REFERENCES members(id)
+                            ON UPDATE CASCADE ON DELETE SET NULL
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                        """
+                    )
+                )
+        logger.info("Railway-safe migration applied: %s", sql_path.name)
+        return True
+
+    if sql_path.name == "migrate_expenses.sql":
+        with engine.begin() as conn:
+            categories_exists = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM information_schema.TABLES
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'expense_categories'
+                    LIMIT 1
+                    """
+                )
+            ).first()
+            if not categories_exists:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE expense_categories (
+                          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                          name VARCHAR(100) NOT NULL,
+                          sort_order INT NOT NULL DEFAULT 0,
+                          is_active TINYINT(1) NOT NULL DEFAULT 1,
+                          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                          UNIQUE KEY uk_expense_categories_name (name),
+                          KEY idx_expense_categories_sort (sort_order)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                        """
+                    )
+                )
+            records_exists = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM information_schema.TABLES
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'expense_records'
+                    LIMIT 1
+                    """
+                )
+            ).first()
+            if not records_exists:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE expense_records (
+                          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                          category_id BIGINT NOT NULL,
+                          amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+                          expense_date DATE NOT NULL,
+                          note VARCHAR(255) NULL,
+                          source_type VARCHAR(30) NULL,
+                          source_id VARCHAR(120) NULL,
+                          created_by_admin_id BIGINT NULL,
+                          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                          KEY idx_expense_records_date (expense_date),
+                          KEY idx_expense_records_category_id (category_id),
+                          KEY idx_expense_records_source (source_type, source_id),
+                          CONSTRAINT fk_expense_records_category
+                            FOREIGN KEY (category_id) REFERENCES expense_categories(id)
+                            ON UPDATE CASCADE ON DELETE RESTRICT,
+                          CONSTRAINT fk_expense_records_admin
+                            FOREIGN KEY (created_by_admin_id) REFERENCES admin_users(id)
                             ON UPDATE CASCADE ON DELETE SET NULL
                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                         """
