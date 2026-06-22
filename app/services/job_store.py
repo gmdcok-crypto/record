@@ -467,8 +467,12 @@ def set_job_status(
 ) -> Job:
     previous = job.status
     job.status = next_status
-    if next_status == PDF_SENT and job.finalized_at is None:
-        job.finalized_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    if next_status == PDF_SENT:
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        if job.finalized_at is None:
+            job.finalized_at = now
+        if job.completed_at is None:
+            job.completed_at = now
     status_log = JobStatusLog(
         job_id=job.job_id,
         from_status=previous,
@@ -639,6 +643,13 @@ def mark_final_pdf_delivered(db: Session, job: Job) -> Job:
         job = get_job_record(db, job_id)
         if job is None:
             raise RuntimeError(f"작업을 찾을 수 없습니다: {job_id}")
+        if job.completed_at is None:
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            job.completed_at = now
+            if job.finalized_at is None:
+                job.finalized_at = now
+            db.commit()
+            db.refresh(job)
 
     try:
         _sync_settlement_month_for_job(db, job)
@@ -1123,7 +1134,7 @@ def _job_delivered_at(job: Job, pdf_sent_at_by_job: dict[str, datetime]) -> date
 
 
 def backfill_completed_job_durations(db: Session) -> int:
-    """pdf_sent(및 레거시 final_done) 작업의 duration_seconds 를 채웁니다."""
+    """pdf_sent 작업의 duration_seconds·completed_at·settlement_amount 를 보정합니다."""
     jobs = db.scalars(
         select(Job).where(
             _settlement_eligible_jobs_filter(),
@@ -1132,11 +1143,17 @@ def backfill_completed_job_durations(db: Session) -> int:
     ).all()
     updated = 0
     for job in jobs:
-        if int(job.duration_seconds or 0) > 0:
-            continue
-        resolved = _resolve_job_duration_seconds(job)
-        if resolved > 0:
-            job.duration_seconds = resolved
+        touched = False
+        if int(job.duration_seconds or 0) <= 0 and _ensure_job_duration_seconds(job) > 0:
+            touched = True
+        needs_settlement = (
+            job.completed_at is None
+            or float(job.settlement_amount or 0) <= 0
+        )
+        if needs_settlement:
+            _apply_job_settlement_on_pdf_delivered(db, job)
+            touched = True
+        if touched:
             updated += 1
     if updated:
         db.commit()
