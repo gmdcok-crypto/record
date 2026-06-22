@@ -1,8 +1,10 @@
-# Frontend stages build in parallel via BuildKit; layer order caches npm/pip when lockfiles unchanged.
-# Railway cache mounts need id=s/<service-id>-<path> (hardcode service ID in Railway dashboard).
-# Layer caching below works without --mount=type=cache.
+# Frontend apps build sequentially in one stage to avoid Railway OOM (exit 137)
+# when BuildKit would otherwise run client/admin/transcriber builds in parallel.
 
-FROM node:20-alpine AS client-build
+FROM node:20-alpine AS frontend-build
+WORKDIR /app
+ENV NODE_OPTIONS=--max-old-space-size=1536
+
 WORKDIR /app/client
 ARG VITE_API_URL=
 ENV VITE_API_URL=$VITE_API_URL
@@ -11,14 +13,12 @@ RUN npm ci --prefer-offline --no-audit --no-fund
 COPY client/ ./
 RUN npm run build
 
-FROM node:20-alpine AS admin-build
 WORKDIR /app/admin
 COPY admin/package.json admin/package-lock.json ./
 RUN npm ci --prefer-offline --no-audit --no-fund
 COPY admin/ ./
 RUN npm run build
 
-FROM node:20-alpine AS transcriber-build
 WORKDIR /app/transcriber
 COPY transcriber/package.json transcriber/package-lock.json ./
 RUN npm ci --prefer-offline --no-audit --no-fund
@@ -47,8 +47,8 @@ RUN mkdir -p /app/app/assets/fonts \
 COPY app ./app
 COPY intro ./intro
 COPY scripts ./scripts
-COPY --from=client-build /app/client/dist ./client/dist
-COPY --from=admin-build /app/admin/dist ./admin/dist
-COPY --from=transcriber-build /app/transcriber/dist ./transcriber/dist
+COPY --from=frontend-build /app/client/dist ./client/dist
+COPY --from=frontend-build /app/admin/dist ./admin/dist
+COPY --from=frontend-build /app/transcriber/dist ./transcriber/dist
 
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

@@ -6,4 +6,8 @@ export default defineConfig({
   server: {
     port: 5175,
   },
+  build: {
+    sourcemap: false,
+    reportCompressedSize: false,
+  },
 });
