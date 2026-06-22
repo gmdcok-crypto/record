@@ -351,8 +351,8 @@ function mapJobStatus(status: string): JobStatus {
   }
 }
 
-function normalizeWorkflowStatus(status: string): string {
-  switch (status) {
+function normalizeWorkflowStatus(status: string | undefined | null): string {
+  switch (status ?? "") {
     case "uploaded":
       return "waiting_assignment";
     case "assigned":
@@ -365,7 +365,7 @@ function normalizeWorkflowStatus(status: string): string {
     case "final_done":
       return "pdf_sent";
     default:
-      return status;
+      return status ?? "";
   }
 }
 
