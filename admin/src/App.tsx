@@ -585,10 +585,7 @@ function App() {
   const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [editingAdminId, setEditingAdminId] = useState<number | null>(null);
   const [adminForm, setAdminForm] = useState<AdminForm>(EMPTY_ADMIN_FORM);
-  const [salesDateFrom, setSalesDateFrom] = useState(() => {
-    const today = todayKstDateKey();
-    return `${today.slice(0, 4)}-01-01`;
-  });
+  const [salesDateFrom, setSalesDateFrom] = useState(() => todayKstDateKey());
   const [salesDateTo, setSalesDateTo] = useState(() => todayKstDateKey());
 
   useEffect(() => {
