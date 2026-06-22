@@ -755,8 +755,16 @@ export default function App() {
         await saveTranscript(job.job_id, currentTranscript, "pdf_finalize");
         await finalizeTranscriptPdf(job.job_id, currentTranscript);
       }
-      await deliverTranscriptPdf(job.job_id, bundleProjectPdf);
-      setJob({ ...job, transcript_json: currentTranscript, final_pdf_ready: true, status: "pdf_sent" });
+      const result = await deliverTranscriptPdf(job.job_id, bundleProjectPdf);
+      const nextStatus = result.status || "pdf_sent";
+      setJob({
+        ...job,
+        transcript_json: currentTranscript,
+        final_pdf_ready: true,
+        status: nextStatus,
+        workflow_status: nextStatus,
+      });
+      await loadProjects();
       setChangeHistoryRefresh((value) => value + 1);
       showNotice("success", bundleProjectPdf ? "통합본 PDF를 의뢰인에게 전달했습니다." : "개별 PDF를 의뢰인에게 전달했습니다.");
     } catch (err) {

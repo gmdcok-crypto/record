@@ -24,6 +24,7 @@ from app.services.database_migrate import ensure_jobs_status_column, run_sql_mig
 from app.services.database_reset import purge_all_data, reset_database_schema
 from app.services.project_store import get_project_record, list_project_jobs, list_projects, list_transcriber_projects
 from app.services.job_workflow import (
+    CANCELLED,
     CLIENT_REVIEW,
     DELIVER_DRAFT_ALLOWED_STATUSES,
     PUSH_NOTIFY_TRANSCRIBER_STATUSES,
@@ -1754,14 +1755,19 @@ def transcriber_deliver_pdf(
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
         project.pdf_delivery_mode = "bundle"
-        db.commit()
-    elif job.project_id:
-        project = get_project_record(db, job.project_id)
-        if project is not None:
-            project.pdf_delivery_mode = "individual"
-            db.commit()
+        for project_job in list_project_jobs(db, job.project_id):
+            if project_job.assigned_transcriber_id != current.id:
+                continue
+            if normalize_job_status(project_job.status) == CANCELLED:
+                continue
+            mark_final_pdf_delivered(db, project_job)
+    else:
+        if job.project_id:
+            project = get_project_record(db, job.project_id)
+            if project is not None:
+                project.pdf_delivery_mode = "individual"
+        mark_final_pdf_delivered(db, job)
 
-    mark_final_pdf_delivered(db, job)
     _notify_client_pdf_delivery(db, job, delivery_mode="bundle" if body.bundle_project_pdf else "individual")
     _notify_client_status_change(db, job, note="PDF가 전달되었습니다.")
     publish_admin_event("job_updated", {"job_id": job_id, "status": "pdf_sent"})
