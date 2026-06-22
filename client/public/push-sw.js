@@ -27,7 +27,16 @@ self.addEventListener("push", (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(title, options),
+    (async () => {
+      const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of clients) {
+        client.postMessage({
+          type: "WEB_PUSH_NOTIFICATION_RECEIVED",
+          payload: { jobId: payload.jobId || null, kind: payload.kind || "general" },
+        });
+      }
+      await self.registration.showNotification(title, options);
+    })(),
   );
 });
 

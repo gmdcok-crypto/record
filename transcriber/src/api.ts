@@ -638,7 +638,7 @@ export async function finalizeTranscriptPdf(
 export async function deliverTranscriptPdf(
   jobId: string,
   bundleProjectPdf: boolean,
-): Promise<{ status: string; project_id?: string | null; pdf_delivery_mode: string }> {
+): Promise<{ status: string; workflow_status?: string; project_id?: string | null; pdf_delivery_mode: string }> {
   const res = await fetch(`${apiBase()}/api/jobs/transcriber/${jobId}/deliver-pdf`, {
     method: "POST",
     headers: { ...transcriberAuthHeaders(), "Content-Type": "application/json" },

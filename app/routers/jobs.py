@@ -1768,12 +1768,17 @@ def transcriber_deliver_pdf(
                 project.pdf_delivery_mode = "individual"
         mark_final_pdf_delivered(db, job)
 
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
     _notify_client_pdf_delivery(db, job, delivery_mode="bundle" if body.bundle_project_pdf else "individual")
     _notify_client_status_change(db, job, note="PDF가 전달되었습니다.")
-    publish_admin_event("job_updated", {"job_id": job_id, "status": "pdf_sent"})
+    publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
     return {
         "job_id": job_id,
-        "status": "pdf_sent",
+        "status": job.status,
+        "workflow_status": job.status,
         "project_id": job.project_id,
         "pdf_delivery_mode": "bundle" if body.bundle_project_pdf else "individual",
     }

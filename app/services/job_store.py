@@ -575,29 +575,35 @@ def _ensure_pdf_sent_status_log(db: Session, job: Job) -> None:
 
 
 def mark_final_pdf_delivered(db: Session, job: Job) -> Job:
-    if job.status == "pdf_sent":
-        _ensure_pdf_sent_status_log(db, job)
-        _apply_job_settlement_on_pdf_delivered(db, job)
-        _sync_settlement_month_for_job(db, job)
-        db.commit()
-        db.refresh(job)
-        return job
-    previous = job.status
-    job.status = "pdf_sent"
-    db.add(
-        JobStatusLog(
-            job_id=job.job_id,
-            from_status=previous,
-            to_status="pdf_sent",
-            change_note="최종 PDF 의뢰인 전달",
-            changed_by_transcriber_id=job.assigned_transcriber_id,
+    canonical = normalize_job_status(job.status)
+    if canonical != PDF_SENT:
+        previous = job.status
+        job.status = PDF_SENT
+        db.add(
+            JobStatusLog(
+                job_id=job.job_id,
+                from_status=previous,
+                to_status=PDF_SENT,
+                change_note="최종 PDF 의뢰인 전달",
+                changed_by_transcriber_id=job.assigned_transcriber_id,
+            )
         )
-    )
-    db.flush()
+        db.flush()
+    else:
+        _ensure_pdf_sent_status_log(db, job)
+
     _apply_job_settlement_on_pdf_delivered(db, job)
-    _sync_settlement_month_for_job(db, job)
     db.commit()
     db.refresh(job)
+
+    try:
+        _sync_settlement_month_for_job(db, job)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("settlement sync failed after pdf delivery job_id=%s", job.job_id)
+        db.refresh(job)
+
     return job
 
 

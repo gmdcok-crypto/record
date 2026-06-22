@@ -756,13 +756,13 @@ export default function App() {
         await finalizeTranscriptPdf(job.job_id, currentTranscript);
       }
       const result = await deliverTranscriptPdf(job.job_id, bundleProjectPdf);
-      const nextStatus = result.status || "pdf_sent";
+      const refreshed = await fetchJob(job.job_id);
       setJob({
-        ...job,
-        transcript_json: currentTranscript,
+        ...refreshed,
+        transcript_json: refreshed.transcript_json ?? currentTranscript,
+        status: result.workflow_status ?? result.status ?? refreshed.workflow_status ?? refreshed.status ?? "pdf_sent",
+        workflow_status: result.workflow_status ?? result.status ?? refreshed.workflow_status ?? refreshed.status ?? "pdf_sent",
         final_pdf_ready: true,
-        status: nextStatus,
-        workflow_status: nextStatus,
       });
       await loadProjects();
       setChangeHistoryRefresh((value) => value + 1);
