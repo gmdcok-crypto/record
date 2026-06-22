@@ -467,6 +467,31 @@ def set_job_status(
     return job
 
 
+def set_job_status_resilient(
+    db: Session,
+    job: Job,
+    next_status: str,
+    note: str | None = None,
+    *,
+    admin: AdminUser | None = None,
+) -> Job:
+    try:
+        return set_job_status(db, job, next_status, note, admin=admin)
+    except (DataError, DBAPIError):
+        db.rollback()
+        logger.exception("Job status update failed for %s -> %s", job.job_id, next_status)
+        from app.db import get_engine
+        from app.services.database_migrate import ensure_jobs_status_column
+
+        engine = get_engine()
+        if engine is not None:
+            ensure_jobs_status_column(engine)
+        refreshed = get_job_record(db, job.job_id)
+        if refreshed is None:
+            raise
+        return set_job_status(db, refreshed, next_status, note, admin=admin)
+
+
 def mark_transcript_saved(db: Session, job: Job, transcript_key: str, transcript_json: dict) -> Job:
     job.r2_transcript_key = transcript_key
     job.transcript_version = (job.transcript_version or 0) + 1
@@ -575,35 +600,38 @@ def _ensure_pdf_sent_status_log(db: Session, job: Job) -> None:
 
 
 def mark_final_pdf_delivered(db: Session, job: Job) -> Job:
-    canonical = normalize_job_status(job.status)
-    if canonical != PDF_SENT:
-        previous = job.status
-        job.status = PDF_SENT
-        db.add(
-            JobStatusLog(
-                job_id=job.job_id,
-                from_status=previous,
-                to_status=PDF_SENT,
-                change_note="최종 PDF 의뢰인 전달",
-                changed_by_transcriber_id=job.assigned_transcriber_id,
-            )
-        )
-        db.flush()
+    job_id = job.job_id
+    if normalize_job_status(job.status) != PDF_SENT:
+        job = set_job_status_resilient(db, job, PDF_SENT, "최종 PDF 의뢰인 전달")
     else:
         _ensure_pdf_sent_status_log(db, job)
+        db.commit()
+        db.refresh(job)
 
-    _apply_job_settlement_on_pdf_delivered(db, job)
-    db.commit()
-    db.refresh(job)
+    try:
+        _apply_job_settlement_on_pdf_delivered(db, job)
+        db.commit()
+        db.refresh(job)
+    except Exception:
+        db.rollback()
+        logger.exception("settlement apply failed after pdf delivery job_id=%s", job_id)
+        job = get_job_record(db, job_id)
+        if job is None:
+            raise RuntimeError(f"작업을 찾을 수 없습니다: {job_id}")
 
     try:
         _sync_settlement_month_for_job(db, job)
         db.commit()
     except Exception:
         db.rollback()
-        logger.exception("settlement sync failed after pdf delivery job_id=%s", job.job_id)
-        db.refresh(job)
+        logger.exception("settlement sync failed after pdf delivery job_id=%s", job_id)
 
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise RuntimeError(f"작업을 찾을 수 없습니다: {job_id}")
+    db.refresh(job)
+    if normalize_job_status(job.status) != PDF_SENT:
+        raise RuntimeError(f"PDF 전달 후 상태가 pdf_sent로 저장되지 않았습니다 (현재: {job.status})")
     return job
 
 

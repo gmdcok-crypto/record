@@ -27,6 +27,7 @@ from app.services.job_workflow import (
     CANCELLED,
     CLIENT_REVIEW,
     DELIVER_DRAFT_ALLOWED_STATUSES,
+    PDF_SENT,
     PUSH_NOTIFY_TRANSCRIBER_STATUSES,
     TRANSCRIBER_REVIEW,
     TRANSCRIPT_REQUEST,
@@ -1689,6 +1690,13 @@ def download_member_project_final_pdf_bundle(
     return _download_project_bundle_pdf(project_id, db)
 
 
+def _deliver_pdf_or_http_error(db: Session, job: Job) -> Job:
+    try:
+        return mark_final_pdf_delivered(db, job)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @router.post("/admin/jobs/{job_id}/deliver-pdf")
 def admin_deliver_pdf(
     job_id: str,
@@ -1700,13 +1708,14 @@ def admin_deliver_pdf(
         raise HTTPException(status_code=404, detail="Job not found")
     if not job.final_pdf_r2_key:
         raise HTTPException(status_code=409, detail="먼저 PDF를 생성해 주세요.")
-    job = mark_final_pdf_delivered(db, job)
+    job = _deliver_pdf_or_http_error(db, job)
     _notify_client_pdf_delivery(db, job, delivery_mode="individual")
     _notify_client_status_change(db, job, note="PDF가 전달되었습니다.")
-    publish_admin_event("job_updated", {"job_id": job_id, "status": "pdf_sent"})
+    publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
     return {
         "job_id": job_id,
         "status": job.status,
+        "workflow_status": job.status,
         "settlement_amount": float(job.settlement_amount or 0),
     }
 
@@ -1760,17 +1769,22 @@ def transcriber_deliver_pdf(
                 continue
             if normalize_job_status(project_job.status) == CANCELLED:
                 continue
-            mark_final_pdf_delivered(db, project_job)
+            _deliver_pdf_or_http_error(db, project_job)
     else:
         if job.project_id:
             project = get_project_record(db, job.project_id)
             if project is not None:
                 project.pdf_delivery_mode = "individual"
-        mark_final_pdf_delivered(db, job)
+        _deliver_pdf_or_http_error(db, job)
 
     job = get_job_record(db, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
+    if normalize_job_status(job.status) != PDF_SENT:
+        raise HTTPException(
+            status_code=500,
+            detail=f"PDF 전달 후 상태가 갱신되지 않았습니다 (현재: {job.status})",
+        )
 
     _notify_client_pdf_delivery(db, job, delivery_mode="bundle" if body.bundle_project_pdf else "individual")
     _notify_client_status_change(db, job, note="PDF가 전달되었습니다.")
