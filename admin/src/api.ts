@@ -813,6 +813,60 @@ export async function revokeTranscriberAuth(transcriberCode: string): Promise<vo
   }
 }
 
+export type SettlementSnapshotRow = {
+  settlement_id: number | null;
+  transcriber_id: number;
+  transcriber_code: string;
+  transcriber_name: string;
+  month: string;
+  period_start: string;
+  period_end: string;
+  as_of: string;
+  jobs: number;
+  total_minutes: number;
+  amount: number;
+  status: string;
+  total_paid_amount: number;
+  confirmed_at: string | null;
+  paid_at: string | null;
+  can_confirm: boolean;
+  can_pay: boolean;
+};
+
+export type SettlementSnapshotResponse = {
+  as_of: string;
+  month: string;
+  period_start: string;
+  period_end: string;
+  summary: {
+    transcriber_count: number;
+    active_settlement_count: number;
+    total_jobs: number;
+    total_amount: number;
+  };
+  rows: SettlementSnapshotRow[];
+};
+
+export async function fetchSettlementSnapshots(asOf: string): Promise<SettlementSnapshotResponse> {
+  const params = new URLSearchParams({ as_of: asOf });
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/settlements?${params.toString()}`);
+  if (!res.ok) {
+    throw await parseApiError(res, "정산 내역 조회 실패");
+  }
+  return (await res.json()) as SettlementSnapshotResponse;
+}
+
+export async function confirmSettlementSnapshot(transcriberId: number, asOf: string): Promise<void> {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/settlements/confirm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transcriber_id: transcriberId, as_of: asOf }),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "정산 확정 실패");
+  }
+}
+
 export async function updateSettlementStatus(settlementId: number, status: string): Promise<void> {
   const res = await adminFetch(`${apiBase()}/api/jobs/admin/settlements/${settlementId}/status`, {
     method: "POST",

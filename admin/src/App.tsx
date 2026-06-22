@@ -4,6 +4,7 @@ import ActionNoticeModal, { type ActionNotice } from "./ActionNoticeModal";
 import AdminLogin from "./AdminLogin";
 import AdminTranscriptEditor from "./AdminTranscriptEditor";
 import ExpenseManagement from "./ExpenseManagement";
+import TranscriberSettlementPanel from "./TranscriberSettlementPanel";
 import {
   assignProject,
   clearAdminSession,
@@ -30,6 +31,7 @@ import {
   type AdminProfile,
   type AdminRole,
   type JobResponse,
+  type SettlementSnapshotRow,
   type TranscriberGradeRate as ApiTranscriberGradeRate,
 } from "./api";
 import {
@@ -555,6 +557,7 @@ function App() {
   const [settlementPayTarget, setSettlementPayTarget] = useState<SettlementItem | null>(null);
   const [settlementPayAmount, setSettlementPayAmount] = useState("");
   const [settlementPayNote, setSettlementPayNote] = useState("");
+  const [settlementPanelRefresh, setSettlementPanelRefresh] = useState(0);
   const [adminAccounts, setAdminAccounts] = useState<AdminAccount[]>([]);
   const [adminAccountsLoading, setAdminAccountsLoading] = useState(false);
   const [adminQuery, setAdminQuery] = useState("");
@@ -859,30 +862,6 @@ function App() {
     }));
   }, [overview]);
 
-  const settlements = useMemo<SettlementItem[]>(() => {
-    return (overview?.settlements ?? []).map((item) => ({
-      id: item.id,
-      month: item.month,
-      transcriberId: item.transcriber_id ?? null,
-      transcriber: String(item.transcriber),
-      jobs: item.jobs,
-      amount: item.amount,
-      totalPaidAmount: item.total_paid_amount ?? 0,
-      status: mapSettlementStatus(item.status),
-      paidAt: item.paid_at ? formatKstDateTime(item.paid_at) : "-",
-    }));
-  }, [overview]);
-
-  const settlementByTranscriber = useMemo(() => {
-    const map = new Map<number, SettlementItem>();
-    settlements.forEach((item) => {
-      if (item.transcriberId != null) {
-        map.set(item.transcriberId, item);
-      }
-    });
-    return map;
-  }, [settlements]);
-
   const transcriberGradeRates = useMemo<GradeRateItem[]>(
     () =>
       (overview?.transcriber_grade_rates ?? []).map((item: ApiTranscriberGradeRate) => ({
@@ -1080,6 +1059,21 @@ function App() {
     setSettlementPayNote("");
   };
 
+  const openSettlementPayFromSnapshot = (row: SettlementSnapshotRow) => {
+    if (!row.settlement_id) return;
+    openSettlementPayModal({
+      id: row.settlement_id,
+      month: row.month,
+      transcriberId: row.transcriber_id,
+      transcriber: row.transcriber_name,
+      jobs: row.jobs,
+      amount: row.amount,
+      totalPaidAmount: row.total_paid_amount,
+      status: mapSettlementStatus(row.status),
+      paidAt: row.paid_at ? formatKstDateTime(row.paid_at) : "-",
+    });
+  };
+
   const closeSettlementPayModal = () => {
     setSettlementPayTarget(null);
     setSettlementPayAmount("");
@@ -1100,6 +1094,8 @@ function App() {
       });
     });
     closeSettlementPayModal();
+    setSettlementPanelRefresh((value) => value + 1);
+    void loadOverview({ silent: true });
   };
 
   const openCreateTranscriberModal = () => {
@@ -1940,19 +1936,7 @@ function App() {
                   <td className="px-3 py-2 text-[12px] text-slate-400">{person.unitPrice}</td>
                   <td className="px-3 py-2 text-[12px] text-slate-400">{person.qualityScore}</td>
                   <td className="px-3 py-2">
-                    {(() => {
-                      const settlementItem = settlementByTranscriber.get(person.numericId);
-                      return (
                     <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={!settlementItem}
-                        onClick={() => settlementItem && openSettlementPayModal(settlementItem)}
-                        className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-medium text-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
-                        title={settlementItem ? "정산 처리" : "정산 데이터 없음"}
-                      >
-                        정산
-                      </button>
                       <button
                         type="button"
                         onClick={() => openEditTranscriberModal(person)}
@@ -1976,8 +1960,6 @@ function App() {
                         삭제
                       </button>
                     </div>
-                      );
-                    })()}
                   </td>
                 </tr>
               ))}
@@ -1985,6 +1967,14 @@ function App() {
           </table>
         )}
       </div>
+      <TranscriberSettlementPanel
+        refreshToken={settlementPanelRefresh}
+        onPay={openSettlementPayFromSnapshot}
+        onChanged={() => {
+          setSettlementPanelRefresh((value) => value + 1);
+          void loadOverview({ silent: true });
+        }}
+      />
     </div>
   );
 

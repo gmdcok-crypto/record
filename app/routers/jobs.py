@@ -1,7 +1,7 @@
 import logging
 import re
 from pathlib import Path
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated
 from urllib.parse import quote
 
@@ -33,10 +33,12 @@ from app.services.job_store import (
     delete_transcriber,
     get_job_record,
     get_invoice_record,
+    confirm_settlement_snapshot,
     get_settlement_record,
     get_or_create_client_for_member,
     get_transcriber_by_code,
     list_client_jobs,
+    list_settlement_snapshots,
     list_transcriber_grade_rates,
     list_transcribers,
     list_transcriber_jobs,
@@ -174,6 +176,11 @@ class SettlementStatusUpdateRequest(BaseModel):
 class SettlementPaymentRequest(BaseModel):
     amount: float
     note: str | None = None
+
+
+class SettlementConfirmRequest(BaseModel):
+    transcriber_id: int
+    as_of: date
 
 
 class TranscriberGradeRateRequest(BaseModel):
@@ -1084,6 +1091,39 @@ def admin_delete_transcriber(
         raise HTTPException(status_code=409, detail=f"속기사 삭제 실패: {exc}") from exc
     publish_admin_event("transcriber_deleted", {"transcriber_code": transcriber_code})
     return {"code": transcriber_code, "deleted": True}
+
+
+@router.get("/admin/settlements")
+def admin_list_settlements(
+    db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
+    as_of: Annotated[date, Query(description="기준일 (KST). 선택한 달의 해당일까지 완료된 작업을 집계합니다.")],
+) -> dict:
+    return list_settlement_snapshots(db, as_of)
+
+
+@router.post("/admin/settlements/confirm")
+def admin_confirm_settlement(
+    body: SettlementConfirmRequest,
+    db: Annotated[Session, Depends(get_db)],
+    admin: AdminAuth,
+) -> dict:
+    try:
+        settlement = confirm_settlement_snapshot(
+            db,
+            transcriber_id=body.transcriber_id,
+            as_of=body.as_of,
+            admin=admin,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    publish_admin_event("settlement_updated", {"settlement_id": settlement.id})
+    return {
+        "id": settlement.id,
+        "status": settlement.status,
+        "confirmed_at": settlement.confirmed_at.isoformat() if settlement.confirmed_at else None,
+        "final_amount": float(settlement.final_amount or 0),
+    }
 
 
 @router.post("/admin/settlements/{settlement_id}/status")
