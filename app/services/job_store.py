@@ -525,7 +525,9 @@ def mark_transcript_saved(db: Session, job: Job, transcript_key: str, transcript
     return job
 
 
-def store_final_pdf(db: Session, job: Job, pdf_key: str, filename: str) -> Job:
+def store_final_pdf(db: Session, job: Job, pdf_key: str, filename: str, *, transcript_json: dict | None = None) -> Job:
+    if transcript_json is not None:
+        _ensure_job_duration_seconds(job, transcript_json=transcript_json)
     job.final_pdf_r2_key = pdf_key
     job.final_pdf_filename = filename
     job.final_pdf_generated_at = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -557,12 +559,36 @@ def _compute_job_settlement_amount(db: Session, job: Job) -> float:
     return float(unit_price * quantity_minutes)
 
 
+def _ensure_job_completed_at(job: Job) -> datetime:
+    if job.completed_at is not None:
+        return job.completed_at
+    completed_at = (
+        job.final_pdf_generated_at
+        or job.finalized_at
+        or datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+    job.completed_at = completed_at
+    return completed_at
+
+
+def _touch_pdf_sent_job_fields(db: Session, job: Job, *, transcript_json: dict | None = None) -> bool:
+    """pdf_sent 작업의 completed_at·duration_seconds 를 채웁니다."""
+    touched = False
+    if int(job.duration_seconds or 0) <= 0 and _ensure_job_duration_seconds(job, transcript_json=transcript_json) > 0:
+        touched = True
+    if job.completed_at is None:
+        _ensure_job_completed_at(job)
+        touched = True
+    return touched
+
+
 def _apply_job_settlement_on_pdf_delivered(db: Session, job: Job) -> float:
     """속기사 업무 완료(pdf_sent) 시점에 작업비를 jobs 테이블에 반영합니다."""
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-    job.completed_at = now
+    if job.completed_at is None:
+        job.completed_at = job.final_pdf_generated_at or job.finalized_at or now
     if job.finalized_at is None:
-        job.finalized_at = now
+        job.finalized_at = job.completed_at or now
     _ensure_job_duration_seconds(job)
     amount = _compute_job_settlement_amount(db, job)
     job.settlement_amount = amount
@@ -626,6 +652,9 @@ def _ensure_pdf_sent_status_log(db: Session, job: Job) -> None:
 
 def mark_final_pdf_delivered(db: Session, job: Job) -> Job:
     job_id = job.job_id
+    if _touch_pdf_sent_job_fields(db, job):
+        db.commit()
+        db.refresh(job)
     if normalize_job_status(job.status) != PDF_SENT:
         job = set_job_status_resilient(db, job, PDF_SENT, "최종 PDF 의뢰인 전달")
     else:
@@ -1025,6 +1054,7 @@ def _duration_seconds_from_transcript_json(transcript_json: dict | None) -> int 
     if not transcript_json:
         return None
     max_end_ms = 0
+    segment_span_ms = 0
     for token in transcript_json.get("tokens") or []:
         if not isinstance(token, dict):
             continue
@@ -1034,9 +1064,14 @@ def _duration_seconds_from_transcript_json(transcript_json: dict | None) -> int 
     for segment in transcript_json.get("segments") or []:
         if not isinstance(segment, dict):
             continue
+        start_ms = segment.get("start_ms")
         end_ms = segment.get("end_ms")
+        if isinstance(start_ms, (int, float)) and isinstance(end_ms, (int, float)) and end_ms > start_ms:
+            segment_span_ms += int(end_ms - start_ms)
         if isinstance(end_ms, (int, float)) and end_ms > max_end_ms:
             max_end_ms = int(end_ms)
+    if segment_span_ms > 0:
+        return segment_span_ms // 1000
     if max_end_ms <= 0:
         return None
     return max_end_ms // 1000
@@ -1143,20 +1178,20 @@ def backfill_completed_job_durations(db: Session) -> int:
     ).all()
     updated = 0
     for job in jobs:
-        touched = False
-        if int(job.duration_seconds or 0) <= 0 and _ensure_job_duration_seconds(job) > 0:
-            touched = True
-        needs_settlement = (
-            job.completed_at is None
-            or float(job.settlement_amount or 0) <= 0
-        )
-        if needs_settlement:
-            _apply_job_settlement_on_pdf_delivered(db, job)
-            touched = True
-        if touched:
-            updated += 1
-    if updated:
-        db.commit()
+        try:
+            touched = _touch_pdf_sent_job_fields(db, job)
+            if float(job.settlement_amount or 0) <= 0:
+                amount = _compute_job_settlement_amount(db, job)
+                job.settlement_amount = amount
+                if job.settlement_status not in {"confirmed", "paid"}:
+                    job.settlement_status = "waiting"
+                touched = True
+            if touched:
+                db.commit()
+                updated += 1
+        except Exception:
+            logger.exception("pdf_sent job backfill failed job_id=%s", job.job_id)
+            db.rollback()
     return updated
 
 

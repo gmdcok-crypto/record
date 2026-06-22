@@ -1626,7 +1626,7 @@ def finalize_transcript_pdf(
         transcript = filter_transcript_to_selected_segments(transcript, job.selected_segments_json or [])
         pdf_bytes, filename = build_transcript_pdf(transcript)
         pdf_key, stored_filename = save_final_pdf(job_id, pdf_bytes, filename)
-        store_final_pdf(db, job, pdf_key, stored_filename)
+        store_final_pdf(db, job, pdf_key, stored_filename, transcript_json=transcript)
         publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
