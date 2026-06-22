@@ -304,6 +304,7 @@ export async function uploadVoice(
   onUploadComplete?: () => void,
   projectId?: string,
   selectedSegments?: SelectedUploadSegment[],
+  billableDurationMs?: number,
 ): Promise<UploadResponse> {
   const requestId =
     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -318,6 +319,9 @@ export async function uploadVoice(
       }
       if (selectedSegments?.length) {
         form.append("selected_segments_json", JSON.stringify(selectedSegments));
+      }
+      if (billableDurationMs != null && billableDurationMs > 0) {
+        form.append("billable_duration_ms", String(Math.floor(billableDurationMs)));
       }
 
       const token = localStorage.getItem(MEMBER_TOKEN_KEY);
@@ -379,6 +383,8 @@ export async function uploadVoice(
             content_type: contentType,
             project_id: projectId ?? null,
             selected_segments: selectedSegments ?? [],
+            billable_duration_ms:
+              billableDurationMs != null && billableDurationMs > 0 ? Math.floor(billableDurationMs) : null,
           }),
         },
         2,
@@ -437,6 +443,8 @@ export async function uploadVoice(
             content_type: contentType,
             project_id: projectId ?? null,
             selected_segments: selectedSegments ?? [],
+            billable_duration_ms:
+              billableDurationMs != null && billableDurationMs > 0 ? Math.floor(billableDurationMs) : null,
           }),
         },
         2,

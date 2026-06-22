@@ -303,6 +303,7 @@ def create_job_record(
     member: Member | None = None,
     project_id: str | None = None,
     selected_segments: list[dict] | None = None,
+    duration_seconds: int | None = None,
 ) -> Job:
     if member is not None:
         client = get_or_create_client_for_member(db, member)
@@ -312,6 +313,12 @@ def create_job_record(
     due_at = now + timedelta(hours=24)
     title = transcript_json.get("filename") if transcript_json else None
     title = (title or infer_title(filename)).strip()
+
+    resolved_duration = int(duration_seconds or 0)
+    if resolved_duration <= 0:
+        segment_ms = _duration_ms_from_selected_segments(selected_segments)
+        if segment_ms > 0:
+            resolved_duration = segment_ms // 1000
 
     job = Job(
         job_id=job_id,
@@ -329,6 +336,7 @@ def create_job_record(
         assigned_admin_id=None,
         r2_voice_key=voice_key,
         r2_transcript_key=transcript_key,
+        duration_seconds=resolved_duration if resolved_duration > 0 else None,
         selected_segments_json=selected_segments or None,
         transcript_version=1,
         speaker_count=len((transcript_json or {}).get("speaker_labels") or {}),
@@ -496,6 +504,7 @@ def mark_transcript_saved(db: Session, job: Job, transcript_key: str, transcript
     job.r2_transcript_key = transcript_key
     job.transcript_version = (job.transcript_version or 0) + 1
     job.speaker_count = len((transcript_json or {}).get("speaker_labels") or {})
+    _ensure_job_duration_seconds(job, transcript_json=transcript_json)
     db.commit()
     db.refresh(job)
     return job
@@ -529,7 +538,7 @@ def _compute_job_settlement_amount(db: Session, job: Job) -> float:
         for row in list_transcriber_grade_rates(db)
     }
     unit_price = _resolve_settlement_unit_price(transcriber, rates_by_grade)
-    quantity_minutes = _round_settlement_minutes(job.duration_seconds)
+    quantity_minutes = _round_settlement_minutes(_resolve_job_duration_seconds(job))
     return float(unit_price * quantity_minutes)
 
 
@@ -539,6 +548,7 @@ def _apply_job_settlement_on_pdf_delivered(db: Session, job: Job) -> float:
     job.completed_at = now
     if job.finalized_at is None:
         job.finalized_at = now
+    _ensure_job_duration_seconds(job)
     amount = _compute_job_settlement_amount(db, job)
     job.settlement_amount = amount
     if job.settlement_status not in {"confirmed", "paid"}:
@@ -965,6 +975,72 @@ def _ensure_payment_records_table(db: Session) -> None:
             )
 
 
+def _duration_ms_from_selected_segments(segments: list | None) -> int:
+    if not segments:
+        return 0
+    total_ms = 0
+    for segment in segments:
+        if not isinstance(segment, dict):
+            continue
+        if not segment.get("selected"):
+            continue
+        start_ms = int(segment.get("start_ms") or 0)
+        end_ms = int(segment.get("end_ms") or 0)
+        total_ms += max(0, end_ms - start_ms)
+    return total_ms
+
+
+def _duration_seconds_from_transcript_json(transcript_json: dict | None) -> int | None:
+    if not transcript_json:
+        return None
+    max_end_ms = 0
+    for token in transcript_json.get("tokens") or []:
+        if not isinstance(token, dict):
+            continue
+        end_ms = token.get("end_ms")
+        if isinstance(end_ms, (int, float)) and end_ms > max_end_ms:
+            max_end_ms = int(end_ms)
+    for segment in transcript_json.get("segments") or []:
+        if not isinstance(segment, dict):
+            continue
+        end_ms = segment.get("end_ms")
+        if isinstance(end_ms, (int, float)) and end_ms > max_end_ms:
+            max_end_ms = int(end_ms)
+    if max_end_ms <= 0:
+        return None
+    return max_end_ms // 1000
+
+
+def _try_load_transcript_for_job(job: Job) -> dict | None:
+    try:
+        from app.services.r2 import get_transcript_json
+
+        return get_transcript_json(job.job_id)
+    except Exception:
+        logger.debug("transcript load failed for settlement duration job_id=%s", job.job_id, exc_info=True)
+        return None
+
+
+def _resolve_job_duration_seconds(job: Job, *, transcript_json: dict | None = None) -> int:
+    stored = int(job.duration_seconds or 0)
+    if stored > 0:
+        return stored
+    from_segments = _duration_ms_from_selected_segments(job.selected_segments_json)
+    if from_segments > 0:
+        return from_segments // 1000
+    if transcript_json is None:
+        transcript_json = _try_load_transcript_for_job(job)
+    from_transcript = _duration_seconds_from_transcript_json(transcript_json)
+    return int(from_transcript or 0)
+
+
+def _ensure_job_duration_seconds(job: Job, *, transcript_json: dict | None = None) -> int:
+    resolved = _resolve_job_duration_seconds(job, transcript_json=transcript_json)
+    if resolved > 0 and int(job.duration_seconds or 0) <= 0:
+        job.duration_seconds = resolved
+    return resolved
+
+
 def _round_settlement_minutes(duration_seconds: int | None) -> int:
     seconds = int(duration_seconds or 0)
     if seconds <= 0:
@@ -1058,7 +1134,8 @@ def _build_grouped_settlement_entries(
             continue
         if delivered_date > cutoff:
             continue
-        quantity_minutes = _round_settlement_minutes(job.duration_seconds)
+        duration_seconds = _ensure_job_duration_seconds(job)
+        quantity_minutes = _round_settlement_minutes(duration_seconds)
         unit_price = _resolve_settlement_unit_price(transcriber, rates_by_grade)
         amount = float(unit_price * quantity_minutes)
         grouped_entries.setdefault((transcriber.id, period_start, period_end), []).append(
@@ -1354,7 +1431,8 @@ def _build_all_grouped_settlement_entries(db: Session) -> dict[tuple[int, date, 
         if delivered_at is None:
             continue
         period_start, period_end = _month_period_for_date(_as_kst_date(delivered_at))
-        quantity_minutes = _round_settlement_minutes(job.duration_seconds)
+        duration_seconds = _ensure_job_duration_seconds(job)
+        quantity_minutes = _round_settlement_minutes(duration_seconds)
         unit_price = _resolve_settlement_unit_price(transcriber, rates_by_grade)
         amount = float(unit_price * quantity_minutes)
         grouped_entries.setdefault((transcriber.id, period_start, period_end), []).append(
@@ -1397,6 +1475,7 @@ def sync_generated_settlements(db: Session) -> None:
         )
     ).all()
     for job in completed_jobs:
+        _ensure_job_duration_seconds(job)
         computed = settlement_amount_by_job.get(job.job_id)
         if computed is None:
             computed = _compute_job_settlement_amount(db, job)

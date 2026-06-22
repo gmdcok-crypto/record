@@ -54,6 +54,7 @@ import {
 } from "./transcriptEditor";
 import UploadBillingPanel, { type BillingRestoreHint } from "./UploadBillingPanel";
 import type { UploadBillingFile } from "./uploadBilling";
+import { fileBillableDurationMs } from "./uploadBilling";
 import {
   clearPendingUploadSnapshot,
   restorePendingUploadSnapshot,
@@ -945,11 +946,23 @@ export default function App() {
     void loadJobById(item.job_id, { switchToEdit: shouldOpenEdit });
   };
 
-  const performUpload = async (fileToUpload: File, projectId?: string, selectedSegments?: { start_ms: number; end_ms: number; selected?: boolean }[]) => {
+  const performUpload = async (
+    fileToUpload: File,
+    projectId?: string,
+    selectedSegments?: { start_ms: number; end_ms: number; selected?: boolean }[],
+    billableDurationMs?: number,
+  ) => {
     setStep("uploading");
     setProgress(0);
     try {
-      const result = await uploadVoice(fileToUpload, setProgress, undefined, projectId, selectedSegments);
+      const result = await uploadVoice(
+        fileToUpload,
+        setProgress,
+        undefined,
+        projectId,
+        selectedSegments,
+        billableDurationMs,
+      );
       setJob(null);
       setSegments([]);
       setSpeakerLabels({});
@@ -1020,9 +1033,10 @@ export default function App() {
               selected: segment.selected,
             }))
           : [];
+      const billableDurationMs = billingEntry ? fileBillableDurationMs(billingEntry) : undefined;
       setStep("uploading");
       setUploadStatus(`"${uploadedProjectTitle}" 업로드 중 ${index + 1}/${filesToUpload.length}: ${file.name}`);
-      await performUpload(file, targetProjectId, selectedSegments);
+      await performUpload(file, targetProjectId, selectedSegments, billableDurationMs);
     }
 
     return {

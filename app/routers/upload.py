@@ -61,6 +61,7 @@ class PresignRequest(BaseModel):
     content_type: str = Field(default="application/octet-stream")
     project_id: str | None = None
     selected_segments: list[dict] | None = None
+    billable_duration_ms: int | None = None
 
 
 class PresignResponse(BaseModel):
@@ -90,6 +91,7 @@ class VoiceUploadCompleteRequest(BaseModel):
     content_type: str = Field(default="application/octet-stream")
     project_id: str | None = None
     selected_segments: list[dict] | None = None
+    billable_duration_ms: int | None = None
 
 
 @router.post("/voice", response_model=VoiceUploadResponse)
@@ -99,6 +101,7 @@ async def upload_voice(
     member: Annotated[Member | None, Depends(get_optional_current_member)] = None,
     project_id: Annotated[str | None, Form()] = None,
     selected_segments_json: Annotated[str | None, Form()] = None,
+    billable_duration_ms: Annotated[int | None, Form()] = None,
     request_id: Annotated[str | None, Header(alias="X-Upload-Request-Id")] = None,
 ) -> VoiceUploadResponse:
     import json
@@ -196,6 +199,7 @@ async def upload_voice(
         member=member,
         project_id=resolved_project_id,
         selected_segments=selected_segments,
+        duration_seconds=int(billable_duration_ms // 1000) if billable_duration_ms and billable_duration_ms > 0 else None,
     )
     publish_admin_event(
         "job_created",
@@ -352,6 +356,9 @@ def complete_voice_upload(
         member=member,
         project_id=resolved_project_id,
         selected_segments=body.selected_segments if isinstance(body.selected_segments, list) else None,
+        duration_seconds=int(body.billable_duration_ms // 1000)
+        if body.billable_duration_ms and body.billable_duration_ms > 0
+        else None,
     )
     publish_admin_event(
         "job_created",
