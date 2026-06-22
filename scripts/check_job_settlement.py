@@ -58,6 +58,7 @@ def main() -> int:
         print(f"status: {job.status}")
         print(f"assigned_transcriber_id: {job.assigned_transcriber_id}")
         print(f"duration_seconds: {job.duration_seconds}")
+        print(f"selected_segments_json: {job.selected_segments_json!r}")
         print(f"settlement_amount: {job.settlement_amount}")
         print(f"settlement_status: {job.settlement_status}")
         print(f"completed_at: {job.completed_at}")

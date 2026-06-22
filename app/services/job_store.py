@@ -52,6 +52,17 @@ from app.services.job_workflow import (
 THREAD_CLIENT_ADMIN = "client_admin"
 THREAD_TRANSCRIBER_ADMIN = "transcriber_admin"
 
+# DB에 레거시 final_done 으로 남아 있어도 정산 대상으로 포함합니다.
+SETTLEMENT_ELIGIBLE_JOB_STATUSES = (PDF_SENT, "final_done")
+
+
+def _is_pdf_sent_job(job: Job) -> bool:
+    return normalize_job_status(job.status) == PDF_SENT
+
+
+def _settlement_eligible_jobs_filter():
+    return Job.status.in_(SETTLEMENT_ELIGIBLE_JOB_STATUSES)
+
 
 def empty_transcript_json(filename: str) -> dict:
     return {
@@ -557,7 +568,7 @@ def _apply_job_settlement_on_pdf_delivered(db: Session, job: Job) -> float:
 
 
 def _sync_settlement_month_for_job(db: Session, job: Job) -> None:
-    if job.assigned_transcriber_id is None or job.status != "pdf_sent":
+    if job.assigned_transcriber_id is None or not _is_pdf_sent_job(job):
         return
     pdf_sent_at_by_job = _pdf_sent_at_by_job(db, [job.job_id])
     delivered_at = _job_delivered_at(job, pdf_sent_at_by_job)
@@ -586,7 +597,7 @@ def _sync_settlement_month_for_job(db: Session, job: Job) -> None:
 
 
 def _ensure_pdf_sent_status_log(db: Session, job: Job) -> None:
-    if job.status != "pdf_sent":
+    if not _is_pdf_sent_job(job):
         return
     existing = db.scalar(
         select(JobStatusLog.id)
@@ -649,7 +660,7 @@ def repair_job_settlement(db: Session, job: Job) -> Job:
     """pdf_sent 작업의 작업비·settlement_items 누락을 복구합니다."""
     if job.assigned_transcriber_id is None:
         raise ValueError("배정된 속기사가 없어 정산할 수 없습니다.")
-    if job.status != "pdf_sent":
+    if not _is_pdf_sent_job(job):
         raise ValueError("PDF 전달(pdf_sent) 상태가 아닙니다. 먼저 PDF 전달을 완료해 주세요.")
     _ensure_pdf_sent_status_log(db, job)
     _apply_job_settlement_on_pdf_delivered(db, job)
@@ -975,14 +986,23 @@ def _ensure_payment_records_table(db: Session) -> None:
             )
 
 
-def _duration_ms_from_selected_segments(segments: list | None) -> int:
+def _duration_ms_from_selected_segments(segments: list | str | None) -> int:
     if not segments:
+        return 0
+    if isinstance(segments, str):
+        try:
+            import json
+
+            segments = json.loads(segments)
+        except Exception:
+            return 0
+    if not isinstance(segments, list):
         return 0
     total_ms = 0
     for segment in segments:
         if not isinstance(segment, dict):
             continue
-        if not segment.get("selected"):
+        if segment.get("selected", True) is False:
             continue
         start_ms = int(segment.get("start_ms") or 0)
         end_ms = int(segment.get("end_ms") or 0)
@@ -1013,11 +1033,15 @@ def _duration_seconds_from_transcript_json(transcript_json: dict | None) -> int 
 
 def _try_load_transcript_for_job(job: Job) -> dict | None:
     try:
-        from app.services.r2 import get_transcript_json
+        import json
 
+        from app.services.r2 import get_object_bytes, get_transcript_json
+
+        if job.r2_transcript_key:
+            return json.loads(get_object_bytes(job.r2_transcript_key).decode("utf-8"))
         return get_transcript_json(job.job_id)
     except Exception:
-        logger.debug("transcript load failed for settlement duration job_id=%s", job.job_id, exc_info=True)
+        logger.warning("transcript load failed for settlement duration job_id=%s", job.job_id, exc_info=True)
         return None
 
 
@@ -1088,7 +1112,7 @@ def _job_delivered_at(job: Job, pdf_sent_at_by_job: dict[str, datetime]) -> date
     logged = pdf_sent_at_by_job.get(job.job_id)
     if logged is not None:
         return logged
-    if job.status != "pdf_sent":
+    if not _is_pdf_sent_job(job):
         return None
     return (
         job.completed_at
@@ -1096,6 +1120,27 @@ def _job_delivered_at(job: Job, pdf_sent_at_by_job: dict[str, datetime]) -> date
         or job.finalized_at
         or job.updated_at
     )
+
+
+def backfill_completed_job_durations(db: Session) -> int:
+    """pdf_sent(및 레거시 final_done) 작업의 duration_seconds 를 채웁니다."""
+    jobs = db.scalars(
+        select(Job).where(
+            _settlement_eligible_jobs_filter(),
+            Job.assigned_transcriber_id.is_not(None),
+        )
+    ).all()
+    updated = 0
+    for job in jobs:
+        if int(job.duration_seconds or 0) > 0:
+            continue
+        resolved = _resolve_job_duration_seconds(job)
+        if resolved > 0:
+            job.duration_seconds = resolved
+            updated += 1
+    if updated:
+        db.commit()
+    return updated
 
 
 def _build_grouped_settlement_entries(
@@ -1110,7 +1155,7 @@ def _build_grouped_settlement_entries(
 
     completed_jobs = db.scalars(
         select(Job).where(
-            Job.status == "pdf_sent",
+            _settlement_eligible_jobs_filter(),
             Job.assigned_transcriber_id.is_not(None),
         )
     ).all()
@@ -1138,6 +1183,15 @@ def _build_grouped_settlement_entries(
         quantity_minutes = _round_settlement_minutes(duration_seconds)
         unit_price = _resolve_settlement_unit_price(transcriber, rates_by_grade)
         amount = float(unit_price * quantity_minutes)
+        if amount <= 0 and quantity_minutes > 0:
+            logger.warning(
+                "settlement amount zero with billable minutes job_id=%s transcriber_id=%s grade=%s minutes=%s unit_price=%s",
+                job.job_id,
+                transcriber.id,
+                transcriber.grade_level,
+                quantity_minutes,
+                unit_price,
+            )
         grouped_entries.setdefault((transcriber.id, period_start, period_end), []).append(
             {
                 "job": job,
@@ -1255,6 +1309,7 @@ def _serialize_settlement_snapshot_row(
     jobs = len(entries)
     total_minutes = sum(int(entry["quantity_minutes"]) for entry in entries)
     amount = sum(float(entry["amount"]) for entry in entries)
+    unit_price = float(entries[0]["unit_price"]) if entries else 0.0
     status = settlement.status if settlement is not None else "waiting"
     total_paid_amount = float(settlement.total_paid_amount or 0) if settlement is not None else 0.0
     if settlement is not None and status in {"confirmed", "paid"}:
@@ -1279,6 +1334,7 @@ def _serialize_settlement_snapshot_row(
         "as_of": as_of.isoformat(),
         "jobs": jobs,
         "total_minutes": total_minutes,
+        "unit_price": unit_price,
         "amount": amount,
         "income_tax": withholding["income_tax"],
         "local_tax": withholding["local_tax"],
@@ -1296,8 +1352,14 @@ def _serialize_settlement_snapshot_row(
 def list_settlement_snapshots(db: Session, as_of: date) -> dict:
     _ensure_settlement_payment_storage(db)
     try:
+        backfill_completed_job_durations(db)
+    except Exception:
+        logger.exception("settlement duration backfill failed")
+        db.rollback()
+    try:
         sync_generated_settlements(db)
     except Exception:
+        logger.exception("settlement sync failed")
         db.rollback()
     period_start, period_end = _month_period_for_date(as_of)
     grouped_entries = _build_grouped_settlement_entries(db, month_anchor=as_of, as_of=as_of)
@@ -1339,6 +1401,14 @@ def list_settlement_snapshots(db: Session, as_of: date) -> dict:
         },
         "rows": rows,
     }
+
+
+def resync_settlement_snapshots(db: Session) -> dict:
+    """정산 스냅샷 전체를 강제 재계산합니다."""
+    _ensure_settlement_payment_storage(db)
+    duration_updated = backfill_completed_job_durations(db)
+    sync_generated_settlements(db)
+    return {"duration_updated": duration_updated, "synced": True}
 
 
 def confirm_settlement_snapshot(
@@ -1412,7 +1482,7 @@ def _build_all_grouped_settlement_entries(db: Session) -> dict[tuple[int, date, 
     _ensure_transcriber_grade_rates_table(db)
     completed_jobs = db.scalars(
         select(Job).where(
-            Job.status == "pdf_sent",
+            _settlement_eligible_jobs_filter(),
             Job.assigned_transcriber_id.is_not(None),
         )
     ).all()
@@ -1470,7 +1540,7 @@ def sync_generated_settlements(db: Session) -> None:
 
     completed_jobs = db.scalars(
         select(Job).where(
-            Job.status == "pdf_sent",
+            _settlement_eligible_jobs_filter(),
             Job.assigned_transcriber_id.is_not(None),
         )
     ).all()
@@ -1484,7 +1554,7 @@ def sync_generated_settlements(db: Session) -> None:
 
     stale_jobs = db.scalars(
         select(Job).where(
-            Job.status != "pdf_sent",
+            Job.status.not_in(SETTLEMENT_ELIGIBLE_JOB_STATUSES),
             or_(Job.settlement_amount != 0, Job.settlement_status != "waiting"),
         )
     ).all()

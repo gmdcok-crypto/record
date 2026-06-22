@@ -50,6 +50,7 @@ from app.services.job_store import (
     get_transcriber_by_code,
     list_client_jobs,
     list_settlement_snapshots,
+    resync_settlement_snapshots,
     safe_list_payment_records,
     list_transcriber_grade_rates,
     list_transcribers,
@@ -1126,6 +1127,18 @@ def admin_list_settlements(
     as_of: Annotated[date, Query(description="기준일 (KST). 선택한 달의 해당일까지 완료된 작업을 집계합니다.")],
 ) -> dict:
     return list_settlement_snapshots(db, as_of)
+
+
+@router.post("/admin/settlements/resync")
+def admin_resync_settlements(
+    db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
+) -> dict:
+    try:
+        return resync_settlement_snapshots(db)
+    except Exception as exc:
+        logger.exception("admin settlement resync failed")
+        raise HTTPException(status_code=500, detail=f"정산 재계산 실패: {exc}") from exc
 
 
 @router.post("/admin/settlements/confirm")

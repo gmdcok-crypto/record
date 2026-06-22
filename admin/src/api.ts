@@ -837,6 +837,7 @@ export type SettlementSnapshotRow = {
   as_of: string;
   jobs: number;
   total_minutes: number;
+  unit_price: number;
   amount: number;
   income_tax: number;
   local_tax: number;
@@ -875,6 +876,14 @@ export async function fetchSettlementSnapshots(asOf: string): Promise<Settlement
     throw await parseApiError(res, "정산 내역 조회 실패");
   }
   return (await res.json()) as SettlementSnapshotResponse;
+}
+
+export async function resyncSettlementSnapshots(): Promise<{ duration_updated: number; synced: boolean }> {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/settlements/resync`, { method: "POST" });
+  if (!res.ok) {
+    throw await parseApiError(res, "정산 재계산 실패");
+  }
+  return (await res.json()) as { duration_updated: number; synced: boolean };
 }
 
 export async function confirmSettlementSnapshot(transcriberId: number, asOf: string): Promise<void> {
