@@ -1732,34 +1732,83 @@ def update_invoice_status(db: Session, invoice: Invoice, status: str) -> Invoice
     return invoice
 
 
+def _dashboard_overview_jobs(db: Session, jobs: list[Job], display_statuses: dict[str, str]) -> list[dict]:
+    rows: list[dict] = []
+    for job in jobs:
+        try:
+            inquiry = inquiry_summary_for_job(db, job.job_id)
+            visible_transcriber = _visible_transcriber_for_job(db, job)
+            rows.append(
+                {
+                    "id": job.job_id,
+                    "project_id": job.project_id,
+                    "client": job.client.name if job.client else DEFAULT_CLIENT_NAME,
+                    "title": job.title,
+                    "filename": job.original_filename,
+                    "uploaded_at": job.uploaded_at.isoformat() if job.uploaded_at else None,
+                    "assigned_at": job.assigned_at.isoformat() if job.assigned_at else None,
+                    "due_at": job.due_at.isoformat() if job.due_at else None,
+                    "priority": job.priority,
+                    "status": display_statuses.get(job.job_id, normalize_job_status(job.status)),
+                    "assignee": visible_transcriber.name if visible_transcriber else "-",
+                    "progress": _progress_for_status(display_statuses.get(job.job_id, normalize_job_status(job.status))),
+                    "duration": _format_duration(job.duration_seconds),
+                    "sales_amount": float(job.sales_amount or 0),
+                    "settlement_amount": float(job.settlement_amount or 0),
+                    "payment_status": job.payment_status,
+                    "settlement_status": job.settlement_status,
+                    "has_inquiry": inquiry["has_inquiry"],
+                    "admin_inquiry_badges": inquiry["admin_inquiry_badges"],
+                }
+            )
+        except Exception:
+            db.rollback()
+    return rows
+
+
+def safe_list_payment_records(db: Session) -> list[dict]:
+    try:
+        return list_payment_records(db)
+    except Exception:
+        db.rollback()
+        return []
+
+
 def dashboard_overview(db: Session) -> dict:
+    payment_records = safe_list_payment_records(db)
     try:
         sync_generated_settlements(db)
     except Exception:
         db.rollback()
-    for attempt in range(2):
-        try:
-            jobs = db.scalars(select(Job).order_by(Job.updated_at.desc()).limit(50)).all()
-            break
-        except (OperationalError, ProgrammingError) as exc:
-            message = str(exc).lower()
-            if attempt == 1 or "selected_segments_json" not in message:
-                raise
-            _ensure_job_selected_segments_column(db)
-    else:
+    jobs: list[Job] = []
+    try:
+        for attempt in range(2):
+            try:
+                jobs = db.scalars(select(Job).order_by(Job.updated_at.desc()).limit(50)).all()
+                break
+            except (OperationalError, ProgrammingError) as exc:
+                message = str(exc).lower()
+                if attempt == 1 or "selected_segments_json" not in message:
+                    raise
+                _ensure_job_selected_segments_column(db)
+    except Exception:
+        db.rollback()
         jobs = []
-    transcribers = list_transcribers(db)
+    try:
+        transcribers = list_transcribers(db)
+    except Exception:
+        db.rollback()
+        transcribers = []
     try:
         settlements = db.scalars(select(Settlement).order_by(Settlement.created_at.desc()).limit(20)).all()
     except Exception:
         db.rollback()
         settlements = []
     try:
-        payment_records = list_payment_records(db)
+        display_statuses = {job.job_id: _display_status_for_job(db, job) for job in jobs}
     except Exception:
         db.rollback()
-        payment_records = []
-    display_statuses = {job.job_id: _display_status_for_job(db, job) for job in jobs}
+        display_statuses = {}
 
     total_sales = sum(float(job.final_bill_amount or job.sales_amount or 0) for job in jobs)
     total_settlements = sum(float(job.settlement_amount or 0) for job in jobs)
@@ -1805,30 +1854,7 @@ def dashboard_overview(db: Session) -> dict:
         },
         "projects": projects,
         "members": members,
-        "jobs": [
-            {
-                "id": job.job_id,
-                "project_id": job.project_id,
-                "client": job.client.name if job.client else DEFAULT_CLIENT_NAME,
-                "title": job.title,
-                "filename": job.original_filename,
-                "uploaded_at": job.uploaded_at.isoformat() if job.uploaded_at else None,
-                "assigned_at": job.assigned_at.isoformat() if job.assigned_at else None,
-                "due_at": job.due_at.isoformat() if job.due_at else None,
-                "priority": job.priority,
-                "status": display_statuses[job.job_id],
-                "assignee": visible_transcriber.name if (visible_transcriber := _visible_transcriber_for_job(db, job)) else "-",
-                "progress": _progress_for_status(display_statuses[job.job_id]),
-                "duration": _format_duration(job.duration_seconds),
-                "sales_amount": float(job.sales_amount or 0),
-                "settlement_amount": float(job.settlement_amount or 0),
-                "payment_status": job.payment_status,
-                "settlement_status": job.settlement_status,
-                "has_inquiry": inquiry_summary_for_job(db, job.job_id)["has_inquiry"],
-                "admin_inquiry_badges": inquiry_summary_for_job(db, job.job_id)["admin_inquiry_badges"],
-            }
-            for job in jobs
-        ],
+        "jobs": _dashboard_overview_jobs(db, jobs, display_statuses),
         "transcribers": transcribers,
         "transcriber_grade_rates": grade_rates,
         "settlements": [

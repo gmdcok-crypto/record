@@ -648,6 +648,15 @@ export async function fetchAdminOverview(): Promise<AdminOverview> {
   return res.json();
 }
 
+export async function fetchAdminSales(): Promise<AdminOverviewSale[]> {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/sales`);
+  if (!res.ok) {
+    throw await parseApiError(res, "매출 데이터를 불러올 수 없습니다");
+  }
+  const data = (await res.json()) as { sales?: AdminOverviewSale[] };
+  return data.sales ?? [];
+}
+
 export async function updateMemberActive(memberId: number, isActive: boolean): Promise<AdminOverviewMember> {
   const res = await adminFetch(`${apiBase()}/api/jobs/admin/members/${memberId}`, {
     method: "PATCH",

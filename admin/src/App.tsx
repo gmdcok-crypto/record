@@ -16,6 +16,7 @@ import {
   deleteTranscriberGradeRate,
   fetchAdminMe,
   fetchAdminOverview,
+  fetchAdminSales,
   fetchAdminUsers,
   revokeTranscriberAuth,
   fetchTranscriberGradeRates,
@@ -40,7 +41,7 @@ import {
   hasRegisteredAdminPushSubscription,
 } from "./webPush";
 import { ADMIN_ROLES, adminRoleLabel, canAccessMenu, defaultMenuForRole } from "./permissions";
-import { formatKstDateTime, formatKstDateTimeCompact, getKstDateKey, monthStartKstDateKey, todayKstDateKey } from "./formatKstDateTime";
+import { formatKstDateTime, formatKstDateTimeCompact, getKstDateKey, todayKstDateKey } from "./formatKstDateTime";
 import { isMobileLikeAdmin } from "./mobileEnvironment";
 
 type AuthStatus = "loading" | "guest" | "authed";
@@ -584,7 +585,10 @@ function App() {
   const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [editingAdminId, setEditingAdminId] = useState<number | null>(null);
   const [adminForm, setAdminForm] = useState<AdminForm>(EMPTY_ADMIN_FORM);
-  const [salesDateFrom, setSalesDateFrom] = useState(() => monthStartKstDateKey());
+  const [salesDateFrom, setSalesDateFrom] = useState(() => {
+    const today = todayKstDateKey();
+    return `${today.slice(0, 4)}-01-01`;
+  });
   const [salesDateTo, setSalesDateTo] = useState(() => todayKstDateKey());
 
   useEffect(() => {
@@ -621,8 +625,17 @@ function App() {
       if (!silent) {
         setLoading(true);
       }
-      const data = await fetchAdminOverview();
-      setOverview(data);
+      const [data, sales] = await Promise.all([
+        fetchAdminOverview(),
+        fetchAdminSales().catch((err) => {
+          console.error(err);
+          return [];
+        }),
+      ]);
+      setOverview({
+        ...data,
+        sales: sales.length > 0 ? sales : (data.sales ?? []),
+      });
       return data;
     } catch (err) {
       console.error(err);
@@ -655,9 +668,18 @@ function App() {
       if (!alive) return;
       setLoading(true);
       try {
-        const data = await fetchAdminOverview();
+        const [data, sales] = await Promise.all([
+          fetchAdminOverview(),
+          fetchAdminSales().catch((err) => {
+            console.error(err);
+            return [];
+          }),
+        ]);
         if (!alive) return;
-        setOverview(data);
+        setOverview({
+          ...data,
+          sales: sales.length > 0 ? sales : (data.sales ?? []),
+        });
         const queryParams = new URLSearchParams(window.location.search);
         const queryJobId = queryParams.get("job_id");
         if (queryJobId) {
@@ -909,7 +931,7 @@ function App() {
 
   const filteredSales = useMemo(() => {
     return sales.filter((item) => {
-      if (!item.paidAtKey) return false;
+      if (!item.paidAtKey) return true;
       return item.paidAtKey >= salesDateFrom && item.paidAtKey <= salesDateTo;
     });
   }, [sales, salesDateFrom, salesDateTo]);

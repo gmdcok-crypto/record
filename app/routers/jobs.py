@@ -48,6 +48,7 @@ from app.services.job_store import (
     get_transcriber_by_code,
     list_client_jobs,
     list_settlement_snapshots,
+    safe_list_payment_records,
     list_transcriber_grade_rates,
     list_transcribers,
     list_transcriber_jobs,
@@ -610,9 +611,14 @@ def admin_reset_database(request: Request, body: DatabaseResetRequest) -> dict:
 
 @router.get("/admin/overview")
 def admin_overview(db: Annotated[Session, Depends(get_db)], _admin: AdminAuth) -> dict:
+    sales = safe_list_payment_records(db)
     try:
-        return dashboard_overview(db)
+        payload = dashboard_overview(db)
+        if not payload.get("sales"):
+            payload["sales"] = sales
+        return payload
     except Exception:
+        logger.exception("admin overview failed; returning partial payload")
         # Keep admin usable even if one overview section regresses.
         return {
             "stats": {
@@ -630,8 +636,13 @@ def admin_overview(db: Annotated[Session, Depends(get_db)], _admin: AdminAuth) -
             "transcribers": list_transcribers(db),
             "transcriber_grade_rates": list_transcriber_grade_rates(db),
             "settlements": [],
-            "sales": [],
+            "sales": sales,
         }
+
+
+@router.get("/admin/sales")
+def admin_sales(db: Annotated[Session, Depends(get_db)], _admin: AdminAuth) -> dict:
+    return {"sales": safe_list_payment_records(db)}
 
 
 @router.get("/admin/events")

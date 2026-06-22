@@ -1,7 +1,7 @@
 const KST_TIMEZONE = "Asia/Seoul";
 
 function parseServerDateTime(value: string): Date {
-  const trimmed = value.trim();
+  const trimmed = value.trim().replace(" ", "T");
   if (/[zZ]|[+-]\d{2}:\d{2}$/.test(trimmed)) {
     return new Date(trimmed);
   }
