@@ -435,10 +435,8 @@ def set_job_status(
 ) -> Job:
     previous = job.status
     job.status = next_status
-    if next_status == "final_done" and job.completed_at is None:
-        job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
-        if job.finalized_at is None:
-            job.finalized_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    if next_status == "final_done" and job.finalized_at is None:
+        job.finalized_at = datetime.now(timezone.utc).replace(tzinfo=None)
     status_log = JobStatusLog(
         job_id=job.job_id,
         from_status=previous,
@@ -476,10 +474,78 @@ def store_final_pdf(db: Session, job: Job, pdf_key: str, filename: str) -> Job:
     return job
 
 
+def _resolve_settlement_unit_price(transcriber: Transcriber, rates_by_grade: dict[int, float]) -> float:
+    grade_rate = float(rates_by_grade.get(int(transcriber.grade_level or 1), 0) or 0)
+    if grade_rate > 0:
+        return grade_rate
+    return float(transcriber.unit_price or 0)
+
+
+def _compute_job_settlement_amount(db: Session, job: Job) -> float:
+    transcriber = job.transcriber
+    if transcriber is None or job.assigned_transcriber_id is None:
+        return 0.0
+    _ensure_transcriber_grade_rates_table(db)
+    rates_by_grade = {
+        int(row["grade_level"]): float(row["per_minute_rate"] or 0)
+        for row in list_transcriber_grade_rates(db)
+    }
+    unit_price = _resolve_settlement_unit_price(transcriber, rates_by_grade)
+    quantity_minutes = _round_settlement_minutes(job.duration_seconds)
+    return float(unit_price * quantity_minutes)
+
+
+def _apply_job_settlement_on_pdf_delivered(db: Session, job: Job) -> float:
+    """속기사 업무 완료(pdf_sent) 시점에 작업비를 jobs 테이블에 반영합니다."""
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    job.completed_at = now
+    if job.finalized_at is None:
+        job.finalized_at = now
+    amount = _compute_job_settlement_amount(db, job)
+    job.settlement_amount = amount
+    if job.settlement_status not in {"confirmed", "paid"}:
+        job.settlement_status = "waiting"
+    return amount
+
+
+def _sync_settlement_month_for_job(db: Session, job: Job) -> None:
+    if job.assigned_transcriber_id is None or job.status != "pdf_sent":
+        return
+    pdf_sent_at_by_job = _pdf_sent_at_by_job(db, [job.job_id])
+    delivered_at = _job_delivered_at(job, pdf_sent_at_by_job)
+    if delivered_at is None:
+        return
+    month_anchor = _as_kst_date(delivered_at)
+    period_start, period_end = _month_period_for_date(month_anchor)
+    grouped_entries = _build_grouped_settlement_entries(db, month_anchor=month_anchor, as_of=period_end)
+    entries = grouped_entries.get((job.assigned_transcriber_id, period_start, period_end), [])
+    if not entries:
+        return
+    settlement_by_key = _get_settlement_by_period(db)
+    settlement = _upsert_settlement_entries(
+        db,
+        transcriber_id=job.assigned_transcriber_id,
+        period_start=period_start,
+        period_end=period_end,
+        entries=entries,
+        settlement_by_key=settlement_by_key,
+    )
+    for entry in entries:
+        entry_job = entry["job"]
+        entry_job.settlement_amount = float(entry["amount"])
+        if entry_job.settlement_status not in {"confirmed", "paid"}:
+            entry_job.settlement_status = settlement.status
+
+
 def mark_final_pdf_delivered(db: Session, job: Job) -> Job:
-    previous = job.status
-    if previous == "pdf_sent":
+    if job.status == "pdf_sent":
+        if float(job.settlement_amount or 0) <= 0:
+            _apply_job_settlement_on_pdf_delivered(db, job)
+            _sync_settlement_month_for_job(db, job)
+            db.commit()
+            db.refresh(job)
         return job
+    previous = job.status
     job.status = "pdf_sent"
     db.add(
         JobStatusLog(
@@ -490,6 +556,9 @@ def mark_final_pdf_delivered(db: Session, job: Job) -> Job:
             changed_by_transcriber_id=job.assigned_transcriber_id,
         )
     )
+    db.flush()
+    _apply_job_settlement_on_pdf_delivered(db, job)
+    _sync_settlement_month_for_job(db, job)
     db.commit()
     db.refresh(job)
     return job
@@ -854,16 +923,8 @@ def _pdf_sent_at_by_job(db: Session, job_ids: list[str]) -> dict[str, datetime]:
     return pdf_sent_at_by_job
 
 
-def _job_delivered_at(job: Job, pdf_sent_at_by_job: dict[str, datetime]) -> datetime:
-    return (
-        pdf_sent_at_by_job.get(job.job_id)
-        or job.completed_at
-        or job.finalized_at
-        or job.final_pdf_generated_at
-        or job.updated_at
-        or job.uploaded_at
-        or datetime.now(timezone.utc).replace(tzinfo=None)
-    )
+def _job_delivered_at(job: Job, pdf_sent_at_by_job: dict[str, datetime]) -> datetime | None:
+    return pdf_sent_at_by_job.get(job.job_id)
 
 
 def _build_grouped_settlement_entries(
@@ -894,6 +955,8 @@ def _build_grouped_settlement_entries(
         if transcriber is None:
             continue
         delivered_at = _job_delivered_at(job, pdf_sent_at_by_job)
+        if delivered_at is None:
+            continue
         delivered_date = _as_kst_date(delivered_at)
         period_start, period_end = _month_period_for_date(delivered_date)
         if period_start != target_period_start:
@@ -1147,13 +1210,6 @@ def _build_settlement_no(transcriber_id: int, period_start: date) -> str:
     return f"SET-{period_start:%Y%m}-{transcriber_id:04d}"
 
 
-def _resolve_settlement_unit_price(transcriber: Transcriber, rates_by_grade: dict[int, float]) -> float:
-    grade_rate = float(rates_by_grade.get(int(transcriber.grade_level or 1), 0) or 0)
-    if grade_rate > 0:
-        return grade_rate
-    return float(transcriber.unit_price or 0)
-
-
 def _settlement_withholding_breakdown(gross_amount: float) -> dict[str, float]:
     gross = float(gross_amount or 0)
     income_tax = round(gross * 0.03)
@@ -1196,6 +1252,8 @@ def _build_all_grouped_settlement_entries(db: Session) -> dict[tuple[int, date, 
         if transcriber is None:
             continue
         delivered_at = _job_delivered_at(job, pdf_sent_at_by_job)
+        if delivered_at is None:
+            continue
         period_start, period_end = _month_period_for_date(_as_kst_date(delivered_at))
         quantity_minutes = _round_settlement_minutes(job.duration_seconds)
         unit_price = _resolve_settlement_unit_price(transcriber, rates_by_grade)
@@ -1240,8 +1298,11 @@ def sync_generated_settlements(db: Session) -> None:
         )
     ).all()
     for job in completed_jobs:
-        job.settlement_amount = settlement_amount_by_job.get(job.job_id, 0)
-        job.settlement_status = settlement_status_by_job.get(job.job_id, "waiting")
+        computed = settlement_amount_by_job.get(job.job_id)
+        if computed is None:
+            computed = _compute_job_settlement_amount(db, job)
+        job.settlement_amount = float(computed or 0)
+        job.settlement_status = settlement_status_by_job.get(job.job_id, job.settlement_status or "waiting")
 
     stale_jobs = db.scalars(
         select(Job).where(
