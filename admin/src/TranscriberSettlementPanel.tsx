@@ -69,7 +69,7 @@ export default function TranscriberSettlementPanel({ refreshToken = 0, onPay, on
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [monthLabel, setMonthLabel] = useState("");
-  const [summary, setSummary] = useState({ total_jobs: 0, total_amount: 0, active_settlement_count: 0 });
+  const [summary, setSummary] = useState({ total_jobs: 0, total_amount: 0, total_net_pay_amount: 0, active_settlement_count: 0 });
   const [rows, setRows] = useState<SettlementSnapshotRow[]>([]);
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
 
@@ -84,6 +84,7 @@ export default function TranscriberSettlementPanel({ refreshToken = 0, onPay, on
       setSummary({
         total_jobs: data.summary.total_jobs,
         total_amount: data.summary.total_amount,
+        total_net_pay_amount: data.summary.total_net_pay_amount,
         active_settlement_count: data.summary.active_settlement_count,
       });
       setRows(data.rows);
@@ -123,7 +124,7 @@ export default function TranscriberSettlementPanel({ refreshToken = 0, onPay, on
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">정산 관리</p>
           <h3 className="mt-1 text-lg font-semibold text-white">당월 정산</h3>
           <p className="mt-1 text-sm text-slate-400">
-            기준일까지 완료된 작업을 집계합니다. 당월 정산 후 지급은 익월에 진행합니다.
+            기준일까지 완료된 작업을 집계합니다. 원천징수 3.3% 공제 후 실지급액을 익월에 지급합니다.
           </p>
         </div>
         <label className="block w-full max-w-[220px]">
@@ -137,10 +138,11 @@ export default function TranscriberSettlementPanel({ refreshToken = 0, onPay, on
         </label>
       </div>
 
-      <div className="mb-4 grid gap-2 md:grid-cols-3">
+      <div className="mb-4 grid gap-2 md:grid-cols-4">
         <SummaryChip label={`${monthLabel || "-"} 정산 대상`} value={`${summary.active_settlement_count}명`} />
         <SummaryChip label="완료 건수" value={`${summary.total_jobs}건`} tone="cyan" />
-        <SummaryChip label="정산 합계" value={formatCurrency(summary.total_amount)} tone="amber" />
+        <SummaryChip label="총 정산액" value={formatCurrency(summary.total_amount)} tone="amber" />
+        <SummaryChip label="실지급 합계" value={formatCurrency(summary.total_net_pay_amount)} tone="cyan" />
       </div>
 
       {error ? (
@@ -153,13 +155,18 @@ export default function TranscriberSettlementPanel({ refreshToken = 0, onPay, on
         ) : visibleRows.length === 0 ? (
           <div className="px-4 py-10 text-center text-sm text-slate-400">선택한 기준일까지 정산할 완료 작업이 없습니다.</div>
         ) : (
-          <table className="w-full min-w-[920px] border-collapse text-[13px]">
+          <table className="w-full min-w-[1280px] border-collapse text-[13px]">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-950 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                 <th className="px-3 py-2">속기사</th>
-                <th className="px-3 py-2">건수</th>
-                <th className="px-3 py-2">분</th>
-                <th className="px-3 py-2">정산액</th>
+                <th className="px-3 py-2">총금액</th>
+                <th className="px-3 py-2">3%</th>
+                <th className="px-3 py-2">0.3%</th>
+                <th className="px-3 py-2">3.3%</th>
+                <th className="px-3 py-2">실지급액</th>
+                <th className="px-3 py-2">은행</th>
+                <th className="px-3 py-2">계좌번호</th>
+                <th className="px-3 py-2">예금주</th>
                 <th className="px-3 py-2">상태</th>
                 <th className="px-3 py-2">동작</th>
               </tr>
@@ -173,9 +180,14 @@ export default function TranscriberSettlementPanel({ refreshToken = 0, onPay, on
                       <p className="font-medium text-white">{row.transcriber_name}</p>
                       <p className="text-[11px] text-slate-500">{row.transcriber_code}</p>
                     </td>
-                    <td className="px-3 py-2">{row.jobs}건</td>
-                    <td className="px-3 py-2">{row.total_minutes.toLocaleString("ko-KR")}분</td>
                     <td className="px-3 py-2 font-medium text-white">{formatCurrency(row.amount)}</td>
+                    <td className="px-3 py-2 text-rose-300">-{formatCurrency(row.income_tax)}</td>
+                    <td className="px-3 py-2 text-rose-300">-{formatCurrency(row.local_tax)}</td>
+                    <td className="px-3 py-2 text-rose-300">-{formatCurrency(row.total_withholding)}</td>
+                    <td className="px-3 py-2 font-semibold text-cyan-200">{formatCurrency(row.net_pay_amount)}</td>
+                    <td className="px-3 py-2">{row.bank_name || "-"}</td>
+                    <td className="px-3 py-2 font-mono text-[12px]">{row.account_number || "-"}</td>
+                    <td className="px-3 py-2">{row.account_holder || "-"}</td>
                     <td className="px-3 py-2">
                       <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ${settlementStatusTone(status)}`}>
                         {status}

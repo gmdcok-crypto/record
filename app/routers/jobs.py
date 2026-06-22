@@ -145,6 +145,7 @@ class AdminTranscriberUpdateRequest(BaseModel):
     resident_id: str | None = None
     bank_name: str | None = None
     account_number: str | None = None
+    account_holder: str | None = None
     unit_price: float | None = None
     monthly_capacity: int | None = None
     status: str | None = None
@@ -164,6 +165,7 @@ class AdminTranscriberCreateRequest(BaseModel):
     resident_id: str | None = None
     bank_name: str | None = None
     account_number: str | None = None
+    account_holder: str | None = None
     unit_price: float = 0
     monthly_capacity: int | None = None
     status: str = "available"
@@ -961,6 +963,7 @@ def admin_update_transcriber(
             resident_id=body.resident_id,
             bank_name=body.bank_name,
             account_number=body.account_number,
+            account_holder=body.account_holder,
             unit_price=body.unit_price,
             monthly_capacity=body.monthly_capacity,
             status=body.status,
@@ -997,6 +1000,7 @@ def admin_create_transcriber(
             resident_id=body.resident_id,
             bank_name=body.bank_name,
             account_number=body.account_number,
+            account_holder=body.account_holder,
             unit_price=body.unit_price,
             monthly_capacity=body.monthly_capacity,
             status=body.status,

@@ -634,6 +634,7 @@ def list_transcribers(db: Session) -> list[dict]:
             "phone": row.phone,
             "resident_id": row.resident_id_masked,
             "bank_name": row.bank_name,
+            "account_holder": row.account_holder,
             "account_number": row.account_number,
             "specialty": row.specialty,
             "status": row.status,
@@ -1025,13 +1026,18 @@ def _serialize_settlement_snapshot_row(
         jobs = int(settlement.total_jobs or jobs)
         total_minutes = int(settlement.total_minutes or total_minutes)
         amount = float(settlement.final_amount or amount)
+    withholding = _settlement_withholding_breakdown(amount)
+    net_pay_amount = float(withholding["net_pay_amount"])
     can_confirm = status not in {"confirmed", "paid"} and jobs > 0
-    can_pay = status == "confirmed" and total_paid_amount < amount
+    can_pay = status == "confirmed" and total_paid_amount < net_pay_amount
     return {
         "settlement_id": settlement.id if settlement is not None else None,
         "transcriber_id": transcriber.id,
         "transcriber_code": transcriber.transcriber_code,
         "transcriber_name": transcriber.name,
+        "bank_name": transcriber.bank_name or "",
+        "account_number": transcriber.account_number or "",
+        "account_holder": transcriber.account_holder or "",
         "month": f"{period_start:%Y-%m}",
         "period_start": period_start.isoformat(),
         "period_end": period_end.isoformat(),
@@ -1039,6 +1045,10 @@ def _serialize_settlement_snapshot_row(
         "jobs": jobs,
         "total_minutes": total_minutes,
         "amount": amount,
+        "income_tax": withholding["income_tax"],
+        "local_tax": withholding["local_tax"],
+        "total_withholding": withholding["total_withholding"],
+        "net_pay_amount": net_pay_amount,
         "status": status,
         "total_paid_amount": total_paid_amount,
         "confirmed_at": settlement.confirmed_at.isoformat() if settlement and settlement.confirmed_at else None,
@@ -1074,6 +1084,7 @@ def list_settlement_snapshots(db: Session, as_of: date) -> dict:
 
     rows.sort(key=lambda row: (-float(row["amount"]), row["transcriber_name"]))
     total_amount = sum(float(row["amount"]) for row in rows)
+    total_net_pay = sum(float(row["net_pay_amount"]) for row in rows)
     total_jobs = sum(int(row["jobs"]) for row in rows)
     return {
         "as_of": as_of.isoformat(),
@@ -1085,6 +1096,7 @@ def list_settlement_snapshots(db: Session, as_of: date) -> dict:
             "active_settlement_count": sum(1 for row in rows if row["jobs"] > 0),
             "total_jobs": total_jobs,
             "total_amount": total_amount,
+            "total_net_pay_amount": total_net_pay,
         },
         "rows": rows,
     }
@@ -1142,9 +1154,25 @@ def _resolve_settlement_unit_price(transcriber: Transcriber, rates_by_grade: dic
     return float(transcriber.unit_price or 0)
 
 
+def _settlement_withholding_breakdown(gross_amount: float) -> dict[str, float]:
+    gross = float(gross_amount or 0)
+    income_tax = round(gross * 0.03)
+    local_tax = round(gross * 0.003)
+    total_withholding = income_tax + local_tax
+    net_pay_amount = gross - total_withholding
+    return {
+        "gross_amount": gross,
+        "income_tax": float(income_tax),
+        "local_tax": float(local_tax),
+        "total_withholding": float(total_withholding),
+        "net_pay_amount": float(net_pay_amount),
+    }
+
+
 def _settlement_status_for_amounts(total_paid_amount: float, final_amount: float) -> str:
+    net_pay_amount = _settlement_withholding_breakdown(final_amount)["net_pay_amount"]
     if total_paid_amount > 0:
-        return "paid" if total_paid_amount >= final_amount else "confirmed"
+        return "paid" if total_paid_amount >= net_pay_amount else "confirmed"
     return "waiting"
 
 
@@ -1353,6 +1381,7 @@ def create_transcriber(
     resident_id: str | None = None,
     bank_name: str | None = None,
     account_number: str | None = None,
+    account_holder: str | None = None,
     unit_price: float = 0,
     monthly_capacity: int | None = None,
     status: str = "available",
@@ -1375,7 +1404,7 @@ def create_transcriber(
             resident_id_masked=(resident_id or "").strip() or None,
             bank_name=(bank_name or "").strip() or None,
             account_number=(account_number or "").strip() or None,
-            account_holder=normalized_name,
+            account_holder=(account_holder or "").strip() or normalized_name,
             unit_price=unit_price,
             monthly_capacity=monthly_capacity,
             status=status,
@@ -1407,6 +1436,7 @@ def update_transcriber(
     resident_id: str | None = None,
     bank_name: str | None = None,
     account_number: str | None = None,
+    account_holder: str | None = None,
     unit_price: float | None = None,
     monthly_capacity: int | None = None,
     status: str | None = None,
@@ -1416,8 +1446,10 @@ def update_transcriber(
         if not normalized_name:
             raise ValueError("Transcriber name is required")
         transcriber.name = normalized_name
-        if not transcriber.account_holder:
-            transcriber.account_holder = normalized_name
+    if account_holder is not None:
+        transcriber.account_holder = account_holder.strip() or None
+    elif name is not None and not transcriber.account_holder:
+        transcriber.account_holder = normalized_name
     if grade_level is not None:
         if grade_level < 1 or grade_level > 5:
             raise ValueError("등급은 1등급부터 5등급까지 선택할 수 있습니다.")
@@ -1451,8 +1483,10 @@ def update_transcriber(
             _ensure_transcriber_grade_level_column(db)
             if name is not None:
                 transcriber.name = normalized_name
-                if not transcriber.account_holder:
-                    transcriber.account_holder = normalized_name
+            if account_holder is not None:
+                transcriber.account_holder = account_holder.strip() or None
+            elif name is not None and not transcriber.account_holder:
+                transcriber.account_holder = normalized_name
             if grade_level is not None:
                 transcriber.grade_level = grade_level
             if specialty is not None:

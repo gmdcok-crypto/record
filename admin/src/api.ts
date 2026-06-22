@@ -132,6 +132,7 @@ export type AdminOverviewTranscriber = {
   phone: string | null;
   resident_id: string | null;
   bank_name: string | null;
+  account_holder: string | null;
   account_number: string | null;
   specialty: string | null;
   status: string;
@@ -725,6 +726,7 @@ export async function updateTranscriber(
     resident_id?: string;
     bank_name?: string;
     account_number?: string;
+    account_holder?: string;
     unit_price?: number;
     monthly_capacity?: number;
     status?: string;
@@ -748,6 +750,7 @@ export async function createTranscriber(payload: {
   resident_id?: string;
   bank_name?: string;
   account_number?: string;
+  account_holder?: string;
   unit_price?: number;
   monthly_capacity?: number;
   status?: string;
@@ -825,6 +828,13 @@ export type SettlementSnapshotRow = {
   jobs: number;
   total_minutes: number;
   amount: number;
+  income_tax: number;
+  local_tax: number;
+  total_withholding: number;
+  net_pay_amount: number;
+  bank_name: string;
+  account_number: string;
+  account_holder: string;
   status: string;
   total_paid_amount: number;
   confirmed_at: string | null;
@@ -843,6 +853,7 @@ export type SettlementSnapshotResponse = {
     active_settlement_count: number;
     total_jobs: number;
     total_amount: number;
+    total_net_pay_amount: number;
   };
   rows: SettlementSnapshotRow[];
 };

@@ -145,6 +145,7 @@ type Transcriber = {
   phone: string;
   residentId: string;
   bankName: string;
+  accountHolder: string;
   accountNumber: string;
   specialty: string;
   status: TranscriberStatus;
@@ -163,6 +164,7 @@ type TranscriberForm = {
   phone: string;
   residentId: string;
   bankName: string;
+  accountHolder: string;
   accountNumber: string;
 };
 
@@ -173,6 +175,7 @@ const EMPTY_TRANSCRIBER_FORM: TranscriberForm = {
   phone: "",
   residentId: "",
   bankName: "",
+  accountHolder: "",
   accountNumber: "",
 };
 
@@ -201,6 +204,10 @@ type SettlementItem = {
   transcriber: string;
   jobs: number;
   amount: number;
+  incomeTax: number;
+  localTax: number;
+  totalWithholding: number;
+  netPayAmount: number;
   totalPaidAmount: number;
   status: SettlementStatus;
   paidAt: string;
@@ -850,6 +857,7 @@ function App() {
       phone: person.phone || "",
       residentId: person.resident_id || "",
       bankName: person.bank_name || "",
+      accountHolder: person.account_holder || "",
       accountNumber: person.account_number || "",
       specialty: person.specialty || "-",
       status: mapTranscriberStatus(person.status, person.current_load),
@@ -1055,7 +1063,8 @@ function App() {
 
   const openSettlementPayModal = (item: SettlementItem) => {
     setSettlementPayTarget(item);
-    setSettlementPayAmount("");
+    const remaining = Math.max(0, Math.round(item.netPayAmount - item.totalPaidAmount));
+    setSettlementPayAmount(remaining > 0 ? String(remaining) : "");
     setSettlementPayNote("");
   };
 
@@ -1068,6 +1077,10 @@ function App() {
       transcriber: row.transcriber_name,
       jobs: row.jobs,
       amount: row.amount,
+      incomeTax: row.income_tax,
+      localTax: row.local_tax,
+      totalWithholding: row.total_withholding,
+      netPayAmount: row.net_pay_amount,
       totalPaidAmount: row.total_paid_amount,
       status: mapSettlementStatus(row.status),
       paidAt: row.paid_at ? formatKstDateTime(row.paid_at) : "-",
@@ -1120,6 +1133,7 @@ function App() {
       phone: person.phone,
       residentId: person.residentId,
       bankName: person.bankName,
+      accountHolder: person.accountHolder,
       accountNumber: person.accountNumber,
     });
     setTranscriberModalOpen(true);
@@ -1256,6 +1270,7 @@ function App() {
       phone: transcriberForm.phone.trim() || undefined,
       resident_id: transcriberForm.residentId.trim() || undefined,
       bank_name: transcriberForm.bankName.trim() || undefined,
+      account_holder: transcriberForm.accountHolder.trim() || undefined,
       account_number: transcriberForm.accountNumber.trim() || undefined,
     };
 
@@ -2954,6 +2969,15 @@ function App() {
                   className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
                 />
               </label>
+              <label>
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">예금주</span>
+                <input
+                  value={transcriberForm.accountHolder}
+                  onChange={(e) => setTranscriberForm((prev) => ({ ...prev, accountHolder: e.target.value }))}
+                  placeholder="예금주명"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+                />
+              </label>
             </div>
 
             <div className="mt-6 flex justify-end gap-2">
@@ -3101,11 +3125,16 @@ function App() {
 
             <div className="mt-4 space-y-4">
               <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-300">
-                <p>정산액: {formatCurrency(settlementPayTarget.amount)}</p>
-                <p className="mt-1">누적 입금액: {formatCurrency(settlementPayTarget.totalPaidAmount)}</p>
+                <p>총 정산액: {formatCurrency(settlementPayTarget.amount)}</p>
+                <p className="mt-1 text-rose-300">
+                  원천징수 3.3%: -{formatCurrency(settlementPayTarget.totalWithholding)} (3%{" "}
+                  {formatCurrency(settlementPayTarget.incomeTax)} / 0.3% {formatCurrency(settlementPayTarget.localTax)})
+                </p>
+                <p className="mt-1 font-medium text-cyan-200">실지급액: {formatCurrency(settlementPayTarget.netPayAmount)}</p>
+                <p className="mt-1">누적 지급액: {formatCurrency(settlementPayTarget.totalPaidAmount)}</p>
               </div>
               <label className="block">
-                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">입금액</span>
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">지급액 (실지급)</span>
                 <input
                   value={settlementPayAmount}
                   onChange={(e) => setSettlementPayAmount(e.target.value)}
