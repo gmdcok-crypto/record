@@ -6,7 +6,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models.admin_models import Job, Transcriber
-from app.services.job_store import ACTIVE_JOB_STATUSES, generate_transcriber_code, _sync_transcriber_load
+from app.services.job_workflow import ACTIVE_JOB_STATUSES, WAITING_ASSIGNMENT, normalize_job_status
 from app.services.passwords import hash_password, verify_password
 
 logger = logging.getLogger(__name__)
@@ -114,8 +114,8 @@ def unassign_transcriber_jobs(db: Session, transcriber_id: int) -> None:
     for job in assigned_jobs:
         job.assigned_transcriber_id = None
         job.assigned_at = None
-        if job.status in ACTIVE_JOB_STATUSES or job.status == "assigned":
-            job.status = "waiting_assignment"
+        if normalize_job_status(job.status) in ACTIVE_JOB_STATUSES:
+            job.status = WAITING_ASSIGNMENT
     _sync_transcriber_load(db, transcriber_id)
 
 

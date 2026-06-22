@@ -23,6 +23,15 @@ from app.services.admin_events import publish_admin_event, stream_admin_events
 from app.services.database_migrate import ensure_jobs_status_column, run_sql_migration
 from app.services.database_reset import purge_all_data, reset_database_schema
 from app.services.project_store import get_project_record, list_project_jobs, list_projects, list_transcriber_projects
+from app.services.job_workflow import (
+    CLIENT_REVIEW,
+    DELIVER_DRAFT_ALLOWED_STATUSES,
+    PUSH_NOTIFY_TRANSCRIBER_STATUSES,
+    TRANSCRIBER_REVIEW,
+    TRANSCRIPT_REQUEST,
+    WORKING,
+    normalize_job_status,
+)
 from app.services.job_store import (
     assign_job,
     create_transcriber,
@@ -50,7 +59,6 @@ from app.services.job_store import (
     serialize_job,
     store_final_pdf,
     set_job_status,
-    TRANSCRIBER_DRAFT_STATUSES,
     transcriber_can_view_job_transcript,
     transcript_visible_to_client,
     upsert_transcriber_grade_rate,
@@ -421,7 +429,7 @@ def _notify_admin_inquiry(
 
 
 def _maybe_notify_admin_review_request(db: Session, job: Job, *, note: str | None = None) -> None:
-    if job.status not in {"review_waiting", "transcriber_review"}:
+    if normalize_job_status(job.status) not in PUSH_NOTIFY_TRANSCRIBER_STATUSES:
         return
     try:
         delivered = send_admin_review_request_web_push(db, job=job, note=note)
@@ -432,7 +440,7 @@ def _maybe_notify_admin_review_request(db: Session, job: Job, *, note: str | Non
 
 
 def _maybe_notify_transcriber_client_request(db: Session, job: Job, *, note: str | None = None) -> None:
-    if job.status not in {"review_waiting", "transcriber_review"}:
+    if normalize_job_status(job.status) not in PUSH_NOTIFY_TRANSCRIBER_STATUSES:
         return
     if job.assigned_transcriber_id is None:
         return
@@ -1262,8 +1270,9 @@ def transcriber_ai_draft(
         raise HTTPException(status_code=502, detail=f"Transcription failed: {exc}") from exc
 
     mark_transcript_saved(db, job, transcript_key, transcript_json)
-    if job.status == "assigned":
-        job = set_job_status(db, job, "working", "AI 초벌 생성")
+    if normalize_job_status(job.status) not in {WORKING, CLIENT_REVIEW, TRANSCRIBER_REVIEW, TRANSCRIPT_REQUEST}:
+        if job.assigned_transcriber_id is not None:
+            job = set_job_status(db, job, WORKING, "AI 초벌 생성")
     publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
 
     return {
@@ -1287,7 +1296,7 @@ def transcriber_deliver_draft(
         raise HTTPException(status_code=404, detail="Job not found")
     if job.assigned_transcriber_id != current.id:
         raise HTTPException(status_code=403, detail="배정된 작업만 초벌을 전달할 수 있습니다.")
-    if job.status not in TRANSCRIBER_DRAFT_STATUSES | {"review_waiting", "transcriber_review", "first_done", "client_editing"}:
+    if normalize_job_status(job.status) not in DELIVER_DRAFT_ALLOWED_STATUSES:
         raise HTTPException(status_code=409, detail="현재 상태에서는 초벌을 전달할 수 없습니다.")
 
     voice_key = get_voice_object_key(job_id)
@@ -1309,7 +1318,7 @@ def transcriber_deliver_draft(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Save failed: {exc}") from exc
 
-    job = set_job_status(db, job, "first_done", "속기사 초벌 전달")
+    job = set_job_status(db, job, CLIENT_REVIEW, "속기사 초벌 전달")
     _notify_client_status_change(db, job, note="초벌본이 도착했습니다.")
     publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
 
@@ -1343,8 +1352,9 @@ def admin_ai_draft(
         raise HTTPException(status_code=502, detail=f"Transcription failed: {exc}") from exc
 
     mark_transcript_saved(db, job, transcript_key, transcript_json)
-    if job.status == "assigned":
-        job = set_job_status(db, job, "working", "관리자 AI 초벌 생성", admin=admin)
+    if normalize_job_status(job.status) not in {WORKING, CLIENT_REVIEW, TRANSCRIBER_REVIEW, TRANSCRIPT_REQUEST}:
+        if job.assigned_transcriber_id is not None or admin is not None:
+            job = set_job_status(db, job, WORKING, "관리자 AI 초벌 생성", admin=admin)
     publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
 
     return {
@@ -1367,7 +1377,7 @@ def admin_deliver_draft(
     job = get_job_record(db, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.status not in TRANSCRIBER_DRAFT_STATUSES | {"review_waiting", "transcriber_review", "first_done", "client_editing"}:
+    if normalize_job_status(job.status) not in DELIVER_DRAFT_ALLOWED_STATUSES:
         raise HTTPException(status_code=409, detail="현재 상태에서는 초벌을 전달할 수 없습니다.")
 
     voice_key = get_voice_object_key(job_id)
@@ -1388,7 +1398,7 @@ def admin_deliver_draft(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Save failed: {exc}") from exc
 
-    job = set_job_status(db, job, "first_done", "관리자 초벌 전달", admin=admin)
+    job = set_job_status(db, job, CLIENT_REVIEW, "관리자 초벌 전달", admin=admin)
     _notify_client_status_change(db, job, note="초벌본이 도착했습니다.")
     publish_admin_event("job_updated", {"job_id": job_id, "status": job.status})
 
@@ -1830,8 +1840,8 @@ def save_shared_transcript(
             save_kind=save_kind,
             shared_editor=True,
         )
-        if job.status != "client_editing":
-            job = set_job_status(db, job, "client_editing", "공유 링크 수정본 저장")
+        if normalize_job_status(job.status) != CLIENT_REVIEW:
+            job = set_job_status(db, job, CLIENT_REVIEW, "공유 링크 수정본 저장")
             _notify_client_status_change(db, job, note="의뢰인 수정본이 저장되었습니다.")
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -1862,7 +1872,7 @@ def submit_shared_review_request(
             save_kind="review_request",
             shared_editor=True,
         )
-        job = set_job_status(db, job, "review_waiting", "공유 링크에서 속기사 재검수 요청")
+        job = set_job_status(db, job, TRANSCRIBER_REVIEW, "공유 링크에서 속기사 재검수 요청")
         _notify_client_status_change(db, job, note="속기사 재검토 요청이 접수되었습니다.")
         _maybe_notify_admin_review_request(db, job, note="공유 링크에서 속기사 재검수 요청")
         _maybe_notify_transcriber_client_request(db, job, note="공유 링크에서 속기사 재검수 요청")
@@ -1887,7 +1897,7 @@ def submit_transcriber_review_request(
     _ensure_member_owns_job(db, member, job)
 
     try:
-        job = _set_job_status_or_http_error(db, job, "transcriber_review", "의뢰인 검토요청")
+        job = _set_job_status_or_http_error(db, job, TRANSCRIBER_REVIEW, "의뢰인 속기사 검토요청")
         _notify_client_status_change(db, job, note="속기사 검토가 요청되었습니다.")
         _maybe_notify_admin_review_request(db, job, note="의뢰인 검토요청")
         _maybe_notify_transcriber_client_request(db, job, note="의뢰인 검토요청")

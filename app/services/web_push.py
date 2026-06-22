@@ -21,6 +21,14 @@ from app.models.admin_models import (
     TranscriberPushSubscription,
 )
 from app.services.database_reset import _run_sql_file
+from app.services.job_workflow import (
+    CLIENT_REVIEW,
+    PDF_SENT,
+    TRANSCRIBER_REVIEW,
+    TRANSCRIPT_REQUEST,
+    WORKING,
+    normalize_job_status,
+)
 
 logger = logging.getLogger(__name__)
 SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
@@ -415,16 +423,14 @@ def _transcriber_job_url(job: Job) -> str:
 
 
 def send_client_status_web_push(db: Session, *, member: Member, job: Job, note: str | None = None) -> int:
+    status = normalize_job_status(job.status)
     status_text = {
-        "assigned": "작업이 배정되었습니다.",
-        "working": "작업이 시작되었습니다.",
-        "first_done": "초벌본 검토가 가능합니다.",
-        "client_editing": "의뢰인 수정본이 저장되었습니다.",
-        "review_waiting": "녹취록 요청이 접수되었습니다.",
-        "transcriber_review": "속기사 검토가 진행 중입니다.",
-        "final_done": "최종본이 확정되었습니다.",
-        "pdf_sent": "PDF가 전달되었습니다.",
-    }.get(job.status)
+        WORKING: "속기사가 작업을 진행 중입니다.",
+        CLIENT_REVIEW: "초벌본 검토가 가능합니다.",
+        TRANSCRIBER_REVIEW: "속기사 검토가 진행 중입니다.",
+        TRANSCRIPT_REQUEST: "녹취록 요청이 접수되었습니다.",
+        PDF_SENT: "PDF가 전달되었습니다.",
+    }.get(status)
     if not status_text:
         return 0
     extra = f" {note.strip()}" if note and note.strip() else ""
@@ -613,12 +619,13 @@ def send_transcriber_client_request_web_push(
     job: Job,
     note: str | None = None,
 ) -> int:
-    if job.status == "transcriber_review":
+    status = normalize_job_status(job.status)
+    if status == TRANSCRIBER_REVIEW:
         title = "검토 요청"
         body = f"{job.original_filename}: 의뢰인이 검토를 요청했습니다."
         kind = "transcriber_review_request"
         tag = f"transcriber-review-{job.job_id}"
-    elif job.status == "review_waiting":
+    elif status == TRANSCRIPT_REQUEST:
         title = "녹취록 요청"
         body = f"{job.original_filename}: 의뢰인이 녹취록을 요청했습니다."
         kind = "transcriber_transcript_request"

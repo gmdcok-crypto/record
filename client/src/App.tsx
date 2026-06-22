@@ -95,8 +95,6 @@ type EditableSegment = TranscriptSegment & { id: string };
 type PushPermissionState = NotificationPermission | "unsupported";
 const FRONTEND_VERSION_POLL_MS = 60_000;
 
-const EDITABLE_JOB_STATUSES = new Set(["first_done", "client_editing"]);
-
 const ACCEPT = "audio/*,video/mp4,video/webm,.wav,.mp3,.m4a,.flac,.ogg";
 const GUEST_CLIENT_NAME = "의뢰인";
 const PENDING_PORTONE_PAYMENT_KEY = "pending_portone_payment";
@@ -139,45 +137,51 @@ function autoResizeTextarea(element: HTMLTextAreaElement) {
   element.style.height = `${element.scrollHeight}px`;
 }
 
-function mapClientJobStatus(status: string): string {
+function normalizeWorkflowStatus(status: string): string {
   switch (status) {
-    case "waiting_assignment":
     case "uploaded":
-      return "배정 대기";
+      return "waiting_assignment";
     case "assigned":
+      return "working";
+    case "first_done":
+    case "client_editing":
+      return "client_review";
+    case "review_waiting":
+      return "transcript_request";
+    case "final_done":
+      return "pdf_sent";
+    default:
+      return status;
+  }
+}
+
+function mapClientJobStatus(status: string): string {
+  switch (normalizeWorkflowStatus(status)) {
+    case "waiting_assignment":
+      return "배정 대기";
     case "working":
       return "작업 중";
-    case "first_done":
+    case "client_review":
       return "의뢰인 검토";
-    case "client_editing":
-      return "의뢰인 검토";
-    case "review_waiting":
-      return "녹취록 요청";
     case "transcriber_review":
       return "속기사검토";
-    case "final_done":
-      return "PDF 준비";
+    case "transcript_request":
+      return "녹취록 요청";
     case "pdf_sent":
       return "PDF 수령";
-    case "cancelled":
-      return "취소됨";
     default:
       return status;
   }
 }
 
 function archiveStatusStyle(status: string): string {
-  switch (status) {
-    case "first_done":
-    case "review_waiting":
+  switch (normalizeWorkflowStatus(status)) {
+    case "client_review":
     case "transcriber_review":
+    case "transcript_request":
       return "client-archive__status client-archive__status--review";
-    case "client_editing":
-      return "client-archive__status client-archive__status--client";
-    case "final_done":
     case "pdf_sent":
       return "client-archive__status client-archive__status--done";
-    case "assigned":
     case "working":
       return "client-archive__status client-archive__status--working";
     case "cancelled":
@@ -188,7 +192,8 @@ function archiveStatusStyle(status: string): string {
 }
 
 function isEditableArchiveStatus(status: string): boolean {
-  return EDITABLE_JOB_STATUSES.has(status) || status === "pdf_sent";
+  const canonical = normalizeWorkflowStatus(status);
+  return canonical === "client_review" || canonical === "pdf_sent";
 }
 
 function jobWorkflowStatus(job: { status?: string; workflow_status?: string } | null | undefined): string {
@@ -887,13 +892,13 @@ export default function App() {
       const shouldOpenEdit = options?.switchToEdit ?? isEditableArchiveStatus(workflowStatus);
       if (shouldOpenEdit) {
         setActiveTab("edit");
-      } else if (workflowStatus === "assigned" || workflowStatus === "working") {
+      } else if (normalizeWorkflowStatus(workflowStatus) === "working") {
         setActiveTab("archive");
         showNotice("info", "속기사가 작업 중입니다. 의뢰인 검토요청 후 편집 화면에서 확인할 수 있습니다.");
-      } else if (workflowStatus === "transcriber_review") {
+      } else if (normalizeWorkflowStatus(workflowStatus) === "transcriber_review") {
         setActiveTab("archive");
         showNotice("info", "속기사 검토 중입니다. 검토가 완료되면 PDF가 전달됩니다.");
-      } else if (workflowStatus === "review_waiting") {
+      } else if (normalizeWorkflowStatus(workflowStatus) === "transcript_request") {
         setActiveTab("archive");
         showNotice("info", "녹취록 요청이 접수되었습니다. 속기사가 최종 확인 후 PDF를 전달합니다.");
       }
@@ -907,16 +912,16 @@ export default function App() {
   };
 
   const openArchiveJob = (item: JobArchiveItem, projectTitle?: string) => {
-    const workflowStatus = item.workflow_status ?? item.status;
+    const workflowStatus = normalizeWorkflowStatus(item.workflow_status ?? item.status);
     if (workflowStatus === "transcriber_review") {
       showNotice("info", "속기사 검토 중입니다. 검토가 완료되면 PDF가 전달됩니다.");
       return;
     }
-    if (workflowStatus === "review_waiting") {
+    if (workflowStatus === "transcript_request") {
       showNotice("info", "녹취록 요청이 접수되었습니다. 속기사가 최종 확인 후 PDF를 전달합니다.");
       return;
     }
-    if (workflowStatus === "assigned" || workflowStatus === "working") {
+    if (workflowStatus === "working") {
       showNotice("info", "속기사가 작업 중입니다. 의뢰인 검토 단계가 되면 편집 화면에서 확인할 수 있습니다.");
       return;
     }
@@ -1173,12 +1178,11 @@ export default function App() {
     setActionNotice(null);
     try {
       await saveTranscript(job.job_id, currentTranscript, "draft");
-      await updateJobStatus(job.job_id, "client_editing", "의뢰인 수정본 저장");
       setJob({
         ...job,
         transcript_json: currentTranscript,
-        status: "client_editing",
-        workflow_status: "client_editing",
+        status: "client_review",
+        workflow_status: "client_review",
       });
       setChangeHistoryRefresh((value) => value + 1);
       showNotice("success", "", "저장완료");
@@ -1197,7 +1201,7 @@ export default function App() {
     try {
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
       await saveTranscript(job.job_id, currentTranscript, "draft");
-      await updateJobStatus(job.job_id, "review_waiting", "의뢰인 녹취록 요청");
+      await updateJobStatus(job.job_id, "transcript_request", "의뢰인 녹취록 요청");
       setJob(null);
       setSegments([]);
       setSpeakerLabels({});
@@ -1708,7 +1712,7 @@ export default function App() {
 
             {job && !isEditableArchiveStatus(currentWorkflowStatus) ? (
               <div className="client-edit__empty">
-                {currentWorkflowStatus === "assigned" || currentWorkflowStatus === "working" ? (
+                {normalizeWorkflowStatus(currentWorkflowStatus) === "working" ? (
                   <>
                     속기사가 초벌 작업 중입니다.
                     <br />
@@ -1720,13 +1724,13 @@ export default function App() {
                     <br />
                     아래에서 내용을 확인하고 PDF를 다운로드할 수 있습니다.
                   </>
-                ) : currentWorkflowStatus === "transcriber_review" ? (
+                ) : currentWorkflowStatus === "transcriber_review" || normalizeWorkflowStatus(currentWorkflowStatus) === "transcriber_review" ? (
                   <>
                     속기사 검토 중입니다.
                     <br />
                     검토가 완료되면 보관함에서 PDF 수령 상태로 확인할 수 있습니다.
                   </>
-                ) : currentWorkflowStatus === "review_waiting" ? (
+                ) : normalizeWorkflowStatus(currentWorkflowStatus) === "transcript_request" ? (
                   <>
                     녹취록 요청이 접수되었습니다.
                     <br />

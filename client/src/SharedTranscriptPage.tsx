@@ -158,8 +158,8 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
               ...prev,
               job: {
                 ...prev.job,
-                status: "client_editing",
-                workflow_status: "client_editing",
+                status: "client_review",
+                workflow_status: "client_review",
                 transcript_json: currentTranscript,
               },
             }
@@ -225,8 +225,8 @@ export default function SharedTranscriptPage({ token }: { token: string }) {
               ...prev,
               job: {
                 ...prev.job,
-                status: "review_waiting",
-                workflow_status: "review_waiting",
+                status: "transcriber_review",
+                workflow_status: "transcriber_review",
                 transcript_json: currentTranscript,
               },
             }

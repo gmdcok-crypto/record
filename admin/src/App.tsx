@@ -61,9 +61,9 @@ type JobStatus =
   | "배정 대기"
   | "속기사 작업 중"
   | "의뢰인 검토"
-  | "녹취록 요청"
   | "속기사검토"
-  | "최종 완료";
+  | "녹취록 요청"
+  | "PDF 전달";
 
 type PaymentStatus = "미수" | "부분 입금" | "입금 완료";
 type SettlementStatus = "정산 대기" | "정산 확정" | "지급 완료";
@@ -302,7 +302,7 @@ function projectIsReassignMode(project: ProjectItem): boolean {
 }
 
 function isFinalFileStatus(status: JobStatus): boolean {
-  return status === "최종 완료";
+  return status === "PDF 전달";
 }
 
 function isInProgressFileStatus(status: JobStatus): boolean {
@@ -333,26 +333,39 @@ function defaultTranscriberCodeForProject(project: ProjectItem, people: Transcri
 }
 
 function mapJobStatus(status: string): JobStatus {
-  switch (status) {
+  switch (normalizeWorkflowStatus(status)) {
     case "waiting_assignment":
-    case "uploaded":
       return "배정 대기";
-    case "assigned":
     case "working":
       return "속기사 작업 중";
-    case "first_done":
+    case "client_review":
       return "의뢰인 검토";
-    case "client_editing":
-      return "의뢰인 검토";
-    case "review_waiting":
-      return "녹취록 요청";
     case "transcriber_review":
       return "속기사검토";
-    case "final_done":
+    case "transcript_request":
+      return "녹취록 요청";
     case "pdf_sent":
-      return "최종 완료";
+      return "PDF 전달";
     default:
       return "배정 대기";
+  }
+}
+
+function normalizeWorkflowStatus(status: string): string {
+  switch (status) {
+    case "uploaded":
+      return "waiting_assignment";
+    case "assigned":
+      return "working";
+    case "first_done":
+    case "client_editing":
+      return "client_review";
+    case "review_waiting":
+      return "transcript_request";
+    case "final_done":
+      return "pdf_sent";
+    default:
+      return status;
   }
 }
 
@@ -407,8 +420,8 @@ function activityTitle(job: JobItem): string {
       return `${job.id} 녹취록 요청 접수`;
     case "속기사검토":
       return `${job.id} 속기사 검토 요청 접수`;
-    case "최종 완료":
-      return `${job.id} 최종본 완료`;
+    case "PDF 전달":
+      return `${job.id} PDF 전달 완료`;
     default:
       return `${job.id} 작업 업데이트`;
   }
@@ -416,7 +429,7 @@ function activityTitle(job: JobItem): string {
 
 function statusTone(status: JobStatus | SettlementStatus | PaymentStatus | TranscriberStatus): string {
   switch (status) {
-    case "최종 완료":
+    case "PDF 전달":
     case "입금 완료":
     case "지급 완료":
     case "작업 가능":
@@ -695,10 +708,14 @@ function App() {
         if (payload.type === "job_inquiry_created" && payload.payload?.sender_role === "client") {
           notifyAdminEvent("의뢰인 문의 도착", "의뢰인이 관리자에게 새 문의를 남겼습니다.");
         }
-        if (payload.type === "job_updated" && payload.payload?.status === "review_waiting") {
+        if (payload.type === "job_updated" && payload.payload?.status === "transcript_request") {
           notifyAdminEvent("녹취록 요청", "의뢰인이 녹취록 요청을 보냈습니다.");
         }
-        if (payload.type === "job_updated" && payload.payload?.status === "transcriber_review") {
+        if (
+          payload.type === "job_updated" &&
+          (payload.payload?.status === "transcriber_review" ||
+            payload.payload?.status === "review_waiting")
+        ) {
           notifyAdminEvent("속기사 검토 요청", "의뢰인이 속기사 검토를 요청했습니다.");
         }
       } catch {
@@ -1540,7 +1557,7 @@ function App() {
           <option value="의뢰인 검토">의뢰인 검토</option>
           <option value="녹취록 요청">녹취록 요청</option>
           <option value="속기사검토">속기사검토</option>
-          <option value="최종 완료">최종 완료</option>
+          <option value="PDF 전달">PDF 전달</option>
         </select>
           <div className="ml-auto flex items-center gap-2 text-[11px] text-slate-500">
             <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1">
@@ -2000,7 +2017,7 @@ function App() {
           { title: "배정 대기", count: `${dashboardStats.waitingAssign}건`, tone: "amber" as const },
           { title: "속기사 작업 중", count: `${dashboardStats.working}건`, tone: "cyan" as const },
           {
-            title: "최종 완료",
+            title: "PDF 전달",
             count: `${dashboardStats.finalDone}건`,
             tone: "emerald" as const,
           },

@@ -109,39 +109,51 @@ function autoResizeTextarea(element: HTMLTextAreaElement) {
   element.style.height = `${element.scrollHeight}px`;
 }
 
-function mapFileStatusLabel(status: string): string {
+function normalizeWorkflowStatus(status: string): string {
   switch (status) {
+    case "uploaded":
+      return "waiting_assignment";
     case "assigned":
-      return "배정 완료";
-    case "working":
-      return "초벌 작성 중";
+      return "working";
     case "first_done":
-      return "의뢰인 검토";
     case "client_editing":
-      return "의뢰인 검토";
+      return "client_review";
     case "review_waiting":
-      return "녹취록 요청";
+      return "transcript_request";
+    case "final_done":
+      return "pdf_sent";
+    default:
+      return status;
+  }
+}
+
+function mapFileStatusLabel(status: string): string {
+  switch (normalizeWorkflowStatus(status)) {
+    case "waiting_assignment":
+      return "배정 대기";
+    case "working":
+      return "작업 중";
+    case "client_review":
+      return "의뢰인 검토";
     case "transcriber_review":
       return "속기사검토";
-    case "final_done":
+    case "transcript_request":
+      return "녹취록 요청";
     case "pdf_sent":
-      return "PDF 완료";
+      return "PDF 전달";
     default:
       return status;
   }
 }
 
 function fileStatusStyle(status: string): string {
-  switch (status) {
-    case "final_done":
+  switch (normalizeWorkflowStatus(status)) {
     case "pdf_sent":
       return "bg-emerald-500/15 text-emerald-300";
-    case "first_done":
-    case "review_waiting":
+    case "client_review":
     case "transcriber_review":
-    case "client_editing":
+    case "transcript_request":
       return "bg-violet-500/15 text-violet-300";
-    case "assigned":
     case "working":
       return "bg-cyan-500/15 text-cyan-300";
     default:
@@ -280,7 +292,7 @@ export default function AdminTranscriptEditor({
       const nextJob = {
         ...job,
         transcript_json: transcript,
-        status: job.status === "assigned" ? "working" : job.status,
+        status: normalizeWorkflowStatus(job.status) === "working" ? "working" : job.status,
         workflow_status: result.workflow_status ?? job.workflow_status ?? job.status,
       };
       onJobChange(nextJob);

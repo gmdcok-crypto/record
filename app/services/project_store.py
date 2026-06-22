@@ -16,11 +16,17 @@ from app.services.job_store import (
     infer_title,
     inquiry_summary_for_job,
 )
+from app.services.job_workflow import (
+    FINAL_JOB_STATUSES,
+    REVIEW_JOB_STATUSES,
+    TRANSCRIPT_REQUEST,
+    TRANSCRIBER_REVIEW,
+    WAITING_JOB_STATUSES,
+    WORKING_JOB_STATUSES,
+    normalize_job_status,
+)
 
-FINAL_JOB_STATUSES = frozenset({"pdf_sent"})
-DELIVERY_PENDING_JOB_STATUSES = frozenset({"first_done", "final_done"})
-WAITING_JOB_STATUSES = frozenset({"uploaded", "waiting_assignment"})
-WORKING_JOB_STATUSES = frozenset({"assigned", "working", "client_editing", "review_waiting", "transcriber_review"})
+DELIVERY_PENDING_JOB_STATUSES = REVIEW_JOB_STATUSES
 
 
 class ProjectAccessError(ValueError):
@@ -28,16 +34,17 @@ class ProjectAccessError(ValueError):
 
 
 def compute_project_status(display_statuses: list[str]) -> str:
-    if not display_statuses:
+    normalized = [normalize_job_status(status) for status in display_statuses]
+    if not normalized:
         return "empty"
-    if all(status in FINAL_JOB_STATUSES for status in display_statuses):
+    if all(status in FINAL_JOB_STATUSES for status in normalized):
         return "completed"
-    if any(status in WAITING_JOB_STATUSES for status in display_statuses):
+    if any(status in WAITING_JOB_STATUSES for status in normalized):
         return "waiting_assignment"
-    if any(status in WORKING_JOB_STATUSES for status in display_statuses):
-        return "working"
-    if all(status in FINAL_JOB_STATUSES | DELIVERY_PENDING_JOB_STATUSES for status in display_statuses):
+    if any(status in REVIEW_JOB_STATUSES for status in normalized):
         return "client_review"
+    if any(status in WORKING_JOB_STATUSES for status in normalized):
+        return "working"
     return "working"
 
 
@@ -421,12 +428,12 @@ def assign_project_jobs(
 
     eligible: list[Job] = []
     for job in jobs:
-        display_status = _display_status_for_job(db, job)
-        if display_status in FINAL_JOB_STATUSES | {"final_done"}:
+        display_status = normalize_job_status(_display_status_for_job(db, job))
+        if display_status in FINAL_JOB_STATUSES:
             continue
         if reassign:
             eligible.append(job)
-        elif display_status in WAITING_JOB_STATUSES | {"review_waiting", "transcriber_review"}:
+        elif display_status in WAITING_JOB_STATUSES | REVIEW_JOB_STATUSES | {TRANSCRIPT_REQUEST}:
             eligible.append(job)
 
     if not eligible:

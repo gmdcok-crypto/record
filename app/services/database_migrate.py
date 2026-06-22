@@ -35,6 +35,7 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_admin_auth.sql",
     SCRIPTS_DIR / "migrate_transcriber_push_subscriptions.sql",
     SCRIPTS_DIR / "migrate_job_transcriber_review_status.sql",
+    SCRIPTS_DIR / "migrate_job_workflow_statuses.sql",
 ]
 
 

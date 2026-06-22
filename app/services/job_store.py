@@ -36,12 +36,19 @@ DEFAULT_ADMIN_NAME = "운영관리자"
 DEFAULT_TRANSCRIBER_CODE = "TR-001"
 DEFAULT_CLIENT_CODE = "CLIENT-DEFAULT"
 DEFAULT_CLIENT_NAME = "일반 의뢰인"
-ACTIVE_JOB_STATUSES = {"assigned", "working", "first_done", "client_editing", "review_waiting", "transcriber_review"}
-TRANSCRIBER_VISIBLE_JOB_STATUSES = ACTIVE_JOB_STATUSES | {"final_done", "pdf_sent"}
-CLIENT_VISIBLE_TRANSCRIPT_STATUSES = frozenset(
-    {"first_done", "client_editing", "review_waiting", "transcriber_review", "final_done", "pdf_sent"}
+from app.services.job_workflow import (
+    ACTIVE_JOB_STATUSES,
+    CLIENT_REVIEW,
+    CLIENT_VISIBLE_TRANSCRIPT_STATUSES,
+    PDF_SENT,
+    TRANSCRIBER_DRAFT_STATUSES,
+    TRANSCRIBER_REVIEW,
+    TRANSCRIBER_VISIBLE_JOB_STATUSES,
+    TRANSCRIPT_REQUEST,
+    WAITING_ASSIGNMENT,
+    WORKING,
+    normalize_job_status,
 )
-TRANSCRIBER_DRAFT_STATUSES = frozenset({"assigned", "working"})
 THREAD_CLIENT_ADMIN = "client_admin"
 THREAD_TRANSCRIBER_ADMIN = "transcriber_admin"
 
@@ -272,15 +279,16 @@ def _visible_transcriber_for_job(db: Session, job: Job) -> Transcriber | None:
 
 
 def _display_status_for_job(db: Session, job: Job) -> str:
-    if job.status in {"uploaded", "waiting_assignment"}:
-        return "waiting_assignment"
-    if job.status in ACTIVE_JOB_STATUSES and job.assigned_transcriber_id is None:
-        return "waiting_assignment"
-    if job.status in CLIENT_VISIBLE_TRANSCRIPT_STATUSES:
-        return job.status
-    if job.status in ACTIVE_JOB_STATUSES and not _has_manual_assignment(db, job.job_id):
-        return "waiting_assignment"
-    return job.status
+    status = normalize_job_status(job.status)
+    if status == WAITING_ASSIGNMENT:
+        return WAITING_ASSIGNMENT
+    if status in ACTIVE_JOB_STATUSES and job.assigned_transcriber_id is None:
+        return WAITING_ASSIGNMENT
+    if status in CLIENT_VISIBLE_TRANSCRIPT_STATUSES:
+        return status
+    if status in ACTIVE_JOB_STATUSES and not _has_manual_assignment(db, job.job_id):
+        return WAITING_ASSIGNMENT
+    return status
 
 
 def create_job_record(
@@ -383,8 +391,13 @@ def assign_job(
     job.assigned_at = assigned_at
     if admin is not None:
         job.assigned_admin_id = admin.id
-    if job.status in {"uploaded", "waiting_assignment", "review_waiting", "transcriber_review"}:
-        job.status = "assigned"
+    if normalize_job_status(job.status) in {
+        WAITING_ASSIGNMENT,
+        TRANSCRIPT_REQUEST,
+        TRANSCRIBER_REVIEW,
+        CLIENT_REVIEW,
+    } or job.status == "assigned":
+        job.status = WORKING
 
     db.add(
         JobAssignment(
@@ -435,7 +448,7 @@ def set_job_status(
 ) -> Job:
     previous = job.status
     job.status = next_status
-    if next_status == "final_done" and job.finalized_at is None:
+    if next_status == PDF_SENT and job.finalized_at is None:
         job.finalized_at = datetime.now(timezone.utc).replace(tzinfo=None)
     status_log = JobStatusLog(
         job_id=job.job_id,
@@ -1648,15 +1661,15 @@ def delete_transcriber(db: Session, transcriber: Transcriber) -> None:
     for job in assigned_jobs:
         job.assigned_transcriber_id = None
         job.assigned_at = None
-        if job.status in ACTIVE_JOB_STATUSES or job.status == "assigned":
-            job.status = "waiting_assignment"
+        if normalize_job_status(job.status) in ACTIVE_JOB_STATUSES:
+            job.status = WAITING_ASSIGNMENT
 
     db.delete(transcriber)
     db.commit()
 
 
 def delete_job_if_unassigned(db: Session, job: Job) -> None:
-    if job.status not in {"uploaded", "waiting_assignment"} or job.assigned_transcriber_id is not None:
+    if normalize_job_status(job.status) not in {WAITING_ASSIGNMENT} or job.assigned_transcriber_id is not None:
         raise ValueError("Only unassigned jobs can be cancelled")
 
     assignments = db.scalars(select(JobAssignment).where(JobAssignment.job_id == job.job_id)).all()
@@ -1768,8 +1781,13 @@ def dashboard_overview(db: Session) -> dict:
         "stats": {
             "total_jobs": len(jobs),
             "waiting_assignment": sum(1 for job in jobs if display_statuses[job.job_id] == "waiting_assignment"),
-            "working": sum(1 for job in jobs if display_statuses[job.job_id] in {"assigned", "working", "client_editing", "review_waiting", "transcriber_review"}),
-            "final_done": sum(1 for job in jobs if display_statuses[job.job_id] == "pdf_sent"),
+            "working": sum(
+                1
+                for job in jobs
+                if display_statuses[job.job_id]
+                in {WORKING, CLIENT_REVIEW, TRANSCRIBER_REVIEW, TRANSCRIPT_REQUEST}
+            ),
+            "final_done": sum(1 for job in jobs if display_statuses[job.job_id] == PDF_SENT),
             "total_sales": total_sales,
             "total_settlements": total_settlements,
             "outstanding": outstanding,
@@ -1823,20 +1841,17 @@ def dashboard_overview(db: Session) -> dict:
 
 
 def _progress_for_status(status: str) -> int:
+    canonical = normalize_job_status(status)
     mapping = {
-        "uploaded": 5,
-        "waiting_assignment": 15,
-        "assigned": 25,
-        "working": 55,
-        "first_done": 70,
-        "client_editing": 82,
-        "review_waiting": 90,
-        "transcriber_review": 90,
-        "final_done": 98,
-        "pdf_sent": 100,
-        "cancelled": 0,
+        WAITING_ASSIGNMENT: 15,
+        WORKING: 40,
+        CLIENT_REVIEW: 60,
+        TRANSCRIBER_REVIEW: 75,
+        TRANSCRIPT_REQUEST: 90,
+        PDF_SENT: 100,
+        CANCELLED: 0,
     }
-    return mapping.get(status, 0)
+    return mapping.get(canonical, 0)
 
 
 def _format_duration(seconds: int | None) -> str:
