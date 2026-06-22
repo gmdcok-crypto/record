@@ -8,6 +8,7 @@ import TranscriptChangeHistory from "./TranscriptChangeHistory";
 import {
   createAdminJobInquiry,
   deliverDraftToClient,
+  adminDeliverJobPdf,
   downloadFinalTranscriptPdf,
   fetchAdminJobInquiries,
   fetchTranscriptChanges,
@@ -357,16 +358,17 @@ export default function AdminTranscriptEditor({
       await saveTranscript(job.job_id, currentTranscript, "pdf_finalize");
       await finalizeTranscriptPdf(job.job_id, currentTranscript);
       await downloadFinalTranscriptPdf(job.job_id);
+      const delivered = await adminDeliverJobPdf(job.job_id);
       onJobChange({
         ...job,
         transcript_json: currentTranscript,
         final_pdf_ready: true,
-        status: "pdf_sent",
-        workflow_status: "pdf_sent",
+        status: delivered.status,
+        workflow_status: delivered.status,
       });
       setChangeHistoryRefresh((value) => value + 1);
       await onReloadOverview?.();
-      onNotice("success", "최종 PDF를 R2에 저장하고 다운로드했습니다.");
+      onNotice("success", "최종 PDF를 저장·전달했고 정산 데이터를 반영했습니다.");
     } catch (err) {
       onNotice("error", err instanceof Error ? err.message : "PDF 다운로드 실패");
     } finally {

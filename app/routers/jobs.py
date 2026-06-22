@@ -16,7 +16,7 @@ from app.config import settings
 from app.dependencies.member_auth import get_current_member, get_optional_current_member
 from app.dependencies.transcriber_auth import get_current_transcriber, get_optional_current_transcriber
 from app.dependencies.admin_auth import AdminAuth, AdminEventAuth, OptionalAdminAuth
-from app.models.admin_models import AdminUser, Client, Job, Member, Transcriber
+from app.models.admin_models import AdminUser, Client, Job, Member, SettlementItem, Transcriber
 from app.db import ensure_db_initialized, get_db, get_engine
 from app.services.audio import remux_faststart, should_faststart
 from app.services.admin_events import publish_admin_event, stream_admin_events
@@ -46,6 +46,7 @@ from app.services.job_store import (
     empty_transcript_json,
     mark_transcript_saved,
     record_settlement_payment,
+    repair_job_settlement,
     serialize_job,
     store_final_pdf,
     set_job_status,
@@ -1664,6 +1665,50 @@ def download_member_project_final_pdf_bundle(
     if project.client_id != client.id:
         raise HTTPException(status_code=403, detail="이 프로젝트에 접근할 수 없습니다.")
     return _download_project_bundle_pdf(project_id, db)
+
+
+@router.post("/admin/jobs/{job_id}/deliver-pdf")
+def admin_deliver_pdf(
+    job_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
+) -> dict:
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.final_pdf_r2_key:
+        raise HTTPException(status_code=409, detail="먼저 PDF를 생성해 주세요.")
+    job = mark_final_pdf_delivered(db, job)
+    _notify_client_pdf_delivery(db, job, delivery_mode="individual")
+    _notify_client_status_change(db, job, note="PDF가 전달되었습니다.")
+    publish_admin_event("job_updated", {"job_id": job_id, "status": "pdf_sent"})
+    return {
+        "job_id": job_id,
+        "status": job.status,
+        "settlement_amount": float(job.settlement_amount or 0),
+    }
+
+
+@router.post("/admin/jobs/{job_id}/sync-settlement")
+def admin_sync_job_settlement(
+    job_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
+) -> dict:
+    job = get_job_record(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        job = repair_job_settlement(db, job)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    item = db.scalar(select(SettlementItem).where(SettlementItem.job_id == job_id))
+    return {
+        "job_id": job_id,
+        "status": job.status,
+        "settlement_amount": float(job.settlement_amount or 0),
+        "settlement_item_id": item.id if item is not None else None,
+    }
 
 
 @router.post("/transcriber/{job_id}/deliver-pdf")

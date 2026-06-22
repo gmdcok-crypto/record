@@ -537,13 +537,37 @@ def _sync_settlement_month_for_job(db: Session, job: Job) -> None:
             entry_job.settlement_status = settlement.status
 
 
+def _ensure_pdf_sent_status_log(db: Session, job: Job) -> None:
+    if job.status != "pdf_sent":
+        return
+    existing = db.scalar(
+        select(JobStatusLog.id)
+        .where(JobStatusLog.job_id == job.job_id, JobStatusLog.to_status == "pdf_sent")
+        .limit(1)
+    )
+    if existing is not None:
+        return
+    ts = job.completed_at or job.final_pdf_generated_at or job.finalized_at or datetime.now(timezone.utc).replace(tzinfo=None)
+    db.add(
+        JobStatusLog(
+            job_id=job.job_id,
+            from_status=None,
+            to_status="pdf_sent",
+            change_note="최종 PDF 의뢰인 전달 (정산 동기화)",
+            changed_by_transcriber_id=job.assigned_transcriber_id,
+            changed_at=ts,
+        )
+    )
+    db.flush()
+
+
 def mark_final_pdf_delivered(db: Session, job: Job) -> Job:
     if job.status == "pdf_sent":
-        if float(job.settlement_amount or 0) <= 0:
-            _apply_job_settlement_on_pdf_delivered(db, job)
-            _sync_settlement_month_for_job(db, job)
-            db.commit()
-            db.refresh(job)
+        _ensure_pdf_sent_status_log(db, job)
+        _apply_job_settlement_on_pdf_delivered(db, job)
+        _sync_settlement_month_for_job(db, job)
+        db.commit()
+        db.refresh(job)
         return job
     previous = job.status
     job.status = "pdf_sent"
@@ -557,6 +581,20 @@ def mark_final_pdf_delivered(db: Session, job: Job) -> Job:
         )
     )
     db.flush()
+    _apply_job_settlement_on_pdf_delivered(db, job)
+    _sync_settlement_month_for_job(db, job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def repair_job_settlement(db: Session, job: Job) -> Job:
+    """pdf_sent 작업의 작업비·settlement_items 누락을 복구합니다."""
+    if job.assigned_transcriber_id is None:
+        raise ValueError("배정된 속기사가 없어 정산할 수 없습니다.")
+    if job.status != "pdf_sent":
+        raise ValueError("PDF 전달(pdf_sent) 상태가 아닙니다. 먼저 PDF 전달을 완료해 주세요.")
+    _ensure_pdf_sent_status_log(db, job)
     _apply_job_settlement_on_pdf_delivered(db, job)
     _sync_settlement_month_for_job(db, job)
     db.commit()
@@ -924,7 +962,17 @@ def _pdf_sent_at_by_job(db: Session, job_ids: list[str]) -> dict[str, datetime]:
 
 
 def _job_delivered_at(job: Job, pdf_sent_at_by_job: dict[str, datetime]) -> datetime | None:
-    return pdf_sent_at_by_job.get(job.job_id)
+    logged = pdf_sent_at_by_job.get(job.job_id)
+    if logged is not None:
+        return logged
+    if job.status != "pdf_sent":
+        return None
+    return (
+        job.completed_at
+        or job.final_pdf_generated_at
+        or job.finalized_at
+        or job.updated_at
+    )
 
 
 def _build_grouped_settlement_entries(
@@ -1123,6 +1171,10 @@ def _serialize_settlement_snapshot_row(
 
 def list_settlement_snapshots(db: Session, as_of: date) -> dict:
     _ensure_settlement_payment_storage(db)
+    try:
+        sync_generated_settlements(db)
+    except Exception:
+        db.rollback()
     period_start, period_end = _month_period_for_date(as_of)
     grouped_entries = _build_grouped_settlement_entries(db, month_anchor=as_of, as_of=as_of)
     settlement_by_key = _get_settlement_by_period(db)

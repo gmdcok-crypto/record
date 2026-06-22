@@ -1034,6 +1034,18 @@ export async function finalizeTranscriptPdf(
   return res.json();
 }
 
+export async function adminDeliverJobPdf(
+  jobId: string,
+): Promise<{ job_id: string; status: string; settlement_amount: number }> {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/jobs/${jobId}/deliver-pdf`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "PDF 전달 실패");
+  }
+  return res.json();
+}
+
 export async function downloadFinalTranscriptPdf(jobId: string): Promise<void> {
   const res = await adminFetch(`${apiBase()}/api/jobs/${jobId}/transcript.pdf/final`);
   if (!res.ok) {
