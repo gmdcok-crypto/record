@@ -730,30 +730,6 @@ export default function App() {
   }, [memberProfile]);
 
   useEffect(() => {
-    if (!("serviceWorker" in navigator)) return undefined;
-
-    const handler = (event: MessageEvent) => {
-      if (event.data?.type === "WEB_PUSH_NOTIFICATION_RECEIVED") {
-        const kind = event.data?.payload?.kind;
-        if (kind === "pdf_delivery" || kind === "job_status") {
-          void refreshWorkspace(false, true);
-        }
-        return;
-      }
-      if (event.data?.type !== "WEB_PUSH_NOTIFICATION_CLICK") return;
-      const jobId = event.data?.payload?.jobId;
-      if (typeof jobId === "string" && jobId.trim()) {
-        void loadJobById(jobId, { switchToEdit: true });
-      }
-    };
-
-    navigator.serviceWorker.addEventListener("message", handler);
-    return () => {
-      navigator.serviceWorker.removeEventListener("message", handler);
-    };
-  }, [loadJobById, refreshWorkspace]);
-
-  useEffect(() => {
     if (authStatus !== "authenticated") return;
 
     let alive = true;
@@ -917,6 +893,30 @@ export default function App() {
       setLoadingJob(false);
     }
   };
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return undefined;
+
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === "WEB_PUSH_NOTIFICATION_RECEIVED") {
+        const kind = event.data?.payload?.kind;
+        if (kind === "pdf_delivery" || kind === "job_status") {
+          void refreshWorkspace(false, true);
+        }
+        return;
+      }
+      if (event.data?.type !== "WEB_PUSH_NOTIFICATION_CLICK") return;
+      const jobId = event.data?.payload?.jobId;
+      if (typeof jobId === "string" && jobId.trim()) {
+        void loadJobById(jobId, { switchToEdit: true });
+      }
+    };
+
+    navigator.serviceWorker.addEventListener("message", handler);
+    return () => {
+      navigator.serviceWorker.removeEventListener("message", handler);
+    };
+  }, [refreshWorkspace]);
 
   const openArchiveJob = (item: JobArchiveItem, projectTitle?: string) => {
     const workflowStatus = normalizeWorkflowStatus(item.workflow_status ?? item.status);
