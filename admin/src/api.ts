@@ -170,6 +170,7 @@ export type AdminOverviewSale = {
   amount: number;
   pay_method: string | null;
   paid_at: string | null;
+  created_at?: string | null;
   status: string;
 };
 

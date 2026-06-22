@@ -47,6 +47,11 @@ export function todayKstDateKey(reference = new Date()): string {
   return reference.toLocaleDateString("en-CA", { timeZone: KST_TIMEZONE });
 }
 
+export function monthStartKstDateKey(reference = new Date()): string {
+  const today = todayKstDateKey(reference);
+  return `${today.slice(0, 7)}-01`;
+}
+
 export function getKstDateKey(value: string | null | undefined): string | null {
   if (!value) return null;
   try {

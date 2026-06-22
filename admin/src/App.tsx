@@ -40,7 +40,7 @@ import {
   hasRegisteredAdminPushSubscription,
 } from "./webPush";
 import { ADMIN_ROLES, adminRoleLabel, canAccessMenu, defaultMenuForRole } from "./permissions";
-import { formatKstDateTime, formatKstDateTimeCompact, getKstDateKey, todayKstDateKey } from "./formatKstDateTime";
+import { formatKstDateTime, formatKstDateTimeCompact, getKstDateKey, monthStartKstDateKey, todayKstDateKey } from "./formatKstDateTime";
 import { isMobileLikeAdmin } from "./mobileEnvironment";
 
 type AuthStatus = "loading" | "guest" | "authed";
@@ -584,7 +584,7 @@ function App() {
   const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [editingAdminId, setEditingAdminId] = useState<number | null>(null);
   const [adminForm, setAdminForm] = useState<AdminForm>(EMPTY_ADMIN_FORM);
-  const [salesDateFrom, setSalesDateFrom] = useState(() => todayKstDateKey());
+  const [salesDateFrom, setSalesDateFrom] = useState(() => monthStartKstDateKey());
   const [salesDateTo, setSalesDateTo] = useState(() => todayKstDateKey());
 
   useEffect(() => {
@@ -764,13 +764,6 @@ function App() {
   }, [authStatus, activeMenu]);
 
   useEffect(() => {
-    if (activeMenu !== "sales") return;
-    const today = todayKstDateKey();
-    setSalesDateFrom(today);
-    setSalesDateTo(today);
-  }, [activeMenu]);
-
-  useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
     const handler = (
       event: MessageEvent<{ type?: string; payload?: { jobId?: string | null; kind?: string } }>,
@@ -898,17 +891,20 @@ function App() {
   );
 
   const sales = useMemo<SalesItem[]>(() => {
-    return (overview?.sales ?? []).map((item) => ({
-      id: item.id,
-      paymentId: item.payment_id,
-      memberName: item.member_name,
-      orderName: item.order_name,
-      amount: item.amount,
-      payMethod: item.pay_method || "-",
-      paidAt: item.paid_at ? formatKstDateTime(item.paid_at) : "-",
-      paidAtKey: getKstDateKey(item.paid_at),
-      status: item.status,
-    }));
+    return (overview?.sales ?? []).map((item) => {
+      const paidAtSource = item.paid_at ?? item.created_at ?? null;
+      return {
+        id: item.id,
+        paymentId: item.payment_id,
+        memberName: item.member_name,
+        orderName: item.order_name,
+        amount: item.amount,
+        payMethod: item.pay_method || "-",
+        paidAt: paidAtSource ? formatKstDateTime(paidAtSource) : "-",
+        paidAtKey: getKstDateKey(paidAtSource),
+        status: item.status,
+      };
+    });
   }, [overview]);
 
   const filteredSales = useMemo(() => {

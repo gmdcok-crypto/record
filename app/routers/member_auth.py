@@ -180,6 +180,18 @@ def _extract_pay_method(payment: dict) -> str | None:
     return label[:50]
 
 
+def _extract_paid_at(payment: dict) -> datetime:
+    from datetime import timezone
+
+    paid_at_raw = payment.get("paidAt") or payment.get("updatedAt") or payment.get("createdAt")
+    if isinstance(paid_at_raw, str) and paid_at_raw.strip():
+        try:
+            return datetime.fromisoformat(paid_at_raw.replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            pass
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def _finalize_portone_payment(
     db: Session,
     *,
@@ -215,13 +227,7 @@ def _finalize_portone_payment(
     pay_method = _extract_pay_method(payment)
 
     if settings.payment_records_enabled:
-        paid_at_raw = payment.get("paidAt") or payment.get("updatedAt")
-        paid_at = None
-        if isinstance(paid_at_raw, str) and paid_at_raw.strip():
-            try:
-                paid_at = datetime.fromisoformat(paid_at_raw.replace("Z", "+00:00")).replace(tzinfo=None)
-            except ValueError:
-                paid_at = None
+        paid_at = _extract_paid_at(payment)
         try:
             _record, created = record_payment_record(
                 db,

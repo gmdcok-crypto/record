@@ -1419,6 +1419,15 @@ def record_settlement_payment(
     raise RuntimeError("Failed to record settlement payment")
 
 
+def _payment_record_datetime_iso(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    iso = value.isoformat()
+    if value.tzinfo is None and not iso.endswith("Z") and "+" not in iso[-6:]:
+        return f"{iso}Z"
+    return iso
+
+
 def record_payment_record(
     db: Session,
     *,
@@ -1433,6 +1442,7 @@ def record_payment_record(
     safe_member_name = (member.name or "").strip()[:100] or "의뢰인"
     safe_order_name = (order_name or "").strip()[:255] or safe_payment_id
     safe_pay_method = (pay_method or "").strip()[:50] or None
+    resolved_paid_at = paid_at or datetime.now(timezone.utc).replace(tzinfo=None)
 
     for attempt in range(2):
         try:
@@ -1447,7 +1457,7 @@ def record_payment_record(
             record.order_name = safe_order_name
             record.amount = amount
             record.pay_method = safe_pay_method
-            record.paid_at = paid_at
+            record.paid_at = resolved_paid_at
             db.commit()
             db.refresh(record)
             return record, created
@@ -1484,7 +1494,8 @@ def list_payment_records(db: Session) -> list[dict]:
             "order_name": row.order_name,
             "amount": float(row.amount or 0),
             "pay_method": row.pay_method,
-            "paid_at": row.paid_at.isoformat() if row.paid_at else None,
+            "paid_at": _payment_record_datetime_iso(row.paid_at or row.created_at),
+            "created_at": _payment_record_datetime_iso(row.created_at),
             "status": "paid",
         }
         for row in rows
