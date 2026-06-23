@@ -28,6 +28,7 @@ import {
 type TermsKey = "service" | "privacy" | "collection";
 
 const REQUIRED_TERMS: TermsKey[] = ["service", "privacy", "collection"];
+const IDENTITY_VERIFICATION_PROMPT = "안전한 의뢰를 위해 본인인증를 완료해주세요";
 
 type SignupFlowContextValue = {
   openSignupFlow: () => void;
@@ -649,7 +650,7 @@ function SignupModal({
               disabled={verifyingIdentity || !identityRequired}
               onClick={() => void verifyIdentity()}
             >
-              {verifyingIdentity ? "인증 중…" : verifiedPhone ? "재인증" : "본인인증"}
+              {verifyingIdentity ? "인증 중…" : verifiedPhone ? "재인증" : IDENTITY_VERIFICATION_PROMPT}
             </button>
           </div>
           {verifiedPhone ? (
@@ -657,7 +658,7 @@ function SignupModal({
               인증된 휴대폰: {formatVerifiedPhone(verifiedPhone)}
             </p>
           ) : identityRequired ? (
-            <p className="signup-hint">회원가입 전 포트원 본인인증을 완료해 주세요.</p>
+            <p className="signup-hint">{IDENTITY_VERIFICATION_PROMPT}</p>
           ) : null}
 
           {error ? <p className="signup-error">{error}</p> : null}
