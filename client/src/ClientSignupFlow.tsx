@@ -18,6 +18,7 @@ import "./styles/signup-modal.css";
 type TermsKey = "service" | "privacy" | "collection";
 
 const REQUIRED_TERMS: TermsKey[] = ["service", "privacy", "collection"];
+const IDENTITY_VERIFICATION_HINT = "안전한 의뢰를 위해 본인인증를 완료해주세요";
 
 type Props = {
   open: boolean;
@@ -624,7 +625,7 @@ function SignupModal({
               인증된 휴대폰: {formatVerifiedPhone(verifiedPhone)}
             </p>
           ) : identityRequired ? (
-            <p className="signup-hint">회원가입 전 포트원 본인인증을 완료해 주세요.</p>
+            <p className="signup-hint">{IDENTITY_VERIFICATION_HINT}</p>
           ) : null}
 
           {error ? <p className="signup-error">{error}</p> : null}
