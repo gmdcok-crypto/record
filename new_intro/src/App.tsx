@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import logo from "./assets/width_1024.png";
 import uploadIcon from "./assets/DesktopPinterestFormUnifiedV3/47762f3b57e28050c36f2dd2f70879f749dbfd75.png";
 import selectIcon from "./assets/DesktopPinterestFormUnifiedV3/e3547b726ceb63cb05d0bbe146755cc2b188322d.png";
@@ -11,6 +12,8 @@ import sadIcon from "./assets/DesktopPinterestFormUnifiedV3/7431f57c1a63f2fdfa65
 import mobileMascot from "./assets/MobilePinterestFormUnifiedV3/90d99f09138042927aebcbc452ca495efa019925.png";
 import heroStoryBanner from "./assets/hero-story-banner.png";
 import { SignupFlowProvider, useSignupFlow } from "./signup/SignupFlow";
+import QuoteModal from "./quote/QuoteModal";
+import { preloadChannelTalk, showChannelTalkMessenger } from "./lib/channelTalk";
 
 const transcriptSamplePdf = "/assets/transcript-sample.pdf";
 
@@ -82,7 +85,13 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return <p className="section-label">{children}</p>;
 }
 
-function Header() {
+function Header({
+  onOpenQuote,
+  onOpenChannelTalk,
+}: {
+  onOpenQuote: () => void;
+  onOpenChannelTalk: () => void;
+}) {
   return (
     <header className="site-header">
       <a className="brand" href="#service" aria-label="불판녹취 홈">
@@ -97,7 +106,15 @@ function Header() {
           <a key={href} href={href}>{label}</a>
         ))}
       </nav>
-      <CtaButton />
+      <div className="site-header-actions">
+        <button type="button" className="header-ghost-btn" onClick={onOpenQuote}>
+          무료견적
+        </button>
+        <button type="button" className="header-ghost-btn" onClick={onOpenChannelTalk}>
+          상담문의
+        </button>
+        <CtaButton />
+      </div>
     </header>
   );
 }
@@ -311,7 +328,13 @@ function Request() {
   );
 }
 
-function Footer() {
+function Footer({
+  onOpenQuote,
+  onOpenChannelTalk,
+}: {
+  onOpenQuote: () => void;
+  onOpenChannelTalk: () => void;
+}) {
   return (
     <footer className="site-footer">
       <div className="footer-brand">
@@ -322,12 +345,48 @@ function Footer() {
         </div>
       </div>
       <div className="footer-links">
-        <span>서비스 소개</span>
-        <span>요금 안내</span>
-        <span>무료 견적</span>
-        <span>개인정보처리방침</span>
+        <a href="#service">서비스 소개</a>
+        <a href="#process">요금 안내</a>
+        <button type="button" className="footer-link-btn" onClick={onOpenQuote}>
+          무료 견적
+        </button>
+        <button type="button" className="footer-link-btn" onClick={onOpenChannelTalk}>
+          상담문의
+        </button>
       </div>
     </footer>
+  );
+}
+
+function AppContent() {
+  const [quoteOpen, setQuoteOpen] = useState(false);
+
+  useEffect(() => {
+    void preloadChannelTalk();
+  }, []);
+
+  const openQuote = () => setQuoteOpen(true);
+  const openChannelTalk = () => {
+    void showChannelTalkMessenger();
+  };
+
+  return (
+    <>
+      <Header onOpenQuote={openQuote} onOpenChannelTalk={openChannelTalk} />
+      <main>
+        <Hero />
+        <HeroStoryBanner />
+        <About />
+        <HotSpeed />
+        <Features />
+        <Process />
+        <Quality />
+        <Results />
+        <Request />
+      </main>
+      <Footer onOpenQuote={openQuote} onOpenChannelTalk={openChannelTalk} />
+      <QuoteModal open={quoteOpen} onClose={() => setQuoteOpen(false)} />
+    </>
   );
 }
 
@@ -335,19 +394,7 @@ export default function App() {
   return (
     <SignupFlowProvider>
       <div className="app">
-        <Header />
-        <main>
-          <Hero />
-          <HeroStoryBanner />
-          <About />
-          <HotSpeed />
-          <Features />
-          <Process />
-          <Quality />
-          <Results />
-          <Request />
-        </main>
-        <Footer />
+        <AppContent />
       </div>
     </SignupFlowProvider>
   );
