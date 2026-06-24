@@ -1383,8 +1383,8 @@ export default function App() {
 
   const tabs: { id: ClientTab; label: string }[] = [
     { id: "upload", label: "업로드" },
-    { id: "archive", label: "보관함" },
-    { id: "edit", label: "편집" },
+    { id: "archive", label: "진행중인 의뢰" },
+    { id: "edit", label: "녹취수정" },
   ];
 
   if (authStatus === "loading") {

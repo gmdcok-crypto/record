@@ -20,7 +20,7 @@ const tabs: TabDef[] = [
   },
   {
     id: "archive",
-    label: "보관함",
+    label: "진행중인 의뢰",
     icon: () => (
       <svg viewBox="0 0 24 24" aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8">
         <path
@@ -33,7 +33,7 @@ const tabs: TabDef[] = [
   },
   {
     id: "edit",
-    label: "편집",
+    label: "녹취수정",
     icon: () => (
       <svg viewBox="0 0 24 24" aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8">
         <path
