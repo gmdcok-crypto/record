@@ -1072,7 +1072,7 @@ export default function App() {
         );
       }
       resetUploadUi(
-        `"${result.projectTitle}" 프로젝트에 ${result.fileCount}개 파일이 추가되었습니다. 관리자 배정 후 속기사가 녹취록을 작성합니다.`,
+        `"${result.projectTitle}" 프로젝트에 ${result.fileCount}개 파일이 추가되었습니다. 파일 확인 후 문의 사항 있으면 연락드리겠습니다.`,
       );
       setActiveTab("archive");
     },
