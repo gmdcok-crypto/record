@@ -43,7 +43,7 @@ import {
   hasRegisteredAdminPushSubscription,
 } from "./webPush";
 import { ADMIN_ROLES, adminRoleLabel, canAccessMenu, defaultMenuForRole } from "./permissions";
-import { formatKstDateTime, formatKstDateTimeCompact, getKstDateKey, todayKstDateKey } from "./formatKstDateTime";
+import { formatKstDateTime, getKstDateKey, todayKstDateKey } from "./formatKstDateTime";
 import { isMobileLikeAdmin } from "./mobileEnvironment";
 
 type AuthStatus = "loading" | "guest" | "authed";
@@ -53,7 +53,6 @@ type MenuKey =
   | "jobs"
   | "transcribers"
   | "members"
-  | "progress"
   | "sales"
   | "expenses"
   | "reports"
@@ -234,17 +233,11 @@ type SalesItem = {
   status: string;
 };
 
-type ActivityItem = {
-  time: string;
-  title: string;
-};
-
 const MENU_BASE: Array<Omit<MenuItem, "count">> = [
   { key: "dashboard", label: "대시보드" },
   { key: "jobs", label: "의뢰 / 파일 관리" },
   { key: "transcribers", label: "속기사 관리" },
   { key: "members", label: "회원 관리" },
-  { key: "progress", label: "진행 현황" },
   { key: "sales", label: "매출 관리" },
   { key: "expenses", label: "지출 관리" },
   { key: "reports", label: "집계" },
@@ -439,25 +432,6 @@ function authStatusTone(authStatus: string): string {
   return authStatus === "active"
     ? "bg-emerald-500/15 text-emerald-300"
     : "bg-amber-500/15 text-amber-300";
-}
-
-function activityTitle(job: JobItem): string {
-  switch (job.status) {
-    case "배정 대기":
-      return `${job.id} 신규 의뢰 접수`;
-    case "속기사 작업 중":
-      return `${job.id} 속기사 작업 진행`;
-    case "의뢰인 검토":
-      return `${job.id} 의뢰인 검토 진행`;
-    case "녹취록 요청":
-      return `${job.id} 녹취록 요청 접수`;
-    case "속기사검토":
-      return `${job.id} 속기사 검토 요청 접수`;
-    case "PDF 전달":
-      return `${job.id} PDF 전달 완료`;
-    default:
-      return `${job.id} 작업 업데이트`;
-  }
 }
 
 function statusTone(status: JobStatus | SettlementStatus | PaymentStatus | TranscriberStatus): string {
@@ -1487,13 +1461,6 @@ function App() {
     });
   };
 
-  const activityFeed = useMemo<ActivityItem[]>(() => {
-    return jobs.slice(0, 4).map((job) => ({
-      time: formatKstDateTimeCompact(job.uploadedAt),
-      title: activityTitle(job),
-    }));
-  }, [jobs]);
-
   const menuItems = useMemo(() => {
     if (!adminProfile) return [];
     return MENU_BASE.filter((item) => canAccessMenu(adminProfile.role, item.key));
@@ -1576,8 +1543,6 @@ function App() {
     };
   }, [overview]);
 
-  const urgentJobs = useMemo(() => jobs.filter((job) => job.priority === "긴급"), [jobs]);
-
   const memberSummaryMetrics = useMemo(
     () => [
       { label: "전체 회원", value: `${members.length}명`, tone: "slate" as const },
@@ -1627,78 +1592,27 @@ function App() {
         <StatCard label="배정 대기 건수" value={`${dashboardStats.waitingAssign}건`} change="우선 처리" />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.6fr_0.95fr]">
-        <SectionCard
-          title="긴급 작업 보드"
-          subtitle="가장 먼저 처리해야 하는 작업을 빠르게 확인합니다."
-          action={
-            <button
-              type="button"
-              onClick={() => setActiveMenu("jobs")}
-              className="rounded-lg border border-slate-700 bg-slate-800/90 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-slate-700"
-            >
-              전체 작업 보기
-            </button>
-          }
-        >
-          <div className="space-y-2">
-            {urgentJobs.length === 0 ? (
-              <EmptyState message="표시할 긴급 작업이 없습니다." />
-            ) : (
-              urgentJobs.map((job) => (
-              <div
-                key={job.id}
-                className="rounded-xl border border-slate-800 bg-slate-950/70 p-3 transition hover:border-cyan-500/30"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-md border border-rose-500/20 bg-rose-500/10 px-2 py-1 text-[11px] font-semibold text-rose-300">
-                        긴급
-                      </span>
-                      <span className={`rounded-md px-2 py-1 text-[11px] font-semibold ${statusTone(job.status)}`}>
-                        {job.status}
-                      </span>
-          </div>
-                    <h3 className="mt-2 text-sm font-semibold text-white">{job.title}</h3>
-                    <p className="mt-1 text-xs text-slate-400">{job.client}</p>
-                  </div>
-                  <div className="text-right text-xs text-slate-300">
-                    <p>담당: {job.assignee}</p>
-                    <p className="mt-1">마감: {job.dueAt}</p>
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <div className="mb-2 flex justify-between text-[11px] text-slate-500">
-                    <span>진행률</span>
-                    <span>{job.progress}%</span>
-                  </div>
-                  <ProgressBar value={job.progress} />
-                </div>
+      <SectionCard title="진행 현황" subtitle="현재 작업 흐름을 같은 운영 톤의 요약 카드로 확인합니다.">
+        <div className="grid gap-3 lg:grid-cols-3">
+          {[
+            { title: "배정 대기", count: `${dashboardStats.waitingAssign}건`, tone: "amber" as const },
+            { title: "속기사 작업 중", count: `${dashboardStats.working}건`, tone: "cyan" as const },
+            {
+              title: "PDF 전달",
+              count: `${dashboardStats.finalDone}건`,
+              tone: "emerald" as const,
+            },
+          ].map((item) => (
+            <div key={item.title} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.title}</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{item.count}</p>
+              <div className="mt-3">
+                <SummaryChip label="상태" value={item.title} tone={item.tone} />
               </div>
-              ))
-            )}
-          </div>
-        </SectionCard>
-
-        <SectionCard title="운영 피드" subtitle="최근 업로드 및 상태 변화를 짧게 추적합니다.">
-          <div className="space-y-3">
-            {activityFeed.length === 0 ? (
-              <EmptyState message="표시할 최근 작업 이력이 없습니다." />
-            ) : (
-              activityFeed.map((item) => (
-              <div key={`${item.time}-${item.title}`} className="flex gap-3 rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2.5">
-                <div className="mt-1 h-2 w-2 rounded-full bg-cyan-400" />
-                <div>
-                  <p className="text-sm font-medium text-white">{item.title}</p>
-                  <p className="mt-1 text-[11px] text-slate-500">{item.time}</p>
-                </div>
-              </div>
-              ))
-            )}
-          </div>
-        </SectionCard>
-      </div>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
     </div>
   );
 
@@ -2176,30 +2090,6 @@ function App() {
     </div>
   );
 
-  const renderProgress = () => (
-    <SectionCard title="진행 현황" subtitle="현재 작업 흐름을 같은 운영 톤의 요약 카드로 확인합니다.">
-      <div className="grid gap-3 lg:grid-cols-3">
-        {[
-          { title: "배정 대기", count: `${dashboardStats.waitingAssign}건`, tone: "amber" as const },
-          { title: "속기사 작업 중", count: `${dashboardStats.working}건`, tone: "cyan" as const },
-          {
-            title: "PDF 전달",
-            count: `${dashboardStats.finalDone}건`,
-            tone: "emerald" as const,
-          },
-        ].map((item) => (
-          <div key={item.title} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.title}</p>
-            <p className="mt-2 text-2xl font-semibold text-white">{item.count}</p>
-            <div className="mt-3">
-              <SummaryChip label="상태" value={item.title} tone={item.tone} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </SectionCard>
-  );
-
   const renderSales = () => (
     <section className="rounded-2xl border border-slate-800 bg-slate-900/92 p-4 shadow-[0_10px_30px_rgba(2,6,23,0.28)]">
       <div className="mb-3 grid gap-1.5 md:grid-cols-2 xl:grid-cols-5">
@@ -2341,8 +2231,6 @@ function App() {
         return renderTranscribers();
       case "members":
         return renderMembers();
-      case "progress":
-        return renderProgress();
       case "sales":
         return renderSales();
       case "expenses":
@@ -2458,8 +2346,6 @@ function App() {
                         ? "속기사 관리"
                         : activeMenu === "members"
                           ? "회원 관리"
-                          : activeMenu === "progress"
-                            ? "진행 현황"
                           : activeMenu === "sales"
                                 ? "매출 관리"
                                 : activeMenu === "expenses"
