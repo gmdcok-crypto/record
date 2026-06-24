@@ -1584,7 +1584,7 @@ function App() {
   );
 
   const renderDashboard = () => (
-    <SectionCard title="진행 현황" subtitle="현재 작업 흐름을 같은 운영 톤의 요약 카드로 확인합니다.">
+    <SectionCard title="진행 현황">
       <div className="grid gap-3 lg:grid-cols-3">
         {[
           { title: "배정 대기", count: `${dashboardStats.waitingAssign}건`, tone: "amber" as const },
