@@ -275,6 +275,27 @@ function formatSalesMonthShort(monthKey: string): string {
   return `(${Number(monthKey.split("-")[1])}월)`;
 }
 
+function addMonthsToMonthKey(monthKey: string, delta: number): string {
+  const [year, month] = monthKey.split("-").map(Number);
+  const total = year * 12 + (month - 1) + delta;
+  const nextYear = Math.floor(total / 12);
+  const nextMonth = (total % 12) + 1;
+  return `${nextYear}-${String(nextMonth).padStart(2, "0")}`;
+}
+
+function buildSalesMonthOptions(reference = new Date()): Array<{ value: string; label: string }> {
+  const current = todayKstDateKey(reference).slice(0, 7);
+  const start = addMonthsToMonthKey(current, -12);
+  const end = addMonthsToMonthKey(current, 12);
+  const options: Array<{ value: string; label: string }> = [];
+  let cursor = start;
+  while (cursor <= end) {
+    options.push({ value: cursor, label: formatSalesMonthKey(cursor) });
+    cursor = addMonthsToMonthKey(cursor, 1);
+  }
+  return options;
+}
+
 function mapProjectStatusLabel(status: string): string {
   switch (status) {
     case "waiting_assignment":
@@ -606,7 +627,11 @@ function App() {
   const [salesDateTo, setSalesDateTo] = useState(() => todayKstDateKey());
   const [salesTargetInput, setSalesTargetInput] = useState("");
   const [salesTargetLoading, setSalesTargetLoading] = useState(false);
-  const [salesTargetSaving, setSalesTargetSaving] = useState(false);
+  const [salesTargetModalOpen, setSalesTargetModalOpen] = useState(false);
+  const [salesTargetModalMonth, setSalesTargetModalMonth] = useState(() => todayKstDateKey().slice(0, 7));
+  const [salesTargetModalInput, setSalesTargetModalInput] = useState("");
+  const [salesTargetModalLoading, setSalesTargetModalLoading] = useState(false);
+  const [salesTargetModalSaving, setSalesTargetModalSaving] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -987,6 +1012,15 @@ function App() {
     return Math.round((salesSummaryMetrics.monthlyTotal / salesTargetAmount) * 1000) / 10;
   }, [salesSummaryMetrics.monthlyTotal, salesTargetAmount]);
 
+  const salesMonthOptions = useMemo(() => buildSalesMonthOptions(), []);
+
+  const salesTargetModalAmount = useMemo(() => {
+    const digits = salesTargetModalInput.replace(/[^\d]/g, "");
+    if (!digits) return 0;
+    const parsed = Number(digits);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }, [salesTargetModalInput]);
+
   useEffect(() => {
     if (activeMenu !== "sales" || authStatus !== "authed") return;
     let cancelled = false;
@@ -1012,21 +1046,58 @@ function App() {
     };
   }, [activeMenu, authStatus, salesMonthKey]);
 
-  const saveSalesMonthlyTarget = async () => {
-    if (salesTargetSaving) return;
-    setSalesTargetSaving(true);
+  useEffect(() => {
+    if (!salesTargetModalOpen) return;
+    let cancelled = false;
+    const loadModalTarget = async () => {
+      setSalesTargetModalLoading(true);
+      try {
+        const data = await fetchSalesMonthlyTarget(salesTargetModalMonth);
+        if (cancelled) return;
+        setSalesTargetModalInput(
+          data.target_amount > 0 ? String(Math.round(data.target_amount)) : "",
+        );
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (!cancelled) {
+          setSalesTargetModalLoading(false);
+        }
+      }
+    };
+    void loadModalTarget();
+    return () => {
+      cancelled = true;
+    };
+  }, [salesTargetModalOpen, salesTargetModalMonth]);
+
+  const openSalesTargetModal = () => {
+    setSalesTargetModalMonth(salesMonthKey);
+    setSalesTargetModalOpen(true);
+  };
+
+  const closeSalesTargetModal = () => {
+    setSalesTargetModalOpen(false);
+  };
+
+  const saveSalesTargetModal = async () => {
+    if (salesTargetModalSaving) return;
+    setSalesTargetModalSaving(true);
     try {
-      const data = await updateSalesMonthlyTarget(salesMonthKey, salesTargetAmount);
-      setSalesTargetInput(data.target_amount > 0 ? String(Math.round(data.target_amount)) : "");
+      const data = await updateSalesMonthlyTarget(salesTargetModalMonth, salesTargetModalAmount);
+      if (salesTargetModalMonth === salesMonthKey) {
+        setSalesTargetInput(data.target_amount > 0 ? String(Math.round(data.target_amount)) : "");
+      }
       setActionNotice({
         kind: "success",
-        message: `${formatSalesMonthKey(salesMonthKey)} 매출 목표를 저장했습니다.`,
+        message: `${formatSalesMonthKey(salesTargetModalMonth)} 매출 목표를 저장했습니다.`,
       });
+      closeSalesTargetModal();
     } catch (err) {
       console.error(err);
       window.alert(err instanceof Error ? err.message : "매출 목표 저장 중 오류가 발생했습니다.");
     } finally {
-      setSalesTargetSaving(false);
+      setSalesTargetModalSaving(false);
     }
   };
 
@@ -2139,23 +2210,20 @@ function App() {
           <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-violet-300/80">
             이번 달 목표 {formatSalesMonthShort(salesMonthKey)}
           </p>
-          <div className="mt-0.5 flex items-center gap-1.5">
-            <input
-              type="text"
-              inputMode="numeric"
-              value={salesTargetLoading ? "불러오는 중…" : salesTargetInput}
-              disabled={salesTargetLoading || salesTargetSaving}
-              onChange={(event) => setSalesTargetInput(event.target.value.replace(/[^\d]/g, ""))}
-              placeholder="금액 입력"
-              className="min-w-0 flex-1 rounded-md border border-violet-500/30 bg-slate-950/80 px-2 py-0.5 text-[12px] font-semibold leading-tight text-white outline-none focus:border-violet-400 disabled:opacity-60"
-            />
+          <div className="mt-0.5 flex items-center justify-between gap-1.5">
+            <p className="min-w-0 truncate text-[12px] font-semibold leading-tight text-white">
+              {salesTargetLoading
+                ? "불러오는 중…"
+                : salesTargetAmount > 0
+                  ? formatCurrency(salesTargetAmount)
+                  : "미설정"}
+            </p>
             <button
               type="button"
-              disabled={salesTargetLoading || salesTargetSaving}
-              onClick={() => void saveSalesMonthlyTarget()}
-              className="shrink-0 rounded-md border border-violet-400/40 bg-violet-500/20 px-2 py-0.5 text-[10px] font-semibold text-violet-100 hover:bg-violet-500/30 disabled:opacity-50"
+              onClick={openSalesTargetModal}
+              className="shrink-0 rounded-md border border-violet-400/40 bg-violet-500/20 px-2 py-0.5 text-[10px] font-semibold text-violet-100 hover:bg-violet-500/30"
             >
-              {salesTargetSaving ? "저장 중" : "저장"}
+              매출목표
             </button>
           </div>
         </div>
@@ -3306,6 +3374,83 @@ function App() {
                 className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950"
               >
                 정산 처리
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {salesTargetModalOpen ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950 p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-300">매출 관리</p>
+                <h3 className="mt-1 text-xl font-semibold text-white">매출 목표 설정</h3>
+                <p className="mt-2 text-sm text-slate-400">월별 매출 목표 금액을 입력합니다.</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeSalesTargetModal}
+                className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300"
+              >
+                닫기
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  대상 월
+                </span>
+                <select
+                  value={salesTargetModalMonth}
+                  onChange={(event) => setSalesTargetModalMonth(event.target.value)}
+                  disabled={salesTargetModalLoading || salesTargetModalSaving}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-400 disabled:opacity-60"
+                >
+                  {salesMonthOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  목표 금액
+                </span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={salesTargetModalLoading ? "불러오는 중…" : salesTargetModalInput}
+                  disabled={salesTargetModalLoading || salesTargetModalSaving}
+                  onChange={(event) => setSalesTargetModalInput(event.target.value.replace(/[^\d]/g, ""))}
+                  placeholder="예: 5000000"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-400 disabled:opacity-60"
+                />
+                {salesTargetModalAmount > 0 ? (
+                  <p className="mt-1 text-xs text-violet-200/80">{formatCurrency(salesTargetModalAmount)}</p>
+                ) : null}
+              </label>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeSalesTargetModal}
+                disabled={salesTargetModalSaving}
+                className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveSalesTargetModal()}
+                disabled={salesTargetModalLoading || salesTargetModalSaving}
+                className="rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400 disabled:opacity-50"
+              >
+                {salesTargetModalSaving ? "저장 중" : "저장"}
               </button>
             </div>
           </div>
