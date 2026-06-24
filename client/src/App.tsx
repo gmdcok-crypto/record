@@ -1935,7 +1935,7 @@ export default function App() {
                     disabled={busy || pdfReceived}
                     className="bp-button bp-button-save"
                   >
-                    저장
+                    수정후 저장
                   </button>
                   <button
                     type="button"
