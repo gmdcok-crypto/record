@@ -201,6 +201,67 @@ def _ensure_job_selected_segments_column(db: Session) -> None:
         conn.execute(text("ALTER TABLE jobs ADD COLUMN selected_segments_json JSON NULL"))
 
 
+def _ensure_job_ai_draft_at_column(db: Session) -> None:
+    bind = db.get_bind()
+    db.rollback()
+    with bind.begin() as conn:
+        exists = conn.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'jobs'
+                  AND COLUMN_NAME = 'ai_draft_at'
+                LIMIT 1
+                """
+            )
+        ).first()
+        if exists:
+            return
+        conn.execute(text("ALTER TABLE jobs ADD COLUMN ai_draft_at DATETIME NULL"))
+
+
+AI_DRAFT_STATUS_NOTES = ("AI 초벌 생성", "관리자 AI 초벌 생성")
+
+
+def job_has_ai_draft(db: Session, job: Job, *, transcript_json: dict | None = None) -> bool:
+    if job.ai_draft_at is not None:
+        return True
+    logged = db.scalar(
+        select(JobStatusLog.id).where(
+            JobStatusLog.job_id == job.job_id,
+            JobStatusLog.change_note.in_(AI_DRAFT_STATUS_NOTES),
+        ).limit(1)
+    )
+    if logged is not None:
+        return True
+    payload = transcript_json
+    if isinstance(payload, dict):
+        tokens = payload.get("tokens")
+        if isinstance(tokens, list) and len(tokens) > 0:
+            return True
+    return False
+
+
+def mark_job_ai_draft_completed(db: Session, job: Job) -> Job:
+    if job.ai_draft_at is not None:
+        return job
+    for attempt in range(2):
+        try:
+            job.ai_draft_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            db.commit()
+            db.refresh(job)
+            return job
+        except (OperationalError, ProgrammingError) as exc:
+            db.rollback()
+            message = str(exc).lower()
+            if attempt == 1 or "ai_draft_at" not in message:
+                raise
+            _ensure_job_ai_draft_at_column(db)
+    return job
+
+
 def _ensure_transcriber_grade_level_column(db: Session) -> None:
     bind = db.get_bind()
     db.rollback()
@@ -743,6 +804,7 @@ def serialize_job(db: Session, job: Job, *, transcript_json: dict, audio_url: st
         "client_inquiry_status": inquiry["client_inquiry_status"],
         "transcriber_inquiry_status": inquiry["transcriber_inquiry_status"],
         "admin_inquiry_badges": inquiry["admin_inquiry_badges"],
+        "ai_draft_completed": job_has_ai_draft(db, job, transcript_json=transcript_json),
     }
 
 

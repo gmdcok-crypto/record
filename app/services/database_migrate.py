@@ -37,6 +37,7 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_job_transcriber_review_status.sql",
     SCRIPTS_DIR / "migrate_job_workflow_statuses.sql",
     SCRIPTS_DIR / "migrate_sales_monthly_targets.sql",
+    SCRIPTS_DIR / "migrate_job_ai_draft_at.sql",
 ]
 
 
@@ -409,6 +410,25 @@ def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) ->
 
     if sql_path.name == "migrate_job_transcriber_review_status.sql":
         return ensure_jobs_status_column(engine)
+
+    if sql_path.name == "migrate_job_ai_draft_at.sql":
+        with engine.begin() as conn:
+            column_exists = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'jobs'
+                      AND COLUMN_NAME = 'ai_draft_at'
+                    LIMIT 1
+                    """
+                )
+            ).first()
+            if not column_exists:
+                conn.execute(text("ALTER TABLE jobs ADD COLUMN ai_draft_at DATETIME NULL"))
+        logger.info("Railway-safe migration applied: %s", sql_path.name)
+        return True
 
     if sql_path.name == "migrate_sales_monthly_targets.sql":
         with engine.begin() as conn:

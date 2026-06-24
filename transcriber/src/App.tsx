@@ -652,6 +652,7 @@ export default function App() {
   };
 
   const busy = saving || aiRunning || downloadingPdf;
+  const aiDraftCompleted = Boolean(job?.ai_draft_completed);
 
   const openAddSegmentAfter = (index: number) => {
     if (busy || !speakerIds.length) return;
@@ -679,7 +680,7 @@ export default function App() {
   };
 
   const onRunAiDraft = async () => {
-    if (!job) return;
+    if (!job || aiDraftCompleted) return;
     if (segments.some((segment) => segment.text.trim()) && !window.confirm("기존 편집 내용을 AI 초벌 결과로 덮어씁니다. 계속할까요?")) {
       return;
     }
@@ -688,7 +689,13 @@ export default function App() {
     try {
       const result = await runAiDraft(job.job_id);
       const transcript = result.transcript_json;
-      setJob({ ...job, transcript_json: transcript, status: "working", workflow_status: "working" });
+      setJob({
+        ...job,
+        transcript_json: transcript,
+        status: "working",
+        workflow_status: "working",
+        ai_draft_completed: true,
+      });
       const aiSegments = buildEditableSegments(transcript);
       const aiLabels = transcript.speaker_labels ?? {};
       setSegments(aiSegments);
@@ -1106,10 +1113,10 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => void onRunAiDraft()}
-                      disabled={busy}
+                      disabled={busy || aiDraftCompleted}
                       className="rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-50"
                     >
-                      {aiRunning ? "AI 초벌 진행 중..." : "AI 초벌작업"}
+                      {aiRunning ? "AI 초벌 진행 중..." : aiDraftCompleted ? "AI 초벌 완료" : "AI 초벌작업"}
                     </button>
                     <button
                       type="button"
