@@ -389,3 +389,12 @@ class ExpenseRecord(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     category: Mapped["ExpenseCategory"] = relationship("ExpenseCategory")
+
+
+class SalesMonthlyTarget(Base):
+    __tablename__ = "sales_monthly_targets"
+
+    month_key: Mapped[str] = mapped_column(String(7), primary_key=True)
+    target_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    updated_by_admin_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

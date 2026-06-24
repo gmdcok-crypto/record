@@ -17,6 +17,8 @@ import {
   fetchAdminMe,
   fetchAdminOverview,
   fetchAdminSales,
+  fetchSalesMonthlyTarget,
+  updateSalesMonthlyTarget,
   fetchAdminUsers,
   revokeTranscriberAuth,
   fetchTranscriberGradeRates,
@@ -262,6 +264,11 @@ function notifyAdminEvent(title: string, body: string) {
 
 function formatCurrency(value: number): string {
   return `${value.toLocaleString("ko-KR")}원`;
+}
+
+function formatSalesMonthKey(monthKey: string): string {
+  const [year, month] = monthKey.split("-");
+  return `${year}년 ${Number(month)}월`;
 }
 
 function mapProjectStatusLabel(status: string): string {
@@ -587,6 +594,9 @@ function App() {
   const [adminForm, setAdminForm] = useState<AdminForm>(EMPTY_ADMIN_FORM);
   const [salesDateFrom, setSalesDateFrom] = useState(() => todayKstDateKey());
   const [salesDateTo, setSalesDateTo] = useState(() => todayKstDateKey());
+  const [salesTargetInput, setSalesTargetInput] = useState("");
+  const [salesTargetLoading, setSalesTargetLoading] = useState(false);
+  const [salesTargetSaving, setSalesTargetSaving] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -949,6 +959,66 @@ function App() {
     }
     return { dailyTotal, monthlyTotal };
   }, [sales, salesDateFrom, salesDateTo]);
+
+  const salesMonthKey = useMemo(() => {
+    const dailyDateKey = salesDateFrom === salesDateTo ? salesDateFrom : salesDateTo;
+    return dailyDateKey.slice(0, 7);
+  }, [salesDateFrom, salesDateTo]);
+
+  const salesTargetAmount = useMemo(() => {
+    const digits = salesTargetInput.replace(/[^\d]/g, "");
+    if (!digits) return 0;
+    const parsed = Number(digits);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }, [salesTargetInput]);
+
+  const salesAchievementRate = useMemo(() => {
+    if (salesTargetAmount <= 0) return null;
+    return Math.round((salesSummaryMetrics.monthlyTotal / salesTargetAmount) * 1000) / 10;
+  }, [salesSummaryMetrics.monthlyTotal, salesTargetAmount]);
+
+  useEffect(() => {
+    if (activeMenu !== "sales" || authStatus !== "authed") return;
+    let cancelled = false;
+    const loadTarget = async () => {
+      setSalesTargetLoading(true);
+      try {
+        const data = await fetchSalesMonthlyTarget(salesMonthKey);
+        if (cancelled) return;
+        setSalesTargetInput(
+          data.target_amount > 0 ? String(Math.round(data.target_amount)) : "",
+        );
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (!cancelled) {
+          setSalesTargetLoading(false);
+        }
+      }
+    };
+    void loadTarget();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMenu, authStatus, salesMonthKey]);
+
+  const saveSalesMonthlyTarget = async () => {
+    if (salesTargetSaving) return;
+    setSalesTargetSaving(true);
+    try {
+      const data = await updateSalesMonthlyTarget(salesMonthKey, salesTargetAmount);
+      setSalesTargetInput(data.target_amount > 0 ? String(Math.round(data.target_amount)) : "");
+      setActionNotice({
+        kind: "success",
+        message: `${formatSalesMonthKey(salesMonthKey)} 매출 목표를 저장했습니다.`,
+      });
+    } catch (err) {
+      console.error(err);
+      window.alert(err instanceof Error ? err.message : "매출 목표 저장 중 오류가 발생했습니다.");
+    } finally {
+      setSalesTargetSaving(false);
+    }
+  };
 
   const runAdminAction = async (successMessage: string, action: () => Promise<void>) => {
     try {
@@ -2051,10 +2121,49 @@ function App() {
 
   const renderSales = () => (
     <section className="rounded-2xl border border-slate-800 bg-slate-900/92 p-4 shadow-[0_10px_30px_rgba(2,6,23,0.28)]">
-      <div className="mb-4 grid gap-2 md:grid-cols-3">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+        <p className="text-[12px] font-medium text-slate-400">
+          {formatSalesMonthKey(salesMonthKey)} 기준 · 월매출은 달력 월 전체 합계입니다.
+        </p>
+      </div>
+      <div className="mb-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
         <SummaryChip label="결제건수" value={`${filteredSales.length}건`} />
         <SummaryChip label="일매출" value={formatCurrency(salesSummaryMetrics.dailyTotal)} tone="cyan" />
         <SummaryChip label="월매출" value={formatCurrency(salesSummaryMetrics.monthlyTotal)} tone="slate" />
+        <div className="rounded-xl border border-violet-500/25 bg-violet-500/10 px-3 py-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-300/80">이번 달 목표</p>
+          <div className="mt-1 flex items-center gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              value={salesTargetLoading ? "불러오는 중…" : salesTargetInput}
+              disabled={salesTargetLoading || salesTargetSaving}
+              onChange={(event) => setSalesTargetInput(event.target.value.replace(/[^\d]/g, ""))}
+              placeholder="금액 입력"
+              className="min-w-0 flex-1 rounded-md border border-violet-500/30 bg-slate-950/80 px-2 py-1 text-[13px] font-semibold text-white outline-none focus:border-violet-400 disabled:opacity-60"
+            />
+            <button
+              type="button"
+              disabled={salesTargetLoading || salesTargetSaving}
+              onClick={() => void saveSalesMonthlyTarget()}
+              className="shrink-0 rounded-md border border-violet-400/40 bg-violet-500/20 px-2 py-1 text-[11px] font-semibold text-violet-100 hover:bg-violet-500/30 disabled:opacity-50"
+            >
+              {salesTargetSaving ? "저장 중" : "저장"}
+            </button>
+          </div>
+          {salesTargetAmount > 0 ? (
+            <p className="mt-1 text-[11px] text-violet-200/80">{formatCurrency(salesTargetAmount)}</p>
+          ) : null}
+        </div>
+        <SummaryChip
+          label="달성률"
+          value={
+            salesAchievementRate === null
+              ? "목표 미설정"
+              : `${salesAchievementRate.toLocaleString("ko-KR")}%`
+          }
+          tone={salesAchievementRate !== null && salesAchievementRate >= 100 ? "emerald" : "amber"}
+        />
       </div>
       <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/70">
         {filteredSales.length === 0 ? (
@@ -2204,14 +2313,6 @@ function App() {
                   <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-300">Bulpen Admin</p>
                   <h1 className="mt-1 text-base font-semibold text-white">Operations Console</h1>
                 </div>
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/90 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Today</p>
-              <div className="mt-2 grid gap-2">
-                <SummaryChip label="배정 대기" value={`${dashboardStats.waitingAssign}건`} tone="amber" />
-                <SummaryChip label="작업 중" value={`${dashboardStats.working}건`} tone="cyan" />
               </div>
             </div>
 

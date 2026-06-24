@@ -36,6 +36,7 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_transcriber_push_subscriptions.sql",
     SCRIPTS_DIR / "migrate_job_transcriber_review_status.sql",
     SCRIPTS_DIR / "migrate_job_workflow_statuses.sql",
+    SCRIPTS_DIR / "migrate_sales_monthly_targets.sql",
 ]
 
 
@@ -408,6 +409,39 @@ def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) ->
 
     if sql_path.name == "migrate_job_transcriber_review_status.sql":
         return ensure_jobs_status_column(engine)
+
+    if sql_path.name == "migrate_sales_monthly_targets.sql":
+        with engine.begin() as conn:
+            table_exists = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM information_schema.TABLES
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'sales_monthly_targets'
+                    LIMIT 1
+                    """
+                )
+            ).first()
+            if not table_exists:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE sales_monthly_targets (
+                          month_key CHAR(7) NOT NULL PRIMARY KEY,
+                          target_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+                          updated_by_admin_id BIGINT NULL,
+                          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                          KEY idx_sales_monthly_targets_updated_by (updated_by_admin_id),
+                          CONSTRAINT fk_sales_monthly_targets_admin
+                            FOREIGN KEY (updated_by_admin_id) REFERENCES admin_users(id)
+                            ON UPDATE CASCADE ON DELETE SET NULL
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                        """
+                    )
+                )
+        logger.info("Railway-safe migration applied: %s", sql_path.name)
+        return True
 
     if sql_path.name == "migrate_payment_records.sql":
         with engine.begin() as conn:

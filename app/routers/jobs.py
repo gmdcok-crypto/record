@@ -7,7 +7,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import DataError, DBAPIError
 from sqlalchemy.orm import Session
@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.dependencies.member_auth import get_current_member, get_optional_current_member
 from app.dependencies.transcriber_auth import get_current_transcriber, get_optional_current_transcriber
-from app.dependencies.admin_auth import AdminAuth, AdminEventAuth, OptionalAdminAuth
+from app.dependencies.admin_auth import AdminAuth, AdminEventAuth, OptionalAdminAuth, require_admin_permission
 from app.models.admin_models import AdminUser, Client, Job, Member, SettlementItem, Transcriber
 from app.db import ensure_db_initialized, get_db, get_engine
 from app.services.audio import remux_faststart, should_faststart
@@ -69,6 +69,11 @@ from app.services.job_store import (
     update_invoice_status,
     update_settlement_status,
     update_transcriber,
+)
+from app.services.sales_target_store import (
+    get_sales_monthly_target,
+    normalize_month_key,
+    set_sales_monthly_target,
 )
 from app.services.transcript_shares import (
     SHARE_EXPIRE_DAYS,
@@ -646,6 +651,44 @@ def admin_overview(db: Annotated[Session, Depends(get_db)], _admin: AdminAuth) -
 @router.get("/admin/sales")
 def admin_sales(db: Annotated[Session, Depends(get_db)], _admin: AdminAuth) -> dict:
     return {"sales": safe_list_payment_records(db)}
+
+
+SalesAdminAuth = Annotated[AdminUser, Depends(require_admin_permission("menu:sales"))]
+
+
+class SalesMonthlyTargetRequest(BaseModel):
+    month_key: str = Field(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+    target_amount: float = Field(..., ge=0)
+
+
+@router.get("/admin/sales/monthly-target")
+def admin_get_sales_monthly_target(
+    db: Annotated[Session, Depends(get_db)],
+    _admin: SalesAdminAuth,
+    month: str | None = Query(default=None),
+) -> dict:
+    try:
+        month_key = normalize_month_key(month)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return get_sales_monthly_target(db, month_key)
+
+
+@router.put("/admin/sales/monthly-target")
+def admin_put_sales_monthly_target(
+    body: SalesMonthlyTargetRequest,
+    db: Annotated[Session, Depends(get_db)],
+    admin: SalesAdminAuth,
+) -> dict:
+    try:
+        return set_sales_monthly_target(
+            db,
+            month_key=body.month_key,
+            target_amount=body.target_amount,
+            admin=admin,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/admin/events")

@@ -657,6 +657,37 @@ export async function fetchAdminSales(): Promise<AdminOverviewSale[]> {
   return data.sales ?? [];
 }
 
+export type SalesMonthlyTarget = {
+  month_key: string;
+  target_amount: number;
+  updated_at: string | null;
+};
+
+export async function fetchSalesMonthlyTarget(monthKey: string): Promise<SalesMonthlyTarget> {
+  const res = await adminFetch(
+    `${apiBase()}/api/jobs/admin/sales/monthly-target?month=${encodeURIComponent(monthKey)}`,
+  );
+  if (!res.ok) {
+    throw await parseApiError(res, "매출 목표를 불러올 수 없습니다");
+  }
+  return res.json();
+}
+
+export async function updateSalesMonthlyTarget(
+  monthKey: string,
+  targetAmount: number,
+): Promise<SalesMonthlyTarget> {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/sales/monthly-target`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ month_key: monthKey, target_amount: targetAmount }),
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, "매출 목표 저장 실패");
+  }
+  return res.json();
+}
+
 export async function updateMemberActive(memberId: number, isActive: boolean): Promise<AdminOverviewMember> {
   const res = await adminFetch(`${apiBase()}/api/jobs/admin/members/${memberId}`, {
     method: "PATCH",
