@@ -1140,7 +1140,7 @@ export default function App() {
                       disabled={busy}
                       className="rounded-xl bg-slate-200 py-3 text-sm font-semibold text-slate-950 transition hover:bg-white disabled:opacity-50"
                     >
-                      {downloadingPdf ? "PDF(완료,정산) 중..." : "PDF(완료,정산)"}
+                      {downloadingPdf ? "PDF 전달 중..." : "PDF 전달"}
                     </button>
                     <label className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-200">
                       <input
