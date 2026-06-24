@@ -1,1 +1,0 @@
-ALTER TABLE jobs ADD COLUMN ai_draft_at DATETIME NULL;

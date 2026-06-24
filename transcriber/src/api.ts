@@ -59,7 +59,6 @@ export type JobResponse = {
   selected_segments?: SelectedUploadSegment[];
   has_inquiry?: boolean;
   transcriber_inquiry_status?: "reply_pending" | "reply_arrived" | null;
-  ai_draft_completed?: boolean;
 };
 
 export type AssignedWork = {

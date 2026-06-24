@@ -58,8 +58,6 @@ from app.services.job_store import (
     mark_final_pdf_delivered,
     empty_transcript_json,
     mark_transcript_saved,
-    mark_job_ai_draft_completed,
-    job_has_ai_draft,
     record_settlement_payment,
     repair_job_settlement,
     serialize_job,
@@ -1329,9 +1327,6 @@ def transcriber_ai_draft(
         raise HTTPException(status_code=404, detail="Job not found")
     if job.assigned_transcriber_id != current.id:
         raise HTTPException(status_code=403, detail="배정된 작업만 AI 초벌을 실행할 수 있습니다.")
-    transcript_for_check = get_transcript_json(job_id) if job.r2_transcript_key else None
-    if job_has_ai_draft(db, job, transcript_json=transcript_for_check):
-        raise HTTPException(status_code=409, detail="이미 AI 초벌이 완료된 파일입니다.")
 
     try:
         transcript_json, transcript_key, voice_key = transcribe_job_voice(job_id)
@@ -1344,7 +1339,6 @@ def transcriber_ai_draft(
         raise HTTPException(status_code=502, detail=f"Transcription failed: {exc}") from exc
 
     mark_transcript_saved(db, job, transcript_key, transcript_json)
-    job = mark_job_ai_draft_completed(db, job)
     if normalize_job_status(job.status) not in {WORKING, CLIENT_REVIEW, TRANSCRIBER_REVIEW, TRANSCRIPT_REQUEST}:
         if job.assigned_transcriber_id is not None:
             job = set_job_status(db, job, WORKING, "AI 초벌 생성")
@@ -1427,7 +1421,6 @@ def admin_ai_draft(
         raise HTTPException(status_code=502, detail=f"Transcription failed: {exc}") from exc
 
     mark_transcript_saved(db, job, transcript_key, transcript_json)
-    job = mark_job_ai_draft_completed(db, job)
     if normalize_job_status(job.status) not in {WORKING, CLIENT_REVIEW, TRANSCRIBER_REVIEW, TRANSCRIPT_REQUEST}:
         if job.assigned_transcriber_id is not None or admin is not None:
             job = set_job_status(db, job, WORKING, "관리자 AI 초벌 생성", admin=admin)
