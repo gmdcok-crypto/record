@@ -16,6 +16,23 @@ engine = None
 SessionLocal: Optional[sessionmaker[Session]] = None
 _init_lock = Lock()
 _migrations_done = False
+_job_ai_draft_column_ensured = False
+
+
+def _ensure_job_ai_draft_at_column_once() -> None:
+    global _job_ai_draft_column_ensured
+    if _job_ai_draft_column_ensured or engine is None:
+        return
+    with _init_lock:
+        if _job_ai_draft_column_ensured or engine is None:
+            return
+        from app.services.database_migrate import ensure_job_ai_draft_at_on_engine
+
+        try:
+            ensure_job_ai_draft_at_on_engine(engine)
+            _job_ai_draft_column_ensured = True
+        except Exception:
+            logger.exception("Failed to ensure jobs.ai_draft_at column")
 
 
 def _run_startup_migrations_once() -> None:
@@ -30,6 +47,7 @@ def _run_startup_migrations_once() -> None:
         try:
             run_startup_migrations(engine)
             _migrations_done = True
+            _ensure_job_ai_draft_at_column_once()
         except Exception:
             logger.exception("Startup migrations failed")
 
@@ -86,6 +104,7 @@ def get_db() -> Generator[Session, None, None]:
         ensure_db_initialized()
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail="데이터베이스가 준비되지 않았습니다.") from exc
+    _ensure_job_ai_draft_at_column_once()
     if SessionLocal is None:
         raise HTTPException(status_code=503, detail="데이터베이스가 준비되지 않았습니다.")
     try:

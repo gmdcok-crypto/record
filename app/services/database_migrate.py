@@ -202,6 +202,25 @@ def ensure_expense_tables_on_engine(engine: Engine) -> None:
         logger.exception("Failed to ensure expense tables")
 
 
+def ensure_job_ai_draft_at_on_engine(engine: Engine) -> None:
+    with engine.begin() as conn:
+        column_exists = conn.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'jobs'
+                  AND COLUMN_NAME = 'ai_draft_at'
+                LIMIT 1
+                """
+            )
+        ).first()
+        if not column_exists:
+            conn.execute(text("ALTER TABLE jobs ADD COLUMN ai_draft_at DATETIME NULL"))
+    logger.info("Ensured jobs.ai_draft_at column")
+
+
 def _run_railway_safe_migration(engine: Engine, sql_path: Path, message: str) -> bool:
     lowered = message.lower()
     sql = sql_path.read_text(encoding="utf-8").strip()
@@ -656,3 +675,7 @@ def run_startup_migrations(engine: Engine) -> None:
         ensure_expense_tables_on_engine(engine)
     except Exception:
         logger.exception("Failed to ensure expense tables on startup")
+    try:
+        ensure_job_ai_draft_at_on_engine(engine)
+    except Exception:
+        logger.exception("Failed to ensure jobs.ai_draft_at column on startup")
