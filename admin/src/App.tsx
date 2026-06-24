@@ -271,6 +271,10 @@ function formatSalesMonthKey(monthKey: string): string {
   return `${year}년 ${Number(month)}월`;
 }
 
+function formatSalesMonthShort(monthKey: string): string {
+  return `(${Number(monthKey.split("-")[1])}월)`;
+}
+
 function mapProjectStatusLabel(status: string): string {
   switch (status) {
     case "waiting_assignment":
@@ -531,10 +535,12 @@ function SummaryChip({
   label,
   value,
   tone = "slate",
+  compact = false,
 }: {
   label: string;
   value: string;
   tone?: "slate" | "cyan" | "amber" | "emerald" | "violet";
+  compact?: boolean;
 }) {
   const toneClass =
     tone === "cyan"
@@ -548,9 +554,13 @@ function SummaryChip({
             : "border-slate-700 bg-slate-800/80 text-slate-200";
 
   return (
-    <div className={`rounded-xl border px-3 py-2 ${toneClass}`}>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-white">{value}</p>
+    <div className={`rounded-xl border ${compact ? "px-2.5 py-1.5" : "px-3 py-2"} ${toneClass}`}>
+      <p className={`font-semibold uppercase tracking-[0.16em] text-slate-400 ${compact ? "text-[9px]" : "text-[10px]"}`}>
+        {label}
+      </p>
+      <p className={`font-semibold text-white ${compact ? "mt-0.5 text-[12px] leading-tight" : "mt-1 text-sm"}`}>
+        {value}
+      </p>
     </div>
   );
 }
@@ -2121,18 +2131,15 @@ function App() {
 
   const renderSales = () => (
     <section className="rounded-2xl border border-slate-800 bg-slate-900/92 p-4 shadow-[0_10px_30px_rgba(2,6,23,0.28)]">
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-        <p className="text-[12px] font-medium text-slate-400">
-          {formatSalesMonthKey(salesMonthKey)} 기준 · 월매출은 달력 월 전체 합계입니다.
-        </p>
-      </div>
-      <div className="mb-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-        <SummaryChip label="결제건수" value={`${filteredSales.length}건`} />
-        <SummaryChip label="일매출" value={formatCurrency(salesSummaryMetrics.dailyTotal)} tone="cyan" />
-        <SummaryChip label="월매출" value={formatCurrency(salesSummaryMetrics.monthlyTotal)} tone="slate" />
-        <div className="rounded-xl border border-violet-500/25 bg-violet-500/10 px-3 py-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-300/80">이번 달 목표</p>
-          <div className="mt-1 flex items-center gap-2">
+      <div className="mb-3 grid gap-1.5 md:grid-cols-2 xl:grid-cols-5">
+        <SummaryChip compact label="결제건수" value={`${filteredSales.length}건`} />
+        <SummaryChip compact label="일매출" value={formatCurrency(salesSummaryMetrics.dailyTotal)} tone="cyan" />
+        <SummaryChip compact label="월매출" value={formatCurrency(salesSummaryMetrics.monthlyTotal)} tone="slate" />
+        <div className="rounded-xl border border-violet-500/25 bg-violet-500/10 px-2.5 py-1.5">
+          <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-violet-300/80">
+            이번 달 목표 {formatSalesMonthShort(salesMonthKey)}
+          </p>
+          <div className="mt-0.5 flex items-center gap-1.5">
             <input
               type="text"
               inputMode="numeric"
@@ -2140,22 +2147,20 @@ function App() {
               disabled={salesTargetLoading || salesTargetSaving}
               onChange={(event) => setSalesTargetInput(event.target.value.replace(/[^\d]/g, ""))}
               placeholder="금액 입력"
-              className="min-w-0 flex-1 rounded-md border border-violet-500/30 bg-slate-950/80 px-2 py-1 text-[13px] font-semibold text-white outline-none focus:border-violet-400 disabled:opacity-60"
+              className="min-w-0 flex-1 rounded-md border border-violet-500/30 bg-slate-950/80 px-2 py-0.5 text-[12px] font-semibold leading-tight text-white outline-none focus:border-violet-400 disabled:opacity-60"
             />
             <button
               type="button"
               disabled={salesTargetLoading || salesTargetSaving}
               onClick={() => void saveSalesMonthlyTarget()}
-              className="shrink-0 rounded-md border border-violet-400/40 bg-violet-500/20 px-2 py-1 text-[11px] font-semibold text-violet-100 hover:bg-violet-500/30 disabled:opacity-50"
+              className="shrink-0 rounded-md border border-violet-400/40 bg-violet-500/20 px-2 py-0.5 text-[10px] font-semibold text-violet-100 hover:bg-violet-500/30 disabled:opacity-50"
             >
               {salesTargetSaving ? "저장 중" : "저장"}
             </button>
           </div>
-          {salesTargetAmount > 0 ? (
-            <p className="mt-1 text-[11px] text-violet-200/80">{formatCurrency(salesTargetAmount)}</p>
-          ) : null}
         </div>
         <SummaryChip
+          compact
           label="달성률"
           value={
             salesAchievementRate === null
