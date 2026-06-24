@@ -31,6 +31,7 @@ import {
   type TranscriptSegment,
 } from "./api";
 import ActionNoticeModal, { type ActionNotice, type ActionNoticeKind } from "./ActionNoticeModal";
+import ConfirmModal from "./ConfirmModal";
 import TranscriberLogin from "./TranscriberLogin";
 import TranscriberProfileSettingsModal from "./TranscriberProfileSettingsModal";
 import TranscriberSignup from "./TranscriberSignup";
@@ -276,6 +277,7 @@ export default function App() {
   const [pushPermission, setPushPermission] = useState<PushPermissionState>("default");
   const [pushRegistered, setPushRegistered] = useState(false);
   const [enablingPush, setEnablingPush] = useState(false);
+  const [aiDraftConfirmOpen, setAiDraftConfirmOpen] = useState(false);
 
   const showNotice = useCallback((kind: ActionNoticeKind, message: string, title?: string) => {
     setActionNotice({ kind, message, title });
@@ -679,11 +681,16 @@ export default function App() {
   };
 
   const onRunAiDraft = async () => {
-    if (!job) return;
-    if (segments.some((segment) => segment.text.trim()) && !window.confirm("기존 편집 내용을 AI 초벌 결과로 덮어씁니다. 계속할까요?")) {
+    if (!job || aiRunning) return;
+    if (segments.some((segment) => segment.text.trim())) {
+      setAiDraftConfirmOpen(true);
       return;
     }
+    await executeAiDraft();
+  };
 
+  const executeAiDraft = async () => {
+    if (!job) return;
     setAiRunning(true);
     try {
       const result = await runAiDraft(job.job_id);
@@ -1200,6 +1207,19 @@ export default function App() {
         />
 
         <ActionNoticeModal notice={actionNotice} onClose={() => setActionNotice(null)} accent="violet" />
+
+        <ConfirmModal
+          open={aiDraftConfirmOpen}
+          title="AI 초벌 다시 실행"
+          message="기존 편집 내용을 AI 초벌 결과로 덮어씁니다. 계속할까요?"
+          confirmLabel="계속"
+          cancelLabel="취소"
+          onCancel={() => setAiDraftConfirmOpen(false)}
+          onConfirm={() => {
+            setAiDraftConfirmOpen(false);
+            void executeAiDraft();
+          }}
+        />
       </div>
     </div>
   );
