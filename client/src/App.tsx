@@ -159,7 +159,7 @@ function normalizeWorkflowStatus(status: string): string {
 function mapClientJobStatus(status: string): string {
   switch (normalizeWorkflowStatus(status)) {
     case "waiting_assignment":
-      return "배정 대기";
+      return "작업 중";
     case "working":
       return "작업 중";
     case "client_review":
@@ -184,6 +184,7 @@ function archiveStatusStyle(status: string): string {
     case "pdf_sent":
       return "client-archive__status client-archive__status--done";
     case "working":
+    case "waiting_assignment":
       return "client-archive__status client-archive__status--working";
     case "cancelled":
       return "client-archive__status client-archive__status--cancelled";
@@ -208,7 +209,7 @@ function isPdfReceivedStatus(status: string): boolean {
 function mapProjectStatus(status: string): string {
   switch (status) {
     case "waiting_assignment":
-      return "배정 대기";
+      return "작업 중";
     case "working":
       return "작업 중";
     case "client_review":
