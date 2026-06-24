@@ -1584,36 +1584,27 @@ function App() {
   );
 
   const renderDashboard = () => (
-    <div className="space-y-4">
-      <div className="grid gap-3 xl:grid-cols-4">
-        <StatCard label="이번 달 매출 예정" value={formatCurrency(dashboardStats.totalSales)} change="+12.4%" />
-        <StatCard label="이번 달 정산 예정" value={formatCurrency(dashboardStats.totalSettlements)} change="+8.1%" />
-        <StatCard label="미수 금액" value={formatCurrency(dashboardStats.outstanding)} change="집중 관리" />
-        <StatCard label="배정 대기 건수" value={`${dashboardStats.waitingAssign}건`} change="우선 처리" />
-      </div>
-
-      <SectionCard title="진행 현황" subtitle="현재 작업 흐름을 같은 운영 톤의 요약 카드로 확인합니다.">
-        <div className="grid gap-3 lg:grid-cols-3">
-          {[
-            { title: "배정 대기", count: `${dashboardStats.waitingAssign}건`, tone: "amber" as const },
-            { title: "속기사 작업 중", count: `${dashboardStats.working}건`, tone: "cyan" as const },
-            {
-              title: "PDF 전달",
-              count: `${dashboardStats.finalDone}건`,
-              tone: "emerald" as const,
-            },
-          ].map((item) => (
-            <div key={item.title} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.title}</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{item.count}</p>
-              <div className="mt-3">
-                <SummaryChip label="상태" value={item.title} tone={item.tone} />
-              </div>
+    <SectionCard title="진행 현황" subtitle="현재 작업 흐름을 같은 운영 톤의 요약 카드로 확인합니다.">
+      <div className="grid gap-3 lg:grid-cols-3">
+        {[
+          { title: "배정 대기", count: `${dashboardStats.waitingAssign}건`, tone: "amber" as const },
+          { title: "속기사 작업 중", count: `${dashboardStats.working}건`, tone: "cyan" as const },
+          {
+            title: "PDF 전달",
+            count: `${dashboardStats.finalDone}건`,
+            tone: "emerald" as const,
+          },
+        ].map((item) => (
+          <div key={item.title} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.title}</p>
+            <p className="mt-2 text-2xl font-semibold text-white">{item.count}</p>
+            <div className="mt-3">
+              <SummaryChip label="상태" value={item.title} tone={item.tone} />
             </div>
-          ))}
-        </div>
-      </SectionCard>
-    </div>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
   );
 
   const renderJobs = () => (
