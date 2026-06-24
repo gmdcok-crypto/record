@@ -4,6 +4,7 @@ type Props = {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  hideCancel?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -14,6 +15,7 @@ export default function ConfirmModal({
   message,
   confirmLabel = "계속",
   cancelLabel = "취소",
+  hideCancel = false,
   onConfirm,
   onCancel,
 }: Props) {
@@ -32,13 +34,15 @@ export default function ConfirmModal({
         </h3>
         <p className="mt-3 text-sm leading-6 text-slate-300">{message}</p>
         <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
-          >
-            {cancelLabel}
-          </button>
+          {!hideCancel ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
+            >
+              {cancelLabel}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onConfirm}

@@ -1210,15 +1210,12 @@ export default function App() {
 
         <ConfirmModal
           open={aiDraftConfirmOpen}
-          title="AI 초벌 다시 실행"
-          message="기존 편집 내용을 AI 초벌 결과로 덮어씁니다. 계속할까요?"
-          confirmLabel="계속"
-          cancelLabel="취소"
+          title="AI 초벌"
+          message="이미 초벌작업한 파일입니다."
+          confirmLabel="확인"
+          hideCancel
           onCancel={() => setAiDraftConfirmOpen(false)}
-          onConfirm={() => {
-            setAiDraftConfirmOpen(false);
-            void executeAiDraft();
-          }}
+          onConfirm={() => setAiDraftConfirmOpen(false)}
         />
       </div>
     </div>
