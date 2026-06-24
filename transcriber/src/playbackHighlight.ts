@@ -1,6 +1,8 @@
 import { resolveSegmentEndMs, type SegmentTiming } from "./segmentAudio";
 import type { SelectedUploadSegment, TranscriptToken } from "./api";
 
+export const LOW_CONFIDENCE_THRESHOLD = 0.5;
+
 export type TimedWord = {
   text: string;
   start_ms: number;
@@ -72,7 +74,10 @@ export function buildSegmentTimedWords(
           text: token.text,
           start_ms: start,
           end_ms: Math.max(end, start + 1),
-          uncertain: Boolean(token.uncertain),
+          uncertain:
+            typeof token.confidence === "number"
+              ? token.confidence <= LOW_CONFIDENCE_THRESHOLD
+              : Boolean(token.uncertain),
           confidence: typeof token.confidence === "number" ? token.confidence : null,
           outsideSelection: isOutsideSelection(start, Math.max(end, start + 1), selectedSegments),
         };

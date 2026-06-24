@@ -58,6 +58,8 @@ export default function SegmentPlaybackText({
   );
 
   const showKaraoke = isAudioPlaying && !editing && !readOnly && words.length > 0 && segment.start_ms != null;
+  const showLowConfidenceHighlight =
+    !editing && !readOnly && !isAudioPlaying && words.length > 0 && words.some((word) => word.uncertain);
 
   const cancelScheduledPlay = () => {
     if (playTimerRef.current == null) return;
@@ -112,7 +114,7 @@ export default function SegmentPlaybackText({
     );
   }
 
-  if (showKaraoke) {
+  if (showKaraoke || showLowConfidenceHighlight) {
     return (
       <div
         role="button"
@@ -133,7 +135,12 @@ export default function SegmentPlaybackText({
         }}
         className="w-full cursor-pointer rounded-lg border border-transparent bg-slate-900/60 px-3 py-2 text-sm leading-7 outline-none transition"
       >
-        <KaraokeWords words={words} playbackMs={playbackMs} isAudioPlaying activeWordRef={activeWordRef} />
+        <KaraokeWords
+          words={words}
+          playbackMs={playbackMs}
+          isAudioPlaying={showKaraoke}
+          activeWordRef={activeWordRef}
+        />
       </div>
     );
   }
