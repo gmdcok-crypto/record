@@ -86,11 +86,10 @@ import {
 import { isMobileLikeClient } from "./uploadEnvironment";
 import ClientBottomTabBar from "./ClientBottomTabBar";
 import ClientShellHeader from "./ClientShellHeader";
-import ClientTopTabNav from "./ClientTopTabNav";
+import ClientTopTabNav, { type ClientTab } from "./ClientTopTabNav";
 
 type Step = "idle" | "uploading" | "ready" | "error";
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
-type ClientTab = "upload" | "archive" | "edit";
 type UploadProjectMode = "existing" | "new";
 type EditableSegment = TranscriptSegment & { id: string };
 type PushPermissionState = NotificationPermission | "unsupported";
@@ -250,6 +249,30 @@ function projectFileToArchiveItem(file: ProjectFile, clientName: string): JobArc
   };
 }
 
+function projectFileWorkflowStatus(file: ProjectFile): string {
+  return normalizeWorkflowStatus(file.workflow_status ?? file.status);
+}
+
+function filterProjectsForScope(projects: ProjectSummary[], scope: "active" | "completed"): ProjectSummary[] {
+  return projects.flatMap((project) => {
+    const files = (project.files ?? []).filter((file) => {
+      const completed = isPdfReceivedStatus(projectFileWorkflowStatus(file));
+      return scope === "completed" ? completed : !completed;
+    });
+    if (files.length === 0) return [];
+    const completedCount = files.filter((file) => isPdfReceivedStatus(projectFileWorkflowStatus(file))).length;
+    return [
+      {
+        ...project,
+        files,
+        file_count: files.length,
+        completed_count: completedCount,
+        status: completedCount === files.length ? "completed" : project.status,
+      },
+    ];
+  });
+}
+
 function renderClientInquiryBadge(status?: "reply_pending" | "reply_arrived" | null) {
   if (status === "reply_pending") {
     return (
@@ -402,6 +425,9 @@ export default function App() {
     }
     return newProjectTitle.trim();
   }, [uploadProjectMode, selectedUploadProject, newProjectTitle]);
+
+  const activeProjects = useMemo(() => filterProjectsForScope(projects, "active"), [projects]);
+  const completedProjects = useMemo(() => filterProjectsForScope(projects, "completed"), [projects]);
 
   const refreshWorkspace = useCallback(async (showLoading = false, suppressError = false) => {
     if (showLoading) setLoadingWorkspace(true);
@@ -1385,7 +1411,109 @@ export default function App() {
     { id: "upload", label: "업로드" },
     { id: "archive", label: "진행중인 의뢰" },
     { id: "edit", label: "녹취수정" },
+    { id: "completed", label: "완료된 의뢰" },
   ];
+
+  const renderProjectWorkspace = (
+    list: ProjectSummary[],
+    meta: {
+      eyebrow: string;
+      title: string;
+      desc: string;
+      emptyMessage: string;
+    },
+  ) => (
+    <section className="bp-card client-archive__page-card">
+      <div className="client-archive__heading">
+        <p className="client-archive__eyebrow">{meta.eyebrow}</p>
+        <h2 className="client-archive__title">{meta.title}</h2>
+        <p className="client-archive__desc">{meta.desc}</p>
+      </div>
+
+      <div className="space-y-3">
+        {loadingWorkspace && !projects.length ? (
+          <div className="client-archive__empty">목록을 불러오는 중입니다.</div>
+        ) : list.length ? (
+          list.map((project) => {
+            const expanded = isProjectExpanded(project.project_id);
+            const files = project.files ?? [];
+            return (
+              <div key={project.project_id} className="client-archive__project">
+                <button
+                  type="button"
+                  onClick={() => toggleProjectExpanded(project.project_id)}
+                  className="client-archive__project-toggle"
+                >
+                  <div className="min-w-0">
+                    <p className="client-archive__project-title">{project.title}</p>
+                    <p className="client-archive__project-meta">
+                      진행 {project.completed_count}/{project.file_count} · 마감{" "}
+                      {formatKstDateTime(project.due_at)}
+                    </p>
+                  </div>
+                  <div className="client-archive__project-actions">
+                    <span className={projectStatusStyle(project.status)}>
+                      {mapProjectStatus(project.status)}
+                    </span>
+                    <span className="client-archive__chevron" aria-hidden="true">
+                      {expanded ? "▾" : "▸"}
+                    </span>
+                  </div>
+                </button>
+                {expanded && files.length ? (
+                  <div className="client-archive__files">
+                    {files.map((file) => {
+                      const fileStatus = file.workflow_status ?? file.status;
+                      const item = projectFileToArchiveItem(file, memberName || GUEST_CLIENT_NAME);
+                      return (
+                        <div key={file.job_id} className="client-archive__file">
+                          <div className="flex items-start justify-between gap-3">
+                            <button
+                              type="button"
+                              onClick={() => openArchiveJob(item, project.title)}
+                              onDoubleClick={() => openArchiveJob(item, project.title)}
+                              disabled={loadingJob}
+                              className="client-archive__file-open"
+                            >
+                              <p className="client-archive__file-name">{file.filename}</p>
+                              <p className="client-archive__file-title">{file.title}</p>
+                            </button>
+                            <div className="client-archive__file-badges">
+                              {renderClientInquiryBadge(file.client_inquiry_status)}
+                              <span className={archiveStatusStyle(fileStatus)}>
+                                {mapClientJobStatus(fileStatus)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="client-archive__file-footer">
+                            <span className="client-archive__file-id">{file.job_id}</span>
+                            <span>{formatKstDateTime(file.uploaded_at)}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {expanded && !files.length ? (
+                  <p className="client-archive__no-files">파일이 없습니다.</p>
+                ) : null}
+              </div>
+            );
+          })
+        ) : (
+          <div className="client-archive__empty">{meta.emptyMessage}</div>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => void refreshWorkspace()}
+        className="bp-button bp-button-outline client-archive__refresh"
+      >
+        목록 새로고침
+      </button>
+    </section>
+  );
 
   if (authStatus === "loading") {
     return <div className="client-loading">로그인 확인 중…</div>;
@@ -1582,102 +1710,23 @@ export default function App() {
           </section>
           ) : null}
 
-          {activeTab === "archive" ? (
-          <section className="bp-card client-archive__page-card">
-            <div className="client-archive__heading">
-              <p className="client-archive__eyebrow">보관함</p>
-              <h2 className="client-archive__title">프로젝트 보관함</h2>
-              <p className="client-archive__desc">
-                프로젝트(사건)별로 묶여 있습니다. 의뢰인 검토 파일을 누르면 편집 탭으로 이동합니다.
-              </p>
-            </div>
+          {activeTab === "archive"
+            ? renderProjectWorkspace(activeProjects, {
+                eyebrow: "진행중인 의뢰",
+                title: "진행 중인 프로젝트",
+                desc: "프로젝트(사건)별로 묶여 있습니다. 의뢰인 검토 파일을 누르면 녹취수정 탭으로 이동합니다.",
+                emptyMessage: "진행 중인 의뢰가 없습니다. 업로드 탭에서 파일을 올려 주세요.",
+              })
+            : null}
 
-            <div className="space-y-3">
-              {loadingWorkspace && !projects.length ? (
-                <div className="client-archive__empty">보관함을 불러오는 중입니다.</div>
-              ) : projects.length ? (
-                projects.map((project) => {
-                  const expanded = isProjectExpanded(project.project_id);
-                  const files = project.files ?? [];
-                  return (
-                    <div key={project.project_id} className="client-archive__project">
-                      <button
-                        type="button"
-                        onClick={() => toggleProjectExpanded(project.project_id)}
-                        className="client-archive__project-toggle"
-                      >
-                        <div className="min-w-0">
-                          <p className="client-archive__project-title">{project.title}</p>
-                          <p className="client-archive__project-meta">
-                            진행 {project.completed_count}/{project.file_count} · 마감{" "}
-                            {formatKstDateTime(project.due_at)}
-                          </p>
-                        </div>
-                        <div className="client-archive__project-actions">
-                          <span className={projectStatusStyle(project.status)}>
-                            {mapProjectStatus(project.status)}
-                          </span>
-                          <span className="client-archive__chevron" aria-hidden="true">
-                            {expanded ? "▾" : "▸"}
-                          </span>
-                        </div>
-                      </button>
-                      {expanded && files.length ? (
-                        <div className="client-archive__files">
-                          {files.map((file) => {
-                            const fileStatus = file.workflow_status ?? file.status;
-                            const item = projectFileToArchiveItem(file, memberName || GUEST_CLIENT_NAME);
-                            return (
-                              <div key={file.job_id} className="client-archive__file">
-                                <div className="flex items-start justify-between gap-3">
-                                  <button
-                                    type="button"
-                                    onClick={() => openArchiveJob(item, project.title)}
-                                    onDoubleClick={() => openArchiveJob(item, project.title)}
-                                    disabled={loadingJob}
-                                    className="client-archive__file-open"
-                                  >
-                                    <p className="client-archive__file-name">{file.filename}</p>
-                                    <p className="client-archive__file-title">{file.title}</p>
-                                  </button>
-                                  <div className="client-archive__file-badges">
-                                    {renderClientInquiryBadge(file.client_inquiry_status)}
-                                    <span className={archiveStatusStyle(fileStatus)}>
-                                      {mapClientJobStatus(fileStatus)}
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="client-archive__file-footer">
-                                  <span className="client-archive__file-id">{file.job_id}</span>
-                                  <span>{formatKstDateTime(file.uploaded_at)}</span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : null}
-                      {expanded && !files.length ? (
-                        <p className="client-archive__no-files">파일이 없습니다.</p>
-                      ) : null}
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="client-archive__empty">
-                  아직 프로젝트가 없습니다. 업로드 탭에서 파일을 올려 주세요.
-                </div>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => void refreshWorkspace()}
-              className="bp-button bp-button-outline client-archive__refresh"
-            >
-              보관함 새로고침
-            </button>
-          </section>
-          ) : null}
+          {activeTab === "completed"
+            ? renderProjectWorkspace(completedProjects, {
+                eyebrow: "완료된 의뢰",
+                title: "완료된 프로젝트",
+                desc: "PDF 수령이 완료된 의뢰입니다. 파일을 누르면 내용을 확인하고 PDF를 다운로드할 수 있습니다.",
+                emptyMessage: "완료된 의뢰가 없습니다.",
+              })
+            : null}
 
           {activeTab === "edit" ? (
           <section className="bp-card client-edit__page-card">

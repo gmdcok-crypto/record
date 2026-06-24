@@ -9,7 +9,8 @@ type Props = {
 type TabDef = { id: ClientTab; label: string; icon: () => ReactNode };
 
 const tabs: TabDef[] = [
-  {    id: "upload",
+  {
+    id: "upload",
     label: "업로드",
     icon: () => (
       <svg viewBox="0 0 24 24" aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -20,7 +21,7 @@ const tabs: TabDef[] = [
   },
   {
     id: "archive",
-    label: "진행중인 의뢰",
+    label: "진행중",
     icon: () => (
       <svg viewBox="0 0 24 24" aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8">
         <path
@@ -44,6 +45,16 @@ const tabs: TabDef[] = [
       </svg>
     ),
   },
+  {
+    id: "completed",
+    label: "완료",
+    icon: () => (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="12" cy="12" r="9" />
+      </svg>
+    ),
+  },
 ];
 
 export default function ClientBottomTabBar({ activeTab, onChange }: Props) {
@@ -52,7 +63,7 @@ export default function ClientBottomTabBar({ activeTab, onChange }: Props) {
       className="client-bottom-tab-bar fixed inset-x-0 bottom-0 z-30 border-t backdrop-blur lg:hidden"
       aria-label="모바일 주요 메뉴"
     >
-      <div className="client-shell__inner mx-auto grid grid-cols-3 px-2">
+      <div className="client-shell__inner mx-auto grid grid-cols-4 px-1">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (

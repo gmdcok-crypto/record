@@ -1,4 +1,4 @@
-export type ClientTab = "upload" | "archive" | "edit";
+export type ClientTab = "upload" | "archive" | "edit" | "completed";
 
 type TabItem = { id: ClientTab; label: string };
 
