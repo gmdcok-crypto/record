@@ -23,7 +23,7 @@ function bubbleClass(role: string): string {
 }
 
 export default function ManagerInquiryPanel({
-  title = "관리자 문의",
+  title = "녹취록 관련 바로문의",
   accent: _accent = "cyan",
   jobId,
   loadMessages,
@@ -70,7 +70,7 @@ export default function ManagerInquiryPanel({
     <div className="client-edit__panel">
       <div className="client-edit__panel-header">
         <h3 className="client-edit__panel-title">{title}</h3>
-        <p className="client-edit__panel-desc">작업 관련 문의는 관리자에게만 전달됩니다.</p>
+        <p className="client-edit__panel-desc">해당파일에 관한 내용만 문의해주세요</p>
       </div>
 
       <div className="max-h-64 space-y-3 overflow-y-auto px-4 py-3">
@@ -96,7 +96,7 @@ export default function ManagerInquiryPanel({
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           rows={3}
-          placeholder="관리자에게 전달할 내용을 입력하세요."
+          placeholder="해당파일에 관한 내용을 입력해주세요."
           className="client-edit__textarea"
         />
         <div className="mt-3 flex justify-end">
