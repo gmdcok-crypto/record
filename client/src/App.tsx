@@ -858,8 +858,8 @@ export default function App() {
       showNotice(
         "error",
         uploadProjectMode === "new"
-          ? "프로젝트 이름을 먼저 입력한 뒤 파일을 선택해 주세요."
-          : "업로드할 프로젝트를 먼저 선택해 주세요.",
+          ? "의뢰 제목을 먼저 입력한 뒤 파일을 선택해 주세요."
+          : "업로드할 의뢰를 먼저 선택해 주세요.",
       );
       return;
     }
@@ -1676,14 +1676,14 @@ export default function App() {
           <section className="bp-card client-upload__page-card">
             <div className="client-upload__heading">
               <p className="client-upload__eyebrow">파일 업로드</p>
-              <h2 className="client-upload__title">새 녹취 의뢰</h2>
+              <h2 className="client-upload__title">녹취의뢰</h2>
               <p className="client-upload__desc">
                 프로젝트를 정한 뒤 파일을 선택하고 파일별 업로드 구간을 설정할 수 있습니다.
               </p>
             </div>
 
             <div className="bp-section-box client-upload__project-box">
-              <p className="client-upload__section-label">업로드 프로젝트</p>
+              <p className="client-upload__section-label">업로드 녹취</p>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -1693,7 +1693,7 @@ export default function App() {
                     uploadProjectMode === "existing" ? "is-active" : ""
                   }`}
                 >
-                  기존 프로젝트
+                  기존의뢰 파일 추가
                 </button>
                 <button
                   type="button"
@@ -1702,7 +1702,7 @@ export default function App() {
                     uploadProjectMode === "new" ? "is-active" : ""
                   }`}
                 >
-                  새 프로젝트
+                  새 의뢰
                 </button>
               </div>
               {uploadProjectMode === "existing" ? (
@@ -1721,12 +1721,12 @@ export default function App() {
                     ))}
                   </select>
                 ) : (
-                  <p className="client-upload__field-hint">등록된 프로젝트가 없습니다. 새 프로젝트로 업로드하세요.</p>
+                  <p className="client-upload__field-hint">등록된 의뢰가 없습니다. 새 의뢰로 업로드하세요.</p>
                 )
               ) : (
                 <div className="mt-3">
                   <label className="client-upload__field-label">
-                    프로젝트 이름 <span className="text-[var(--bp-save-text)]">*</span>
+                    의뢰제목 <span className="text-[var(--bp-save-text)]">*</span>
                   </label>
                   <input
                     value={newProjectTitle}
@@ -1736,7 +1736,7 @@ export default function App() {
                     className="bp-control-input"
                   />
                   {!newProjectTitle.trim() ? (
-                    <p className="client-upload__field-hint text-amber-700">프로젝트 이름을 입력해야 파일을 선택할 수 있습니다.</p>
+                    <p className="client-upload__field-hint text-amber-700">의뢰 제목을 입력해야 파일을 선택할 수 있습니다.</p>
                   ) : null}
                 </div>
               )}
@@ -1779,7 +1779,7 @@ export default function App() {
                 </span>
                 <span className="client-upload__dropzone-title">
                   {!uploadProjectReady
-                    ? "프로젝트를 먼저 정해 주세요"
+                    ? "파일을 먼저 선택해주세요"
                     : selectedFiles.length > 0
                       ? `${selectedFiles.length}개 파일 선택됨`
                       : "음성/영상 파일 선택"}
@@ -1787,8 +1787,8 @@ export default function App() {
                 <span className="client-upload__dropzone-desc">
                   {!uploadProjectReady
                     ? uploadProjectMode === "new"
-                      ? "위에 프로젝트 이름을 입력하면 파일 선택이 활성화됩니다."
-                      : "위에서 기존 프로젝트를 선택하면 파일 선택이 활성화됩니다."
+                      ? "위에 의뢰 제목을 입력하면 파일 선택이 활성화됩니다."
+                      : "위에서 기존 의뢰를 선택하면 파일 선택이 활성화됩니다."
                     : selectedFiles.length > 0
                       ? `${selectedFiles[0].name}${selectedFiles.length > 1 ? ` 외 ${selectedFiles.length - 1}개` : ""} · 총 ${formatSize(
                           selectedFiles.reduce((sum, file) => sum + file.size, 0),
