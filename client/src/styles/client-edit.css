@@ -46,7 +46,7 @@
 .client-edit__guide-box {
   display: grid;
   gap: 0;
-  padding: 14px 16px;
+  padding: 10px 16px;
   border: 1px solid color-mix(in srgb, var(--bp-accent) 28%, transparent);
   border-radius: var(--bp-radius-section);
   background: var(--bp-accent-soft);
@@ -59,7 +59,7 @@
 }
 
 .client-edit__guide-col {
-  padding: 4px 0;
+  padding: 2px 0;
 }
 
 @media (min-width: 640px) {
@@ -71,8 +71,8 @@
 
 @media (max-width: 639px) {
   .client-edit__guide-col + .client-edit__guide-col {
-    margin-top: 12px;
-    padding-top: 12px;
+    margin-top: 10px;
+    padding-top: 10px;
     border-top: 1px solid color-mix(in srgb, var(--bp-accent) 22%, var(--bp-line));
   }
 }
@@ -81,7 +81,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 0 0 8px;
+  margin: 0 0 5px;
   font-size: var(--bp-text-body-size);
   font-weight: 700;
   color: var(--bp-accent);
@@ -102,12 +102,12 @@
   position: relative;
   padding-left: 12px;
   font-size: var(--bp-text-caption-size);
-  line-height: 1.55;
+  line-height: 1.45;
   color: var(--bp-ink);
 }
 
 .client-edit__guide-list li + li {
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .client-edit__guide-list li::before {
