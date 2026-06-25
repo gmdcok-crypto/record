@@ -287,7 +287,6 @@ export default function App() {
   const [sendingToClient, setSendingToClient] = useState(false);
   const [aiRunning, setAiRunning] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
-  const [bundleProjectPdf, setBundleProjectPdf] = useState(false);
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
   const [pushPermission, setPushPermission] = useState<PushPermissionState>("default");
   const [pushRegistered, setPushRegistered] = useState(false);
@@ -777,7 +776,7 @@ export default function App() {
         await saveTranscript(job.job_id, currentTranscript, "pdf_finalize");
         await finalizeTranscriptPdf(job.job_id, currentTranscript);
       }
-      const result = await deliverTranscriptPdf(job.job_id, bundleProjectPdf);
+      const result = await deliverTranscriptPdf(job.job_id, false);
       const refreshed = await fetchJob(job.job_id);
       setJob({
         ...refreshed,
@@ -788,7 +787,7 @@ export default function App() {
       });
       await loadProjects();
       setChangeHistoryRefresh((value) => value + 1);
-      showNotice("success", bundleProjectPdf ? "통합본 PDF를 의뢰인에게 전달했습니다." : "개별 PDF를 의뢰인에게 전달했습니다.");
+      showNotice("success", "PDF를 의뢰인에게 전달했습니다.");
     } catch (err) {
       showNotice("error", err instanceof Error ? err.message : "PDF 전달 실패");
     } finally {
@@ -1157,16 +1156,6 @@ export default function App() {
                     >
                       {downloadingPdf ? "PDF 전달 중..." : "PDF 전달"}
                     </button>
-                    <label className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-200">
-                      <input
-                        type="checkbox"
-                        checked={bundleProjectPdf}
-                        onChange={(event) => setBundleProjectPdf(event.target.checked)}
-                        disabled={busy || !currentProject?.project_id}
-                        className="h-4 w-4 rounded border-slate-600 bg-slate-900"
-                      />
-                      <span>프로젝트 전체를 하나의 PDF로 묶기</span>
-                    </label>
                     <button
                       type="button"
                       onClick={() => window.open(finalTranscriptPdfUrl(job.job_id), "_blank", "noopener,noreferrer")}
