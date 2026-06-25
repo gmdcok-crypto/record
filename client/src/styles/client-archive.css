@@ -31,149 +31,43 @@
   color: var(--bp-body);
 }
 
-.client-archive__guide-grid {
-  display: grid;
-  gap: 12px;
-  margin-top: 16px;
-}
-
-@media (min-width: 900px) {
-  .client-archive__guide-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-.client-archive__guide-card {
-  overflow: hidden;
-  border: 1px solid var(--bp-line);
-  border-radius: var(--bp-radius-section);
-  background: var(--bp-surface);
-}
-
-.client-archive__guide-card--review {
-  border-color: color-mix(in srgb, var(--bp-review) 24%, var(--bp-line));
-  background: color-mix(in srgb, var(--bp-review) 6%, var(--bp-surface));
-}
-
-.client-archive__guide-card--request {
-  border-color: color-mix(in srgb, var(--bp-danger) 24%, var(--bp-line));
-  background: color-mix(in srgb, var(--bp-danger) 6%, var(--bp-surface));
-}
-
-.client-archive__guide-card--share {
-  border-color: color-mix(in srgb, #16a34a 24%, var(--bp-line));
-  background: color-mix(in srgb, #16a34a 6%, var(--bp-surface));
-}
-
-.client-archive__guide-card-header {
+.client-archive__working-notice {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 10px;
+  margin-top: 16px;
   padding: 12px 14px;
-  border-bottom: 1px solid color-mix(in srgb, var(--bp-line) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bp-accent) 28%, transparent);
+  border-radius: var(--bp-radius-section);
+  background: var(--bp-accent-soft);
 }
 
-.client-archive__guide-card-icon {
-  font-size: 1rem;
-  line-height: 1.2;
-}
-
-.client-archive__guide-card-title {
-  margin: 0;
-  font-size: var(--bp-text-body-size);
-  font-weight: 700;
-  line-height: 1.3;
-}
-
-.client-archive__guide-card--review .client-archive__guide-card-title {
-  color: var(--bp-review);
-}
-
-.client-archive__guide-card--request .client-archive__guide-card-title {
-  color: var(--bp-danger);
-}
-
-.client-archive__guide-card--share .client-archive__guide-card-title {
-  color: #15803d;
-}
-
-.client-archive__guide-card-desc {
-  margin: 2px 0 0;
-  font-size: var(--bp-text-caption-size);
-  line-height: 1.45;
-  color: var(--bp-body);
-}
-
-.client-archive__guide-actions {
-  display: grid;
-  gap: 8px;
-  padding: 10px 12px 12px;
-}
-
-.client-archive__guide-actions--single {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-@media (min-width: 480px) {
-  .client-archive__guide-actions:not(.client-archive__guide-actions--single) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-.client-archive__guide-action {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 64px;
-  padding: 10px;
-  border: 1px solid var(--bp-line);
-  border-radius: var(--bp-radius-control);
-  background: var(--bp-surface);
-}
-
-.client-archive__guide-action--review {
-  border-color: color-mix(in srgb, var(--bp-review) 22%, var(--bp-line));
-}
-
-.client-archive__guide-action--request {
-  border-color: color-mix(in srgb, var(--bp-danger) 22%, var(--bp-line));
-}
-
-.client-archive__guide-action--share {
-  border-color: color-mix(in srgb, #16a34a 22%, var(--bp-line));
-}
-
-.client-archive__guide-action-icon {
+.client-archive__working-notice-icon {
+  display: inline-flex;
   flex-shrink: 0;
-  font-size: 1rem;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--bp-accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  font-style: italic;
   line-height: 1;
 }
 
-.client-archive__guide-action-text {
-  min-width: 0;
-  flex: 1;
-}
-
-.client-archive__guide-action-title {
+.client-archive__working-notice-text {
   margin: 0;
   font-size: var(--bp-text-caption-size);
-  font-weight: 700;
-  line-height: 1.35;
+  line-height: 1.6;
   color: var(--bp-ink);
 }
 
-.client-archive__guide-action-desc {
-  margin: 2px 0 0;
-  font-size: var(--bp-text-micro-size);
-  line-height: 1.4;
-  color: var(--bp-body);
-}
-
-.client-archive__guide-action-chevron {
-  flex-shrink: 0;
-  font-size: 1.1rem;
-  line-height: 1;
-  color: var(--bp-body);
+.client-archive__working-notice-emphasis {
+  font-weight: 700;
+  color: var(--bp-accent);
 }
 
 .client-archive__empty {
