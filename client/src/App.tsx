@@ -35,6 +35,7 @@ import {
   type MemberProfile,
 } from "./api";
 import ActionNoticeModal, { type ActionNotice, type ActionNoticeKind } from "./ActionNoticeModal";
+import UnsavedChangesModal from "./UnsavedChangesModal";
 import MemberLogin from "./MemberLogin";
 import AddSegmentModal, { type AddSegmentDraft } from "./AddSegmentModal";
 import ManagerInquiryPanel from "./ManagerInquiryPanel";
@@ -50,6 +51,7 @@ import {
   nextSpeakerId,
   OMITTED_MARKER,
   segmentsToTranscript,
+  serializeTranscriptSnapshot,
   toggleSegmentOmitted,
 } from "./transcriptEditor";
 import UploadBillingPanel, { type BillingRestoreHint } from "./UploadBillingPanel";
@@ -93,6 +95,9 @@ type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 type UploadProjectMode = "existing" | "new";
 type EditableSegment = TranscriptSegment & { id: string };
 type PushPermissionState = NotificationPermission | "unsupported";
+type PendingLeaveAction =
+  | { type: "tab"; tab: ClientTab }
+  | { type: "openJob"; item: JobArchiveItem; projectTitle?: string };
 const FRONTEND_VERSION_POLL_MS = 60_000;
 
 const ACCEPT = "audio/*,video/mp4,video/webm,.wav,.mp3,.m4a,.flac,.ogg";
@@ -340,6 +345,10 @@ export default function App() {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [creatingShare, setCreatingShare] = useState(false);
   const [duplicateDialogMessage, setDuplicateDialogMessage] = useState("");
+  const [savedTranscriptSnapshot, setSavedTranscriptSnapshot] = useState("");
+  const [unsavedLeavePromptOpen, setUnsavedLeavePromptOpen] = useState(false);
+  const [savingUnsavedLeave, setSavingUnsavedLeave] = useState(false);
+  const pendingLeaveActionRef = useRef<PendingLeaveAction | null>(null);
   const [uploadPaid, setUploadPaid] = useState(false);
   const [activeTab, setActiveTab] = useState<ClientTab>("upload");
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
@@ -404,6 +413,10 @@ export default function App() {
   const transcriptTokens = useMemo(() => job?.transcript_json?.tokens ?? [], [job?.transcript_json?.tokens]);
   const currentWorkflowStatus = useMemo(() => jobWorkflowStatus(job), [job]);
   const pdfReceived = useMemo(() => isPdfReceivedStatus(currentWorkflowStatus), [currentWorkflowStatus]);
+  const isEditDirty = useMemo(() => {
+    if (!job || pdfReceived || !isEditableArchiveStatus(currentWorkflowStatus)) return false;
+    return serializeTranscriptSnapshot(currentTranscript) !== savedTranscriptSnapshot;
+  }, [job, pdfReceived, currentWorkflowStatus, currentTranscript, savedTranscriptSnapshot]);
   const selectedUploadSegments = useMemo(() => job?.selected_segments ?? [], [job?.selected_segments]);
   const currentTitle = useMemo(
     () => job?.title || job?.transcript_json.filename || selectedFiles[0]?.name || "새 녹취 작업",
@@ -898,6 +911,9 @@ export default function App() {
       setSegments(loadedSegments);
       setSpeakerLabels(loadedLabels);
       setExtraSpeakerIds(deriveExtraSpeakerIds(loadedSegments, loadedLabels));
+      setSavedTranscriptSnapshot(
+        serializeTranscriptSnapshot(segmentsToTranscript(data.transcript_json, loadedSegments, loadedLabels)),
+      );
       setStep("ready");
       const workflowStatus = jobWorkflowStatus(data);
       const shouldOpenEdit = options?.switchToEdit ?? isEditableArchiveStatus(workflowStatus);
@@ -946,32 +962,148 @@ export default function App() {
     };
   }, [refreshWorkspace]);
 
-  const openArchiveJob = (item: JobArchiveItem, projectTitle?: string) => {
-    const workflowStatus = normalizeWorkflowStatus(item.workflow_status ?? item.status);
-    if (workflowStatus === "transcriber_review") {
-      showNotice("info", "속기사 검토 중입니다. 검토가 완료되면 PDF가 전달됩니다.");
-      return;
-    }
-    if (workflowStatus === "transcript_request") {
-      showNotice("info", "녹취록 요청이 접수되었습니다. 속기사가 최종 확인 후 PDF를 전달합니다.");
-      return;
-    }
-    if (workflowStatus === "working") {
-      showNotice("info", "속기사가 작업 중입니다. 의뢰인 검토 단계가 되면 편집 화면에서 확인할 수 있습니다.");
-      return;
-    }
-    if (projectTitle) {
-      const project = projects.find((entry) => entry.title === projectTitle && entry.files?.some((file) => file.job_id === item.job_id));
-      setEditContext({
-        projectId: project?.project_id,
-        projectTitle,
-        filename: item.filename,
-        pdfDeliveryMode: project?.pdf_delivery_mode,
+  const revertUnsavedEdits = useCallback(() => {
+    if (!job?.transcript_json) return;
+    const loadedSegments = buildEditableSegments(job.transcript_json);
+    const loadedLabels = job.transcript_json.speaker_labels ?? {};
+    setSegments(loadedSegments);
+    setSpeakerLabels(loadedLabels);
+    setExtraSpeakerIds(deriveExtraSpeakerIds(loadedSegments, loadedLabels));
+    setSavedTranscriptSnapshot(
+      serializeTranscriptSnapshot(segmentsToTranscript(job.transcript_json, loadedSegments, loadedLabels)),
+    );
+  }, [job]);
+
+  const performOpenArchiveJob = useCallback(
+    (item: JobArchiveItem, projectTitle?: string) => {
+      const workflowStatus = normalizeWorkflowStatus(item.workflow_status ?? item.status);
+      if (workflowStatus === "transcriber_review") {
+        showNotice("info", "속기사 검토 중입니다. 검토가 완료되면 PDF가 전달됩니다.");
+        return;
+      }
+      if (workflowStatus === "transcript_request") {
+        showNotice("info", "녹취록 요청이 접수되었습니다. 속기사가 최종 확인 후 PDF를 전달합니다.");
+        return;
+      }
+      if (workflowStatus === "working") {
+        showNotice("info", "속기사가 작업 중입니다. 의뢰인 검토 단계가 되면 편집 화면에서 확인할 수 있습니다.");
+        return;
+      }
+      if (projectTitle) {
+        const project = projects.find(
+          (entry) => entry.title === projectTitle && entry.files?.some((file) => file.job_id === item.job_id),
+        );
+        setEditContext({
+          projectId: project?.project_id,
+          projectTitle,
+          filename: item.filename,
+          pdfDeliveryMode: project?.pdf_delivery_mode,
+        });
+      }
+      const shouldOpenEdit = isEditableArchiveStatus(workflowStatus);
+      void loadJobById(item.job_id, { switchToEdit: shouldOpenEdit });
+    },
+    [loadJobById, projects, showNotice],
+  );
+
+  const executePendingLeave = useCallback(
+    (action: PendingLeaveAction) => {
+      switch (action.type) {
+        case "tab":
+          setActiveTab(action.tab);
+          break;
+        case "openJob":
+          performOpenArchiveJob(action.item, action.projectTitle);
+          break;
+        default:
+          break;
+      }
+    },
+    [performOpenArchiveJob],
+  );
+
+  const requestLeaveEdit = useCallback(
+    (action: PendingLeaveAction) => {
+      if (!isEditDirty) {
+        executePendingLeave(action);
+        return;
+      }
+      pendingLeaveActionRef.current = action;
+      setUnsavedLeavePromptOpen(true);
+    },
+    [executePendingLeave, isEditDirty],
+  );
+
+  const handleTabChange = useCallback(
+    (tab: ClientTab) => {
+      if (tab === activeTab) return;
+      if (activeTab === "edit" && isEditDirty) {
+        requestLeaveEdit({ type: "tab", tab });
+        return;
+      }
+      setActiveTab(tab);
+    },
+    [activeTab, isEditDirty, requestLeaveEdit],
+  );
+
+  const handleUnsavedLeaveCancel = useCallback(() => {
+    pendingLeaveActionRef.current = null;
+    setUnsavedLeavePromptOpen(false);
+  }, []);
+
+  const handleUnsavedLeaveDiscard = useCallback(() => {
+    const action = pendingLeaveActionRef.current;
+    pendingLeaveActionRef.current = null;
+    setUnsavedLeavePromptOpen(false);
+    revertUnsavedEdits();
+    if (action) executePendingLeave(action);
+  }, [executePendingLeave, revertUnsavedEdits]);
+
+  const handleUnsavedLeaveSave = useCallback(async () => {
+    if (!job) return;
+    setSavingUnsavedLeave(true);
+    try {
+      await saveTranscript(job.job_id, currentTranscript, "draft");
+      const nextTranscript = currentTranscript;
+      setJob({
+        ...job,
+        transcript_json: nextTranscript,
+        status: "client_review",
+        workflow_status: "client_review",
       });
+      setSavedTranscriptSnapshot(serializeTranscriptSnapshot(nextTranscript));
+      setChangeHistoryRefresh((value) => value + 1);
+      await refreshWorkspace();
+      const action = pendingLeaveActionRef.current;
+      pendingLeaveActionRef.current = null;
+      setUnsavedLeavePromptOpen(false);
+      if (action) executePendingLeave(action);
+    } catch (err) {
+      showNotice("error", err instanceof Error ? err.message : "저장 실패", "임시 저장 실패");
+    } finally {
+      setSavingUnsavedLeave(false);
     }
-    const shouldOpenEdit = isEditableArchiveStatus(workflowStatus);
-    void loadJobById(item.job_id, { switchToEdit: shouldOpenEdit });
-  };
+  }, [job, currentTranscript, executePendingLeave, refreshWorkspace, showNotice]);
+
+  useEffect(() => {
+    if (!isEditDirty || activeTab !== "edit") return undefined;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [activeTab, isEditDirty]);
+
+  const openArchiveJob = useCallback(
+    (item: JobArchiveItem, projectTitle?: string) => {
+      if (job && isEditDirty && item.job_id !== job.job_id) {
+        requestLeaveEdit({ type: "openJob", item, projectTitle });
+        return;
+      }
+      performOpenArchiveJob(item, projectTitle);
+    },
+    [isEditDirty, job, performOpenArchiveJob, requestLeaveEdit],
+  );
 
   const performUpload = async (
     fileToUpload: File,
@@ -1226,12 +1358,14 @@ export default function App() {
     setActionNotice(null);
     try {
       await saveTranscript(job.job_id, currentTranscript, "draft");
+      const nextTranscript = currentTranscript;
       setJob({
         ...job,
-        transcript_json: currentTranscript,
+        transcript_json: nextTranscript,
         status: "client_review",
         workflow_status: "client_review",
       });
+      setSavedTranscriptSnapshot(serializeTranscriptSnapshot(nextTranscript));
       setChangeHistoryRefresh((value) => value + 1);
       showNotice("success", "", "저장완료");
       await refreshWorkspace();
@@ -1535,7 +1669,7 @@ export default function App() {
           onLogout={handleLogout}
         />
 
-        <ClientTopTabNav tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+        <ClientTopTabNav tabs={tabs} activeTab={activeTab} onChange={handleTabChange} />
 
         <main className="flex-1">
           {activeTab === "upload" ? (
@@ -2047,6 +2181,14 @@ export default function App() {
           </div>
         ) : null}
 
+        <UnsavedChangesModal
+          open={unsavedLeavePromptOpen}
+          saving={savingUnsavedLeave}
+          onSave={() => void handleUnsavedLeaveSave()}
+          onDiscard={handleUnsavedLeaveDiscard}
+          onCancel={handleUnsavedLeaveCancel}
+        />
+
         <ActionNoticeModal notice={actionNotice} onClose={() => setActionNotice(null)} />
 
         <SpeakerSettingsModal
@@ -2070,7 +2212,7 @@ export default function App() {
         />
       </div>
 
-      <ClientBottomTabBar activeTab={activeTab} onChange={setActiveTab} />
+      <ClientBottomTabBar activeTab={activeTab} onChange={handleTabChange} />
     </div>
   );
 }

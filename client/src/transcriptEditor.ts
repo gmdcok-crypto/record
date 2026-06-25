@@ -74,6 +74,22 @@ export function segmentsToTranscript(
   };
 }
 
+export function serializeTranscriptSnapshot(transcript: TranscriptJson): string {
+  const segments = (transcript.segments ?? []).map((segment) => ({
+    speaker: segment.speaker.trim() || "1",
+    text: segment.text.trim(),
+    start_ms: segment.start_ms ?? null,
+    end_ms: segment.end_ms ?? null,
+    omitted: Boolean(segment.omitted),
+  }));
+  const speaker_labels = Object.fromEntries(
+    Object.entries(transcript.speaker_labels ?? {})
+      .map(([id, name]) => [id, name.trim()])
+      .filter(([, name]) => name),
+  );
+  return JSON.stringify({ segments, speaker_labels });
+}
+
 export function sortSpeakerIds(ids: string[]): string[] {
   return [...ids].sort((a, b) => {
     const na = Number(a);
