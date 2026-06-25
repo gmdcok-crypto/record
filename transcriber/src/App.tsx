@@ -133,7 +133,7 @@ function mapFileStatusLabel(status: string): string {
     case "transcript_request":
       return "녹취록 요청";
     case "pdf_sent":
-      return "PDF 전달";
+      return "최종완료";
     default:
       return status;
   }
