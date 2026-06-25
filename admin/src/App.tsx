@@ -120,6 +120,7 @@ type ProjectItem = {
   statusLabel: string;
   rawStatus: string;
   fileCount: number;
+  totalDurationSeconds: number;
   completedCount: number;
   assignee: string;
   assigneeCode: string | null;
@@ -317,6 +318,21 @@ function projectStatusTone(rawStatus: string): string {
     default:
       return "bg-amber-500/15 text-amber-300";
   }
+}
+
+function formatTotalDurationLabel(totalSeconds: number): string {
+  if (totalSeconds <= 0) return "";
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}시간 ${minutes}분 ${seconds}초`;
+  if (minutes > 0) return `${minutes}분 ${seconds}초`;
+  return `${seconds}초`;
+}
+
+function formatProjectFileCount(count: number, totalSeconds: number): string {
+  const duration = formatTotalDurationLabel(totalSeconds);
+  return duration ? `${count}개(${duration})` : `${count}개`;
 }
 
 function projectAssignButtonLabel(project: ProjectItem): string {
@@ -873,6 +889,7 @@ function App() {
       statusLabel: mapProjectStatusLabel(project.status),
       rawStatus: project.status,
       fileCount: project.file_count,
+      totalDurationSeconds: project.total_duration_seconds ?? 0,
       completedCount: project.completed_count,
       assignee: project.assignee || "-",
       assigneeCode: project.assignee_code ?? null,
@@ -1683,7 +1700,7 @@ function App() {
                         {project.client}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-slate-400">
-                        {project.fileCount}개
+                        {formatProjectFileCount(project.fileCount, project.totalDurationSeconds)}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-slate-300">
                         {project.completedCount}/{project.fileCount}

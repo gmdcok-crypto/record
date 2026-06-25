@@ -196,6 +196,7 @@ export type AdminOverviewProject = {
   status: string;
   file_count: number;
   completed_count: number;
+  total_duration_seconds?: number;
   due_at: string | null;
   memo?: string | null;
   priority?: string;
