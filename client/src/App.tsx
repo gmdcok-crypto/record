@@ -38,6 +38,7 @@ import ActionNoticeModal, { type ActionNotice, type ActionNoticeKind } from "./A
 import UnsavedChangesModal from "./UnsavedChangesModal";
 import MemberLogin from "./MemberLogin";
 import AddSegmentModal, { type AddSegmentDraft } from "./AddSegmentModal";
+import ClientArchiveActionGuide from "./ClientArchiveActionGuide";
 import ManagerInquiryPanel from "./ManagerInquiryPanel";
 import SpeakerSettingsModal from "./SpeakerSettingsModal";
 import TranscriptChangeHistory from "./TranscriptChangeHistory";
@@ -1555,6 +1556,7 @@ export default function App() {
       title: string;
       desc: string;
       emptyMessage: string;
+      showActionGuide?: boolean;
     },
   ) => (
     <section className="bp-card client-archive__page-card">
@@ -1562,6 +1564,7 @@ export default function App() {
         {meta.eyebrow ? <p className="client-archive__eyebrow">{meta.eyebrow}</p> : null}
         <h2 className="client-archive__title">{meta.title}</h2>
         <p className="client-archive__desc">{meta.desc}</p>
+        {meta.showActionGuide ? <ClientArchiveActionGuide /> : null}
       </div>
 
       <div className="space-y-3">
@@ -1846,10 +1849,10 @@ export default function App() {
 
           {activeTab === "archive"
             ? renderProjectWorkspace(activeProjects, {
-                eyebrow: "진행중인 의뢰",
-                title: "진행 중인 프로젝트",
-                desc: "프로젝트(사건)별로 묶여 있습니다. 의뢰인 검토 파일을 누르면 녹취수정 탭으로 이동합니다.",
+                title: "진행중인 의뢰",
+                desc: "의뢰(사건)별로 묶여 있습니다. 의뢰인 검토 파일을 누르면 녹취수정 탭으로 이동합니다.",
                 emptyMessage: "진행 중인 의뢰가 없습니다. 업로드 탭에서 파일을 올려 주세요.",
+                showActionGuide: true,
               })
             : null}
 
