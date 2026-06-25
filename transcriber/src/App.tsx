@@ -97,10 +97,9 @@ function formatTotalDurationLabel(totalSeconds: number): string {
   return `${seconds}초`;
 }
 
-function formatProjectProgressLabel(project: TranscriberProject): string {
-  const progress = `${project.completed_count}/${project.file_count}`;
-  const duration = formatTotalDurationLabel(project.total_duration_seconds ?? 0);
-  return duration ? `${progress} · ${duration}` : progress;
+function formatProjectFileCount(count: number, totalSeconds: number): string {
+  const duration = formatTotalDurationLabel(totalSeconds);
+  return duration ? `${count}개(${duration})` : `${count}개`;
 }
 
 function normalizeWorkflowStatus(status: string): string {
@@ -900,7 +899,7 @@ export default function App() {
                           {mapProjectStatus(project.status)}
                         </span>
                         <span className="text-[11px] font-medium text-slate-200">
-                          {formatProjectProgressLabel(project)}
+                          {formatProjectFileCount(project.file_count, project.total_duration_seconds ?? 0)}
                         </span>
                       </div>
                     </button>
