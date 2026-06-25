@@ -173,7 +173,7 @@ function mapClientJobStatus(status: string): string {
     case "transcript_request":
       return "녹취록 요청";
     case "pdf_sent":
-      return "PDF 수령";
+      return "제출문서 PDF 수령";
     default:
       return status;
   }
@@ -1551,7 +1551,7 @@ export default function App() {
   const renderProjectWorkspace = (
     list: ProjectSummary[],
     meta: {
-      eyebrow: string;
+      eyebrow?: string;
       title: string;
       desc: string;
       emptyMessage: string;
@@ -1559,7 +1559,7 @@ export default function App() {
   ) => (
     <section className="bp-card client-archive__page-card">
       <div className="client-archive__heading">
-        <p className="client-archive__eyebrow">{meta.eyebrow}</p>
+        {meta.eyebrow ? <p className="client-archive__eyebrow">{meta.eyebrow}</p> : null}
         <h2 className="client-archive__title">{meta.title}</h2>
         <p className="client-archive__desc">{meta.desc}</p>
       </div>
@@ -1855,8 +1855,7 @@ export default function App() {
 
           {activeTab === "completed"
             ? renderProjectWorkspace(completedProjects, {
-                eyebrow: "완료된 의뢰",
-                title: "완료된 프로젝트",
+                title: "완료된 의뢰",
                 desc: "PDF 수령이 완료된 의뢰입니다. 파일을 누르면 내용을 확인하고 PDF를 다운로드할 수 있습니다.",
                 emptyMessage: "완료된 의뢰가 없습니다.",
               })
