@@ -87,6 +87,22 @@ function mapProjectStatus(status: string): string {
   }
 }
 
+function formatTotalDurationLabel(totalSeconds: number): string {
+  if (totalSeconds <= 0) return "";
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}시간 ${minutes}분 ${seconds}초`;
+  if (minutes > 0) return `${minutes}분 ${seconds}초`;
+  return `${seconds}초`;
+}
+
+function formatProjectProgressLabel(project: TranscriberProject): string {
+  const progress = `${project.completed_count}/${project.file_count}`;
+  const duration = formatTotalDurationLabel(project.total_duration_seconds ?? 0);
+  return duration ? `${progress} · ${duration}` : progress;
+}
+
 function normalizeWorkflowStatus(status: string): string {
   switch (status) {
     case "uploaded":
@@ -153,28 +169,28 @@ function renderTranscriberInquiryBadge(status?: "reply_pending" | "reply_arrived
 function fileStatusStyle(status: string): string {
   switch (normalizeWorkflowStatus(status)) {
     case "pdf_sent":
-      return "bg-emerald-500/15 text-emerald-300";
+      return "border border-emerald-400/40 bg-emerald-500/25 text-emerald-100";
     case "client_review":
     case "transcriber_review":
     case "transcript_request":
-      return "bg-violet-500/15 text-violet-300";
+      return "border border-violet-400/40 bg-violet-500/25 text-violet-100";
     case "working":
-      return "bg-cyan-500/15 text-cyan-300";
+      return "border border-cyan-400/40 bg-cyan-500/25 text-cyan-100";
     default:
-      return "bg-amber-500/15 text-amber-300";
+      return "border border-amber-400/40 bg-amber-500/25 text-amber-100";
   }
 }
 
 function projectStatusStyle(status: string): string {
   switch (status) {
     case "completed":
-      return "bg-emerald-500/15 text-emerald-300";
+      return "border border-emerald-400/40 bg-emerald-500/25 text-emerald-100";
     case "client_review":
-      return "bg-violet-500/15 text-violet-300";
+      return "border border-violet-400/40 bg-violet-500/25 text-violet-100";
     case "working":
-      return "bg-cyan-500/15 text-cyan-300";
+      return "border border-cyan-400/40 bg-cyan-500/25 text-cyan-100";
     default:
-      return "bg-amber-500/15 text-amber-300";
+      return "border border-amber-400/40 bg-amber-500/25 text-amber-100";
   }
 }
 
@@ -870,21 +886,21 @@ export default function App() {
                       onClick={() => selectProject(project)}
                       className={`block w-full rounded-2xl border px-3 py-3 text-left transition ${
                         active
-                          ? "border-cyan-500/40 bg-cyan-500/10"
-                          : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
+                          ? "border-cyan-400/50 bg-cyan-500/15"
+                          : "border-slate-700/80 bg-slate-900/80 hover:border-slate-600 hover:bg-slate-900"
                       }`}
                     >
-                      <p className="truncate text-sm font-semibold text-white">{project.title}</p>
-                      <p className="mt-1 truncate text-xs text-slate-400">{project.client.name}</p>
-                      <p className="mt-1 truncate text-[10px] text-slate-500">
+                      <p className="truncate text-sm font-semibold text-slate-50">{project.title}</p>
+                      <p className="mt-1 truncate text-xs text-slate-300">{project.client.name}</p>
+                      <p className="mt-1 truncate text-[11px] text-slate-400">
                         배정 {formatKstDateTime(project.files.find((file) => file.assigned_at)?.assigned_at)}
                       </p>
                       <div className="mt-2 flex items-center justify-between gap-2">
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${projectStatusStyle(project.status)}`}>
                           {mapProjectStatus(project.status)}
                         </span>
-                        <span className="text-[10px] text-slate-500">
-                          {project.completed_count}/{project.file_count}
+                        <span className="text-[11px] font-medium text-slate-200">
+                          {formatProjectProgressLabel(project)}
                         </span>
                       </div>
                     </button>
@@ -910,13 +926,13 @@ export default function App() {
                       disabled={loadingJob}
                       className={`block w-full rounded-2xl border px-3 py-3 text-left transition ${
                         active
-                          ? "border-violet-500/40 bg-violet-500/10"
-                          : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
+                          ? "border-violet-400/50 bg-violet-500/15"
+                          : "border-slate-700/80 bg-slate-900/80 hover:border-slate-600 hover:bg-slate-900"
                       } disabled:cursor-not-allowed disabled:opacity-60`}
                     >
-                      <p className="truncate text-sm font-medium text-white">{file.filename}</p>
-                      <p className="mt-1 text-[10px] text-slate-500">{formatKstDateTime(file.due_at)}</p>
-                      <p className="mt-1 text-[10px] text-slate-500">배정 {formatKstDateTime(file.assigned_at)}</p>
+                      <p className="truncate text-sm font-medium text-slate-50">{file.filename}</p>
+                      <p className="mt-1 text-[11px] text-slate-400">마감 {formatKstDateTime(file.due_at)}</p>
+                      <p className="mt-1 text-[11px] text-slate-400">배정 {formatKstDateTime(file.assigned_at)}</p>
                       <div className="mt-2 flex items-center gap-2">
                         {renderTranscriberInquiryBadge(file.transcriber_inquiry_status)}
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${fileStatusStyle(fileWorkflowStatus(file))}`}>

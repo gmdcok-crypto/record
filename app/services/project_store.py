@@ -343,6 +343,7 @@ def list_transcriber_projects(db: Session, transcriber_code: str) -> list[dict]:
         TRANSCRIBER_VISIBLE_JOB_STATUSES,
         _display_status_for_job,
         _has_manual_assignment,
+        _resolve_job_duration_seconds,
     )
 
     transcriber = db.scalar(select(Transcriber).where(Transcriber.transcriber_code == transcriber_code))
@@ -383,6 +384,7 @@ def list_transcriber_projects(db: Session, transcriber_code: str) -> list[dict]:
                 "status": compute_project_status(display_statuses),
                 "file_count": len(project_jobs),
                 "completed_count": sum(1 for status in display_statuses if status in FINAL_JOB_STATUSES),
+                "total_duration_seconds": sum(_resolve_job_duration_seconds(job) for job in project_jobs),
                 "files": [serialize_project_file(db, job) for job in project_jobs],
             }
         )
@@ -401,6 +403,7 @@ def list_transcriber_projects(db: Session, transcriber_code: str) -> list[dict]:
                 "status": compute_project_status([display_status]),
                 "file_count": 1,
                 "completed_count": 1 if display_status in FINAL_JOB_STATUSES else 0,
+                "total_duration_seconds": _resolve_job_duration_seconds(job),
                 "files": [serialize_project_file(db, job)],
             }
         )

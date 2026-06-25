@@ -98,6 +98,7 @@ export type TranscriberProject = {
   status: string;
   file_count: number;
   completed_count: number;
+  total_duration_seconds?: number;
   files: TranscriberProjectFile[];
 };
 
