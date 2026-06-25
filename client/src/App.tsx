@@ -1947,6 +1947,33 @@ export default function App() {
               </div>
             ) : job ? (
               <div className="space-y-4">
+                <div className="client-edit__guide-box">
+                  <div className="client-edit__guide-col">
+                    <h4 className="client-edit__guide-title">
+                      <span className="client-edit__guide-icon" aria-hidden="true">
+                        ⓘ
+                      </span>
+                      검토 안내
+                    </h4>
+                    <ul className="client-edit__guide-list">
+                      <li>한 번 클릭하면 해당 구간의 음성을 바로 들을 수 있습니다.</li>
+                      <li>두 번 클릭하면 내용을 수정할 수 있습니다.</li>
+                    </ul>
+                  </div>
+                  <div className="client-edit__guide-col">
+                    <h4 className="client-edit__guide-title">
+                      <span className="client-edit__guide-icon" aria-hidden="true">
+                        🎧
+                      </span>
+                      문의 사항 안내
+                    </h4>
+                    <ul className="client-edit__guide-list">
+                      <li>하단 페이지 해당 녹취록 관련 문의에 남겨주시면 확인 후 답변드립니다</li>
+                      <li>해당 녹취록과 관련된 음성 파일에 대해서만 남겨주세요</li>
+                    </ul>
+                  </div>
+                </div>
+
                 <div>
                   <label className="client-edit__section-label">원본 음성</label>
                   <audio
