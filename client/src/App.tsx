@@ -1678,7 +1678,7 @@ export default function App() {
               <p className="client-upload__eyebrow">파일 업로드</p>
               <h2 className="client-upload__title">녹취의뢰</h2>
               <p className="client-upload__desc">
-                프로젝트를 정한 뒤 파일을 선택하고 파일별 업로드 구간을 설정할 수 있습니다.
+                파일을 선택하고 파일별 업로드 구간을 설정할 수 있습니다.
               </p>
             </div>
 
