@@ -670,6 +670,8 @@ function App() {
   const [jobTableProjects, setJobTableProjects] = useState<ProjectItem[]>([]);
   const [projectFilesCache, setProjectFilesCache] = useState<Record<string, ProjectFileItem[]>>({});
   const [projectFilesLoading, setProjectFilesLoading] = useState<Record<string, boolean>>({});
+  const [projectFilesError, setProjectFilesError] = useState<Record<string, string>>({});
+  const [jobProjectsUseFallback, setJobProjectsUseFallback] = useState(false);
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedTranscriberCode, setSelectedTranscriberCode] = useState("");
   const [selectedAssignJobIds, setSelectedAssignJobIds] = useState<string[]>([]);
@@ -971,24 +973,56 @@ function App() {
         q: debouncedQuery || undefined,
         fileStatus: jobStatusFilterToCanonical(statusFilter),
       });
+      setJobProjectsUseFallback(false);
       setJobProjectsTotal(result.total);
       setJobTableProjects(result.projects.map((project) => mapApiProjectToItem(project)));
     } catch (err) {
       console.error(err);
-      window.alert(err instanceof Error ? err.message : "프로젝트 목록을 불러올 수 없습니다.");
+      const fallback = overview?.projects ?? [];
+      if (fallback.length > 0) {
+        setJobProjectsUseFallback(true);
+        setJobProjectsTotal(fallback.length);
+        setJobTableProjects(
+          fallback.map((project) =>
+            mapApiProjectToItem(
+              project,
+              (project.files ?? []).map((file) => mapApiProjectFileToItem(file, jobById.get(file.job_id))),
+            ),
+          ),
+        );
+      } else {
+        window.alert(err instanceof Error ? err.message : "프로젝트 목록을 불러올 수 없습니다.");
+      }
     } finally {
       setJobProjectsLoading(false);
     }
-  }, [authStatus, debouncedQuery, jobPage, jobPageSize, jobTab, statusFilter]);
+  }, [authStatus, debouncedQuery, jobById, jobPage, jobPageSize, jobTab, overview?.projects, statusFilter]);
 
-  const ensureProjectFilesLoaded = async (projectId: string): Promise<ProjectFileItem[]> => {
-    if (projectFilesCache[projectId]) return projectFilesCache[projectId];
+  const ensureProjectFilesLoaded = async (
+    projectId: string,
+    seedFiles: ProjectFileItem[] = [],
+  ): Promise<ProjectFileItem[]> => {
+    const cached = projectFilesCache[projectId];
+    if (cached) return cached;
+    if (seedFiles.length > 0) {
+      setProjectFilesCache((prev) => ({ ...prev, [projectId]: seedFiles }));
+      return seedFiles;
+    }
+    setProjectFilesError((prev) => {
+      const next = { ...prev };
+      delete next[projectId];
+      return next;
+    });
     setProjectFilesLoading((prev) => ({ ...prev, [projectId]: true }));
     try {
       const files = await fetchAdminProjectFiles(projectId);
       const mapped = files.map((file) => mapApiProjectFileToItem(file, jobById.get(file.job_id)));
       setProjectFilesCache((prev) => ({ ...prev, [projectId]: mapped }));
       return mapped;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "프로젝트 파일을 불러올 수 없습니다.";
+      setProjectFilesError((prev) => ({ ...prev, [projectId]: message }));
+      return [];
     } finally {
       setProjectFilesLoading((prev) => ({ ...prev, [projectId]: false }));
     }
@@ -1629,10 +1663,11 @@ function App() {
   const isProjectExpanded = (projectId: string) => expandedProjects[projectId] ?? false;
 
   const toggleProjectExpanded = (projectId: string) => {
+    const project = jobTableProjects.find((item) => item.id === projectId);
     const nextExpanded = !isProjectExpanded(projectId);
     setExpandedProjects((prev) => ({ ...prev, [projectId]: nextExpanded }));
     if (nextExpanded) {
-      void ensureProjectFilesLoaded(projectId);
+      void ensureProjectFilesLoaded(projectId, project?.files ?? []);
     }
   };
 
@@ -1739,6 +1774,11 @@ function App() {
             </button>
           ))}
         </div>
+        {jobProjectsUseFallback ? (
+          <p className="text-xs text-amber-300">
+            페이지 목록 API를 사용할 수 없어 전체 의뢰 목록을 표시합니다. 배포 반영 후 새로고침해 주세요.
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-center gap-2">
             <input
           value={query}
@@ -1863,6 +1903,13 @@ function App() {
                       <tr className="bg-slate-950/25 text-slate-400">
                         <td colSpan={10} className="px-3 py-3 text-center text-sm">
                           파일 목록을 불러오는 중입니다.
+                        </td>
+                      </tr>
+                    ) : null}
+                    {expanded && !filesLoading && hydrated.files.length === 0 ? (
+                      <tr className="bg-slate-950/25 text-slate-400">
+                        <td colSpan={10} className="px-3 py-3 text-center text-sm">
+                          {projectFilesError[project.id] ?? "등록된 파일이 없습니다."}
                         </td>
                       </tr>
                     ) : null}

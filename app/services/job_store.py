@@ -2057,7 +2057,7 @@ def dashboard_overview(db: Session) -> dict:
     from app.services.project_store import list_projects
 
     try:
-        projects = list_projects(db, include_files=False)
+        projects = list_projects(db, include_files=True)
     except Exception:
         db.rollback()
         projects = []

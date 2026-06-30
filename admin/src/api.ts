@@ -687,12 +687,20 @@ export async function fetchAdminProjectsPage(params: {
 }
 
 export async function fetchAdminProjectFiles(projectId: string): Promise<AdminOverviewProjectFile[]> {
-  const res = await adminFetch(`${apiBase()}/api/jobs/admin/projects/${encodeURIComponent(projectId)}/files`);
-  if (!res.ok) {
-    throw await parseApiError(res, "프로젝트 파일을 불러올 수 없습니다");
+  const urls = [
+    `${apiBase()}/api/jobs/admin/projects/${encodeURIComponent(projectId)}/files`,
+    `${apiBase()}/api/projects/${encodeURIComponent(projectId)}/files`,
+  ];
+  let lastError = "프로젝트 파일을 불러올 수 없습니다";
+  for (const url of urls) {
+    const res = await adminFetch(url);
+    if (res.ok) {
+      const data = (await res.json()) as { files?: AdminOverviewProjectFile[] };
+      return data.files ?? [];
+    }
+    lastError = (await parseApiError(res, lastError)).message;
   }
-  const data = (await res.json()) as { files?: AdminOverviewProjectFile[] };
-  return data.files ?? [];
+  throw new Error(lastError);
 }
 
 export async function fetchAdminSales(): Promise<AdminOverviewSale[]> {

@@ -693,7 +693,7 @@ def admin_overview(db: Annotated[Session, Depends(get_db)], _admin: AdminAuth) -
                 "total_settlements": 0,
                 "outstanding": 0,
             },
-            "projects": list_projects(db, include_files=False),
+            "projects": list_projects(db, include_files=True),
             "members": list_members_admin(db),
             "jobs": list_client_jobs(db, member=None),
             "transcribers": list_transcribers(db),

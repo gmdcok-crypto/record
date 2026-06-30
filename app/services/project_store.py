@@ -307,19 +307,19 @@ def _admin_projects_filter_clauses(
 
     search = (q or "").strip()
     if search:
-        pattern = f"%{search}%"
+        pattern = f"%{search.lower()}%"
         clauses.append(
             or_(
-                Project.title.ilike(pattern),
-                Project.project_id.ilike(pattern),
-                Client.name.ilike(pattern),
+                func.lower(Project.title).like(pattern),
+                func.lower(Project.project_id).like(pattern),
+                func.lower(Client.name).like(pattern),
                 exists(
                     select(1).where(
                         Job.project_id == Project.project_id,
                         or_(
-                            Job.job_id.ilike(pattern),
-                            Job.title.ilike(pattern),
-                            Job.original_filename.ilike(pattern),
+                            func.lower(Job.job_id).like(pattern),
+                            func.lower(Job.title).like(pattern),
+                            func.lower(Job.original_filename).like(pattern),
                         ),
                     )
                 ),
