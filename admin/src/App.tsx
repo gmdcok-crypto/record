@@ -956,11 +956,27 @@ function App() {
     }));
   }, [overview]);
 
-  const projects = useMemo<ProjectItem[]>(() => {
-    return (overview?.projects ?? []).map((project) => mapApiProjectToItem(project));
-  }, [overview]);
-
   const jobById = useMemo(() => new Map(jobs.map((job) => [job.id, job])), [jobs]);
+
+  const projects = useMemo<ProjectItem[]>(() => {
+    return (overview?.projects ?? []).map((project) =>
+      mapApiProjectToItem(
+        project,
+        (project.files ?? []).map((file) => mapApiProjectFileToItem(file, jobById.get(file.job_id))),
+      ),
+    );
+  }, [overview, jobById]);
+
+  const mapOverviewProjectsToItems = useCallback(
+    (source: NonNullable<AdminOverview["projects"]>) =>
+      source.map((project) =>
+        mapApiProjectToItem(
+          project,
+          (project.files ?? []).map((file) => mapApiProjectFileToItem(file, jobById.get(file.job_id))),
+        ),
+      ),
+    [jobById],
+  );
 
   const loadJobProjects = useCallback(async () => {
     if (authStatus !== "authed") return;
@@ -982,21 +998,14 @@ function App() {
       if (fallback.length > 0) {
         setJobProjectsUseFallback(true);
         setJobProjectsTotal(fallback.length);
-        setJobTableProjects(
-          fallback.map((project) =>
-            mapApiProjectToItem(
-              project,
-              (project.files ?? []).map((file) => mapApiProjectFileToItem(file, jobById.get(file.job_id))),
-            ),
-          ),
-        );
+        setJobTableProjects(mapOverviewProjectsToItems(fallback));
       } else {
         window.alert(err instanceof Error ? err.message : "프로젝트 목록을 불러올 수 없습니다.");
       }
     } finally {
       setJobProjectsLoading(false);
     }
-  }, [authStatus, debouncedQuery, jobById, jobPage, jobPageSize, jobTab, overview?.projects, statusFilter]);
+  }, [authStatus, debouncedQuery, jobPage, jobPageSize, jobTab, mapOverviewProjectsToItems, overview?.projects, statusFilter]);
 
   const ensureProjectFilesLoaded = async (
     projectId: string,
@@ -1027,6 +1036,13 @@ function App() {
       setProjectFilesLoading((prev) => ({ ...prev, [projectId]: false }));
     }
   };
+
+  useEffect(() => {
+    if (activeMenu !== "jobs" || authStatus !== "authed") return;
+    if (!overview?.projects?.length) return;
+    const overviewProjects = overview.projects;
+    setJobTableProjects((prev) => (prev.length > 0 ? prev : mapOverviewProjectsToItems(overviewProjects)));
+  }, [activeMenu, authStatus, mapOverviewProjectsToItems, overview?.projects]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 300);
@@ -1752,28 +1768,6 @@ function App() {
   const renderJobs = () => (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/92 p-4 shadow-[0_10px_30px_rgba(2,6,23,0.28)]">
       <div className="mb-4 space-y-3">
-        <div className="flex flex-wrap gap-2">
-          {(
-            [
-              { id: "active" as const, label: "진행 중" },
-              { id: "completed" as const, label: "완료" },
-              { id: "all" as const, label: "전체" },
-            ] as const
-          ).map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setJobTab(tab.id)}
-              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                jobTab === tab.id
-                  ? "bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-400/40"
-                  : "border border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-900"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
         {jobProjectsUseFallback ? (
           <p className="text-xs text-amber-300">
             페이지 목록 API를 사용할 수 없어 전체 의뢰 목록을 표시합니다. 배포 반영 후 새로고침해 주세요.
@@ -1786,6 +1780,15 @@ function App() {
           placeholder="프로젝트명, 의뢰인, 파일명, 작업번호 검색"
           className="min-w-[280px] flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-cyan-400"
         />
+        <select
+          value={jobTab}
+          onChange={(e) => setJobTab(e.target.value as JobProjectsTab)}
+          className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-400"
+        >
+          <option value="active">진행 중 의뢰</option>
+          <option value="completed">완료 의뢰</option>
+          <option value="all">전체 의뢰</option>
+        </select>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as "전체" | JobStatus)}
@@ -1814,6 +1817,9 @@ function App() {
             </span>
             <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1">
               현재 페이지 {visibleProjects.length}건
+            </span>
+            <span className="rounded-md border border-slate-800 px-2 py-1 text-slate-600" title="관리자 화면 빌드">
+              빌드 {__ADMIN_BUILD__.slice(0, 7)}
             </span>
           </div>
         </div>

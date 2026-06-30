@@ -4,6 +4,8 @@
 
 [build.environment]
   NPM_CONFIG_PRODUCTION = "false"
+  VITE_API_URL = "https://record-production.up.railway.app"
+  VITE_ADMIN_BUILD = "$COMMIT_REF"
 
 [[redirects]]
   from = "/health"
