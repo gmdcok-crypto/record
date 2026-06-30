@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import ActionNoticeModal, { type ActionNotice } from "./ActionNoticeModal";
 import AdminLogin from "./AdminLogin";
@@ -957,6 +957,11 @@ function App() {
   }, [overview]);
 
   const jobById = useMemo(() => new Map(jobs.map((job) => [job.id, job])), [jobs]);
+  const jobByIdRef = useRef(jobById);
+  jobByIdRef.current = jobById;
+
+  const overviewProjectsRef = useRef(overview?.projects ?? []);
+  overviewProjectsRef.current = overview?.projects ?? [];
 
   const projects = useMemo<ProjectItem[]>(() => {
     return (overview?.projects ?? []).map((project) =>
@@ -967,20 +972,23 @@ function App() {
     );
   }, [overview, jobById]);
 
-  const mapOverviewProjectsToItems = useCallback(
-    (source: NonNullable<AdminOverview["projects"]>) =>
-      source.map((project) =>
-        mapApiProjectToItem(
-          project,
-          (project.files ?? []).map((file) => mapApiProjectFileToItem(file, jobById.get(file.job_id))),
+  const mapOverviewProjectsToItems = useCallback((source: NonNullable<AdminOverview["projects"]>) => {
+    return source.map((project) =>
+      mapApiProjectToItem(
+        project,
+        (project.files ?? []).map((file) =>
+          mapApiProjectFileToItem(file, jobByIdRef.current.get(file.job_id)),
         ),
       ),
-    [jobById],
-  );
+    );
+  }, []);
 
-  const loadJobProjects = useCallback(async () => {
+  const loadJobProjects = useCallback(async (options?: { silent?: boolean }) => {
     if (authStatus !== "authed") return;
-    setJobProjectsLoading(true);
+    const silent = options?.silent ?? false;
+    if (!silent) {
+      setJobProjectsLoading(true);
+    }
     try {
       const result = await fetchAdminProjectsPage({
         page: jobPage,
@@ -994,18 +1002,20 @@ function App() {
       setJobTableProjects(result.projects.map((project) => mapApiProjectToItem(project)));
     } catch (err) {
       console.error(err);
-      const fallback = overview?.projects ?? [];
+      const fallback = overviewProjectsRef.current;
       if (fallback.length > 0) {
         setJobProjectsUseFallback(true);
         setJobProjectsTotal(fallback.length);
         setJobTableProjects(mapOverviewProjectsToItems(fallback));
-      } else {
+      } else if (!silent) {
         window.alert(err instanceof Error ? err.message : "프로젝트 목록을 불러올 수 없습니다.");
       }
     } finally {
-      setJobProjectsLoading(false);
+      if (!silent) {
+        setJobProjectsLoading(false);
+      }
     }
-  }, [authStatus, debouncedQuery, jobPage, jobPageSize, jobTab, mapOverviewProjectsToItems, overview?.projects, statusFilter]);
+  }, [authStatus, debouncedQuery, jobPage, jobPageSize, jobTab, mapOverviewProjectsToItems, statusFilter]);
 
   const ensureProjectFilesLoaded = async (
     projectId: string,
@@ -1056,7 +1066,7 @@ function App() {
   useEffect(() => {
     if (activeMenu !== "jobs" || authStatus !== "authed") return;
     void loadJobProjects();
-  }, [activeMenu, authStatus, loadJobProjects]);
+  }, [activeMenu, authStatus, debouncedQuery, jobPage, jobPageSize, jobTab, loadJobProjects, statusFilter]);
 
   const transcribers = useMemo<Transcriber[]>(() => {
     return (overview?.transcribers ?? []).map((person) => ({
