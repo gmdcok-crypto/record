@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.exc import OperationalError, ProgrammingError
-from sqlalchemy import select, text
+from sqlalchemy import and_, exists, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.models.admin_models import AdminUser, Client, Job, Member, Project, Transcriber
@@ -18,7 +18,9 @@ from app.services.job_store import (
     inquiry_summary_for_job,
 )
 from app.services.job_workflow import (
+    CANCELLED,
     FINAL_JOB_STATUSES,
+    LEGACY_TO_CANONICAL,
     REVIEW_JOB_STATUSES,
     TRANSCRIPT_REQUEST,
     TRANSCRIBER_REVIEW,
@@ -216,6 +218,8 @@ def serialize_project_file(db: Session, job: Job) -> dict:
         "client_inquiry_status": inquiry["client_inquiry_status"],
         "transcriber_inquiry_status": inquiry["transcriber_inquiry_status"],
         "admin_inquiry_badges": inquiry["admin_inquiry_badges"],
+        "sales_amount": float(job.final_bill_amount or job.sales_amount or 0),
+        "payment_status": job.payment_status,
     }
 
 
@@ -258,6 +262,105 @@ def serialize_project_summary(db: Session, project: Project, *, include_files: b
     if include_files:
         payload["files"] = [serialize_project_file(db, job) for job in jobs]
     return payload
+
+
+def _raw_statuses_for_admin_filter(canonical_status: str) -> tuple[str, ...]:
+    canonical = normalize_job_status(canonical_status)
+    values = {canonical}
+    for legacy, mapped in LEGACY_TO_CANONICAL.items():
+        if mapped == canonical:
+            values.add(legacy)
+    return tuple(values)
+
+
+def _admin_projects_filter_clauses(
+    *,
+    tab: str,
+    q: str | None,
+    file_status: str | None,
+) -> list:
+    clauses: list = []
+
+    has_jobs = exists(select(1).where(Job.project_id == Project.project_id))
+    has_incomplete = exists(
+        select(1).where(
+            Job.project_id == Project.project_id,
+            Job.status.notin_(tuple(FINAL_JOB_STATUSES | {CANCELLED})),
+        )
+    )
+
+    if tab == "completed":
+        clauses.append(and_(has_jobs, ~has_incomplete))
+    elif tab == "active":
+        clauses.append(or_(~has_jobs, has_incomplete))
+
+    if file_status:
+        raw_statuses = _raw_statuses_for_admin_filter(file_status)
+        clauses.append(
+            exists(
+                select(1).where(
+                    Job.project_id == Project.project_id,
+                    Job.status.in_(raw_statuses),
+                )
+            )
+        )
+
+    search = (q or "").strip()
+    if search:
+        pattern = f"%{search}%"
+        clauses.append(
+            or_(
+                Project.title.ilike(pattern),
+                Project.project_id.ilike(pattern),
+                Client.name.ilike(pattern),
+                exists(
+                    select(1).where(
+                        Job.project_id == Project.project_id,
+                        or_(
+                            Job.job_id.ilike(pattern),
+                            Job.title.ilike(pattern),
+                            Job.original_filename.ilike(pattern),
+                        ),
+                    )
+                ),
+            )
+        )
+
+    return clauses
+
+
+def list_admin_projects_page(
+    db: Session,
+    *,
+    page: int = 1,
+    page_size: int = 20,
+    tab: str = "active",
+    q: str | None = None,
+    file_status: str | None = None,
+) -> tuple[list[dict], int]:
+    page = max(1, page)
+    page_size = max(1, min(page_size, 100))
+    clauses = _admin_projects_filter_clauses(tab=tab, q=q, file_status=file_status)
+
+    count_stmt = select(func.count()).select_from(Project).join(Client, Project.client_id == Client.id)
+    list_stmt = select(Project).join(Client, Project.client_id == Client.id).order_by(Project.updated_at.desc())
+    if clauses:
+        count_stmt = count_stmt.where(*clauses)
+        list_stmt = list_stmt.where(*clauses)
+
+    total = int(db.scalar(count_stmt) or 0)
+    offset = (page - 1) * page_size
+    projects = db.scalars(list_stmt.offset(offset).limit(page_size)).all()
+    items = [serialize_project_summary(db, project, include_files=False) for project in projects]
+    return items, total
+
+
+def list_admin_project_files(db: Session, project_id: str) -> list[dict]:
+    project = get_project_record(db, project_id)
+    if project is None:
+        raise ProjectAccessError("프로젝트를 찾을 수 없습니다.")
+    jobs = list_project_jobs(db, project_id)
+    return [serialize_project_file(db, job) for job in jobs]
 
 
 def list_projects(

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import ActionNoticeModal, { type ActionNotice } from "./ActionNoticeModal";
 import AdminLogin from "./AdminLogin";
@@ -16,6 +16,8 @@ import {
   deleteTranscriberGradeRate,
   fetchAdminMe,
   fetchAdminOverview,
+  fetchAdminProjectFiles,
+  fetchAdminProjectsPage,
   fetchAdminSales,
   fetchSalesMonthlyTarget,
   updateSalesMonthlyTarget,
@@ -31,7 +33,10 @@ import {
   updateTranscriber,
   type AdminAccount,
   type AdminOverview,
+  type AdminOverviewProject,
+  type AdminOverviewProjectFile,
   type AdminProfile,
+  type AdminProjectsPageTab,
   type AdminRole,
   type JobResponse,
   type SettlementSnapshotRow,
@@ -422,6 +427,67 @@ function mapPaymentStatus(status: string): PaymentStatus {
   }
 }
 
+type JobProjectsTab = AdminProjectsPageTab;
+
+function jobStatusFilterToCanonical(filter: "전체" | JobStatus): string | undefined {
+  switch (filter) {
+    case "전체":
+      return undefined;
+    case "배정 대기":
+      return "waiting_assignment";
+    case "속기사 작업 중":
+      return "working";
+    case "의뢰인 검토":
+      return "client_review";
+    case "속기사검토":
+      return "transcriber_review";
+    case "녹취록 요청":
+      return "transcript_request";
+    case "PDF 전달":
+      return "pdf_sent";
+    default:
+      return undefined;
+  }
+}
+
+function mapApiProjectFileToItem(file: AdminOverviewProjectFile, job?: JobItem): ProjectFileItem {
+  return {
+    id: file.job_id,
+    title: file.title,
+    filename: file.filename,
+    status: mapJobStatus(file.status),
+    assignee: file.assignee || job?.assignee || "-",
+    assigneeCode: file.assignee_code ?? null,
+    assignedAt: file.assigned_at ? formatKstDateTime(file.assigned_at) : job?.assignedAt || "-",
+    dueAt: formatKstDateTime(file.due_at),
+    salesAmount: file.sales_amount ?? job?.salesAmount ?? 0,
+    paymentStatus: mapPaymentStatus(file.payment_status ?? "unpaid"),
+    has_inquiry: file.has_inquiry ?? false,
+    admin_inquiry_badges: file.admin_inquiry_badges ?? [],
+  };
+}
+
+function mapApiProjectToItem(project: AdminOverviewProject, files: ProjectFileItem[] = []): ProjectItem {
+  return {
+    id: project.project_id,
+    title: project.title,
+    client: project.client.name,
+    dueAt: formatKstDateTime(project.due_at),
+    statusLabel: mapProjectStatusLabel(project.status),
+    rawStatus: project.status,
+    fileCount: project.file_count,
+    totalDurationSeconds: project.total_duration_seconds ?? 0,
+    completedCount: project.completed_count,
+    assignee: project.assignee || "-",
+    assigneeCode: project.assignee_code ?? null,
+    files,
+  };
+}
+
+function mergeProjectFiles(project: ProjectItem, files: ProjectFileItem[]): ProjectItem {
+  return { ...project, files };
+}
+
 function mapSettlementStatus(status: string): SettlementStatus {
   switch (status) {
     case "paid":
@@ -596,6 +662,15 @@ function App() {
   const [memberQuery, setMemberQuery] = useState("");
   const [detailMember, setDetailMember] = useState<MemberItem | null>(null);
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
+  const [jobTab, setJobTab] = useState<JobProjectsTab>("active");
+  const [jobPage, setJobPage] = useState(1);
+  const [jobPageSize, setJobPageSize] = useState(20);
+  const [jobProjectsTotal, setJobProjectsTotal] = useState(0);
+  const [jobProjectsLoading, setJobProjectsLoading] = useState(false);
+  const [jobTableProjects, setJobTableProjects] = useState<ProjectItem[]>([]);
+  const [projectFilesCache, setProjectFilesCache] = useState<Record<string, ProjectFileItem[]>>({});
+  const [projectFilesLoading, setProjectFilesLoading] = useState<Record<string, boolean>>({});
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedTranscriberCode, setSelectedTranscriberCode] = useState("");
   const [selectedAssignJobIds, setSelectedAssignJobIds] = useState<string[]>([]);
   const [transcriberModalOpen, setTranscriberModalOpen] = useState(false);
@@ -880,38 +955,58 @@ function App() {
   }, [overview]);
 
   const projects = useMemo<ProjectItem[]>(() => {
-    const jobById = new Map(jobs.map((job) => [job.id, job]));
-    return (overview?.projects ?? []).map((project) => ({
-      id: project.project_id,
-      title: project.title,
-      client: project.client.name,
-      dueAt: formatKstDateTime(project.due_at),
-      statusLabel: mapProjectStatusLabel(project.status),
-      rawStatus: project.status,
-      fileCount: project.file_count,
-      totalDurationSeconds: project.total_duration_seconds ?? 0,
-      completedCount: project.completed_count,
-      assignee: project.assignee || "-",
-      assigneeCode: project.assignee_code ?? null,
-      files: (project.files ?? []).map((file) => {
-        const job = jobById.get(file.job_id);
-        return {
-          id: file.job_id,
-          title: file.title,
-          filename: file.filename,
-          status: mapJobStatus(file.status),
-          assignee: file.assignee || job?.assignee || "-",
-          assigneeCode: file.assignee_code ?? null,
-          assignedAt: file.assigned_at ? formatKstDateTime(file.assigned_at) : job?.assignedAt || "-",
-          dueAt: formatKstDateTime(file.due_at),
-          salesAmount: job?.salesAmount ?? 0,
-          paymentStatus: job?.paymentStatus ?? "미수",
-          has_inquiry: file.has_inquiry ?? false,
-          admin_inquiry_badges: file.admin_inquiry_badges ?? [],
-        };
-      }),
-    }));
-  }, [overview, jobs]);
+    return (overview?.projects ?? []).map((project) => mapApiProjectToItem(project));
+  }, [overview]);
+
+  const jobById = useMemo(() => new Map(jobs.map((job) => [job.id, job])), [jobs]);
+
+  const loadJobProjects = useCallback(async () => {
+    if (authStatus !== "authed") return;
+    setJobProjectsLoading(true);
+    try {
+      const result = await fetchAdminProjectsPage({
+        page: jobPage,
+        pageSize: jobPageSize,
+        tab: jobTab,
+        q: debouncedQuery || undefined,
+        fileStatus: jobStatusFilterToCanonical(statusFilter),
+      });
+      setJobProjectsTotal(result.total);
+      setJobTableProjects(result.projects.map((project) => mapApiProjectToItem(project)));
+    } catch (err) {
+      console.error(err);
+      window.alert(err instanceof Error ? err.message : "프로젝트 목록을 불러올 수 없습니다.");
+    } finally {
+      setJobProjectsLoading(false);
+    }
+  }, [authStatus, debouncedQuery, jobPage, jobPageSize, jobTab, statusFilter]);
+
+  const ensureProjectFilesLoaded = async (projectId: string): Promise<ProjectFileItem[]> => {
+    if (projectFilesCache[projectId]) return projectFilesCache[projectId];
+    setProjectFilesLoading((prev) => ({ ...prev, [projectId]: true }));
+    try {
+      const files = await fetchAdminProjectFiles(projectId);
+      const mapped = files.map((file) => mapApiProjectFileToItem(file, jobById.get(file.job_id)));
+      setProjectFilesCache((prev) => ({ ...prev, [projectId]: mapped }));
+      return mapped;
+    } finally {
+      setProjectFilesLoading((prev) => ({ ...prev, [projectId]: false }));
+    }
+  };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    setJobPage(1);
+  }, [debouncedQuery, jobTab, statusFilter, jobPageSize]);
+
+  useEffect(() => {
+    if (activeMenu !== "jobs" || authStatus !== "authed") return;
+    void loadJobProjects();
+  }, [activeMenu, authStatus, loadJobProjects]);
 
   const transcribers = useMemo<Transcriber[]>(() => {
     return (overview?.transcribers ?? []).map((person) => ({
@@ -1096,6 +1191,10 @@ function App() {
     try {
       await action();
       await loadOverview();
+      if (activeMenu === "jobs") {
+        setProjectFilesCache({});
+        await loadJobProjects();
+      }
       setActionNotice({ kind: "success", message: successMessage });
     } catch (err) {
       console.error(err);
@@ -1169,7 +1268,10 @@ function App() {
   };
 
   const openProjectDetailModal = (project: ProjectItem) => {
-    setDetailProject(project);
+    void (async () => {
+      const files = await ensureProjectFilesLoaded(project.id);
+      setDetailProject(mergeProjectFiles(project, files));
+    })();
   };
 
   const closeProjectDetailModal = () => {
@@ -1182,11 +1284,15 @@ function App() {
   };
 
   const openAssignProjectModal = (project: ProjectItem) => {
-    const reassign = projectIsReassignMode(project);
-    const assignableFiles = assignableProjectFiles(project, reassign);
-    setAssignProjectTarget(project);
-    setSelectedTranscriberCode(defaultTranscriberCodeForProject(project, transcribers));
-    setSelectedAssignJobIds(assignableFiles.map((file) => file.id));
+    void (async () => {
+      const files = await ensureProjectFilesLoaded(project.id);
+      const hydrated = mergeProjectFiles(project, files);
+      const reassign = projectIsReassignMode(hydrated);
+      const assignableFiles = assignableProjectFiles(hydrated, reassign);
+      setAssignProjectTarget(hydrated);
+      setSelectedTranscriberCode(defaultTranscriberCodeForProject(hydrated, transcribers));
+      setSelectedAssignJobIds(assignableFiles.map((file) => file.id));
+    })();
   };
 
   const closeAssignModal = () => {
@@ -1518,35 +1624,19 @@ function App() {
     });
   }, [detailMember, projects, overview]);
 
-  const visibleProjects = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return projects.filter((project) => {
-      const matchesStatus =
-        statusFilter === "전체" ||
-        project.files.some((file) => file.status === statusFilter) ||
-        (statusFilter === "배정 대기" && project.rawStatus === "waiting_assignment");
-      if (!matchesStatus) return false;
-      if (!q) return true;
-      const haystack = [
-        project.id,
-        project.title,
-        project.client,
-        project.assignee,
-        ...project.files.map((file) => file.id),
-        ...project.files.map((file) => file.filename),
-        ...project.files.map((file) => file.title),
-      ]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(q);
-    });
-  }, [projects, query, statusFilter]);
+  const visibleProjects = jobTableProjects;
 
-  const isProjectExpanded = (projectId: string) => expandedProjects[projectId] ?? true;
+  const isProjectExpanded = (projectId: string) => expandedProjects[projectId] ?? false;
 
   const toggleProjectExpanded = (projectId: string) => {
-    setExpandedProjects((prev) => ({ ...prev, [projectId]: !(prev[projectId] ?? true) }));
+    const nextExpanded = !isProjectExpanded(projectId);
+    setExpandedProjects((prev) => ({ ...prev, [projectId]: nextExpanded }));
+    if (nextExpanded) {
+      void ensureProjectFilesLoaded(projectId);
+    }
   };
+
+  const jobTotalPages = Math.max(1, Math.ceil(jobProjectsTotal / jobPageSize));
 
   const dashboardStats = useMemo(() => {
     return {
@@ -1627,6 +1717,28 @@ function App() {
   const renderJobs = () => (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/92 p-4 shadow-[0_10px_30px_rgba(2,6,23,0.28)]">
       <div className="mb-4 space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              { id: "active" as const, label: "진행 중" },
+              { id: "completed" as const, label: "완료" },
+              { id: "all" as const, label: "전체" },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setJobTab(tab.id)}
+              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                jobTab === tab.id
+                  ? "bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-400/40"
+                  : "border border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-900"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
             <input
           value={query}
@@ -1647,19 +1759,30 @@ function App() {
           <option value="속기사검토">속기사검토</option>
           <option value="PDF 전달">PDF 전달</option>
         </select>
+        <select
+          value={jobPageSize}
+          onChange={(e) => setJobPageSize(Number(e.target.value))}
+          className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-400"
+        >
+          <option value={20}>20개씩</option>
+          <option value={50}>50개씩</option>
+          <option value={100}>100개씩</option>
+        </select>
           <div className="ml-auto flex items-center gap-2 text-[11px] text-slate-500">
             <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1">
-              프로젝트 {visibleProjects.length}건
+              전체 {jobProjectsTotal.toLocaleString("ko-KR")}건
             </span>
             <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1">
-              펼침 상태 {visibleProjects.filter((project) => isProjectExpanded(project.id)).length}건
+              현재 페이지 {visibleProjects.length}건
             </span>
           </div>
         </div>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/70">
-        {visibleProjects.length === 0 ? (
+        {jobProjectsLoading ? (
+          <div className="px-4 py-10 text-center text-sm text-slate-400">프로젝트 목록을 불러오는 중입니다.</div>
+        ) : visibleProjects.length === 0 ? (
           <EmptyState message="표시할 프로젝트가 없습니다." />
         ) : (
           <table className="w-full min-w-[1220px] border-collapse text-[13px]">
@@ -1679,7 +1802,9 @@ function App() {
             </thead>
             <tbody>
               {visibleProjects.map((project) => {
+                const hydrated = mergeProjectFiles(project, projectFilesCache[project.id] ?? []);
                 const expanded = isProjectExpanded(project.id);
+                const filesLoading = Boolean(projectFilesLoading[project.id]);
                 return (
                   <Fragment key={project.id}>
                     <tr className="border-t border-slate-800 bg-slate-950/50 text-slate-200 hover:bg-slate-900/60">
@@ -1707,7 +1832,7 @@ function App() {
                       </td>
                       <td className="max-w-[120px] truncate whitespace-nowrap px-3 py-2">{project.assignee}</td>
                       <td className="whitespace-nowrap px-3 py-2 text-slate-400">
-                        {project.files.find((file) => file.assignedAt !== "-")?.assignedAt ?? "-"}
+                        {hydrated.files.find((file) => file.assignedAt !== "-")?.assignedAt ?? "-"}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-slate-400">{project.dueAt}</td>
                       <td className="whitespace-nowrap px-3 py-2">
@@ -1719,14 +1844,14 @@ function App() {
                         <div className="flex gap-2">
             <button
               type="button"
-                            onClick={() => openProjectDetailModal(project)}
+                            onClick={() => openProjectDetailModal(hydrated)}
                             className="rounded-md border border-slate-700 px-2.5 py-1.5 text-[11px] font-medium text-slate-200 transition hover:bg-slate-800"
             >
                             상세
             </button>
             <button
               type="button"
-                            onClick={() => openAssignProjectModal(project)}
+                            onClick={() => openAssignProjectModal(hydrated)}
                             className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] font-medium text-cyan-300 transition hover:bg-cyan-500/20"
             >
                             {projectAssignButtonLabel(project)}
@@ -1734,8 +1859,15 @@ function App() {
                         </div>
                       </td>
                     </tr>
-                    {expanded
-                      ? project.files.map((file) => (
+                    {expanded && filesLoading ? (
+                      <tr className="bg-slate-950/25 text-slate-400">
+                        <td colSpan={10} className="px-3 py-3 text-center text-sm">
+                          파일 목록을 불러오는 중입니다.
+                        </td>
+                      </tr>
+                    ) : null}
+                    {expanded && !filesLoading
+                      ? hydrated.files.map((file) => (
                           <tr key={`${project.id}-${file.id}`} className="bg-slate-950/25 text-slate-300 hover:bg-slate-900/50">
                             <td className="sticky left-0 z-[1] border-r border-slate-800 bg-slate-950/95 px-3 py-1.5" />
                             <td className="sticky left-[49px] z-[1] border-r border-slate-800 bg-slate-950/95 px-3 py-1.5 pl-8 font-mono text-[11px] text-slate-500" title={file.id}>
@@ -1793,6 +1925,37 @@ function App() {
           </table>
         )}
           </div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-slate-500">
+          {jobProjectsTotal === 0
+            ? "0건"
+            : `${jobProjectsTotal.toLocaleString("ko-KR")}건 중 ${(jobPage - 1) * jobPageSize + 1}-${Math.min(
+                jobPage * jobPageSize,
+                jobProjectsTotal,
+              )}건 표시`}
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setJobPage((page) => Math.max(1, page - 1))}
+            disabled={jobPage <= 1 || jobProjectsLoading}
+            className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 disabled:opacity-40"
+          >
+            이전
+          </button>
+          <span className="text-xs text-slate-400">
+            {jobPage} / {jobTotalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => setJobPage((page) => Math.min(jobTotalPages, page + 1))}
+            disabled={jobPage >= jobTotalPages || jobProjectsLoading}
+            className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 disabled:opacity-40"
+          >
+            다음
+          </button>
+        </div>
+      </div>
     </div>
   );
 

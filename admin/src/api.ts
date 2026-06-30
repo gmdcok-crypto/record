@@ -187,6 +187,8 @@ export type AdminOverviewProjectFile = {
   pdf_ready: boolean;
   has_inquiry?: boolean;
   admin_inquiry_badges?: string[];
+  sales_amount?: number;
+  payment_status?: string;
 };
 
 export type AdminOverviewProject = {
@@ -647,6 +649,50 @@ export async function fetchAdminOverview(): Promise<AdminOverview> {
     throw await parseApiError(res, "관리자 데이터를 불러올 수 없습니다");
   }
   return res.json();
+}
+
+export type AdminProjectsPageTab = "active" | "completed" | "all";
+
+export type AdminProjectsPageResponse = {
+  projects: AdminOverviewProject[];
+  total: number;
+  page: number;
+  page_size: number;
+  tab: AdminProjectsPageTab;
+};
+
+export async function fetchAdminProjectsPage(params: {
+  page: number;
+  pageSize: number;
+  tab: AdminProjectsPageTab;
+  q?: string;
+  fileStatus?: string;
+}): Promise<AdminProjectsPageResponse> {
+  const search = new URLSearchParams({
+    page: String(params.page),
+    page_size: String(params.pageSize),
+    tab: params.tab,
+  });
+  if (params.q?.trim()) {
+    search.set("q", params.q.trim());
+  }
+  if (params.fileStatus) {
+    search.set("file_status", params.fileStatus);
+  }
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/projects?${search.toString()}`);
+  if (!res.ok) {
+    throw await parseApiError(res, "프로젝트 목록을 불러올 수 없습니다");
+  }
+  return res.json();
+}
+
+export async function fetchAdminProjectFiles(projectId: string): Promise<AdminOverviewProjectFile[]> {
+  const res = await adminFetch(`${apiBase()}/api/jobs/admin/projects/${encodeURIComponent(projectId)}/files`);
+  if (!res.ok) {
+    throw await parseApiError(res, "프로젝트 파일을 불러올 수 없습니다");
+  }
+  const data = (await res.json()) as { files?: AdminOverviewProjectFile[] };
+  return data.files ?? [];
 }
 
 export async function fetchAdminSales(): Promise<AdminOverviewSale[]> {

@@ -22,7 +22,15 @@ from app.services.audio import remux_faststart, should_faststart
 from app.services.admin_events import publish_admin_event, stream_admin_events
 from app.services.database_migrate import ensure_jobs_status_column, run_sql_migration
 from app.services.database_reset import purge_all_data, reset_database_schema
-from app.services.project_store import get_project_record, list_project_jobs, list_projects, list_transcriber_projects
+from app.services.project_store import (
+    ProjectAccessError,
+    get_project_record,
+    list_admin_project_files,
+    list_admin_projects_page,
+    list_project_jobs,
+    list_projects,
+    list_transcriber_projects,
+)
 from app.services.job_workflow import (
     CANCELLED,
     CLIENT_REVIEW,
@@ -617,6 +625,53 @@ def admin_reset_database(request: Request, body: DatabaseResetRequest) -> dict:
     return {"reset": True}
 
 
+@router.get("/admin/projects")
+def admin_list_projects(
+    db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    tab: str = Query(default="active", pattern="^(active|completed|all)$"),
+    q: str | None = Query(default=None, max_length=200),
+    file_status: str | None = Query(default=None, max_length=40),
+) -> dict:
+    try:
+        projects, total = list_admin_projects_page(
+            db,
+            page=page,
+            page_size=page_size,
+            tab=tab,
+            q=q,
+            file_status=file_status,
+        )
+    except Exception as exc:
+        logger.exception("admin project list failed")
+        raise HTTPException(status_code=503, detail=f"프로젝트 목록 조회 실패: {exc}") from exc
+    return {
+        "projects": projects,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "tab": tab,
+    }
+
+
+@router.get("/admin/projects/{project_id}/files")
+def admin_list_project_files(
+    project_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
+) -> dict:
+    try:
+        files = list_admin_project_files(db, project_id)
+    except ProjectAccessError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("admin project files failed for %s", project_id)
+        raise HTTPException(status_code=503, detail=f"프로젝트 파일 조회 실패: {exc}") from exc
+    return {"project_id": project_id, "files": files}
+
+
 @router.get("/admin/overview")
 def admin_overview(db: Annotated[Session, Depends(get_db)], _admin: AdminAuth) -> dict:
     sales = safe_list_payment_records(db)
@@ -638,7 +693,7 @@ def admin_overview(db: Annotated[Session, Depends(get_db)], _admin: AdminAuth) -
                 "total_settlements": 0,
                 "outstanding": 0,
             },
-            "projects": list_projects(db, include_files=True),
+            "projects": list_projects(db, include_files=False),
             "members": list_members_admin(db),
             "jobs": list_client_jobs(db, member=None),
             "transcribers": list_transcribers(db),
