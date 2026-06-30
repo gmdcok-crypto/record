@@ -6,6 +6,7 @@ on:
     paths:
       - "admin/**"
       - ".github/workflows/deploy-admin-netlify.yml"
+  workflow_dispatch:
 
 jobs:
   deploy:
