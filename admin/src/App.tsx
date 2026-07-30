@@ -36,7 +36,6 @@ import {
   type AdminOverviewProject,
   type AdminOverviewProjectFile,
   type AdminProfile,
-  type AdminProjectsPageTab,
   type AdminRole,
   type JobResponse,
   type SettlementSnapshotRow,
@@ -427,8 +426,6 @@ function mapPaymentStatus(status: string): PaymentStatus {
   }
 }
 
-type JobProjectsTab = AdminProjectsPageTab;
-
 function jobStatusFilterToCanonical(filter: "전체" | JobStatus): string | undefined {
   switch (filter) {
     case "전체":
@@ -662,7 +659,18 @@ function App() {
   const [memberQuery, setMemberQuery] = useState("");
   const [detailMember, setDetailMember] = useState<MemberItem | null>(null);
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
-  const [jobTab, setJobTab] = useState<JobProjectsTab>("active");
+  const [jobsScopeSelect, setJobsScopeSelect] = useState<"active" | "completed">("active");
+  const [completedModalOpen, setCompletedModalOpen] = useState(false);
+  const [completedQuery, setCompletedQuery] = useState("");
+  const [completedDebouncedQuery, setCompletedDebouncedQuery] = useState("");
+  const [completedStatusFilter, setCompletedStatusFilter] = useState<"전체" | JobStatus>("전체");
+  const [completedPage, setCompletedPage] = useState(1);
+  const [completedPageSize, setCompletedPageSize] = useState(20);
+  const [completedProjectsTotal, setCompletedProjectsTotal] = useState(0);
+  const [completedProjectsLoading, setCompletedProjectsLoading] = useState(false);
+  const [completedTableProjects, setCompletedTableProjects] = useState<ProjectItem[]>([]);
+  const [completedExpandedProjects, setCompletedExpandedProjects] = useState<Record<string, boolean>>({});
+  const [completedProjectsUseFallback, setCompletedProjectsUseFallback] = useState(false);
   const [jobPage, setJobPage] = useState(1);
   const [jobPageSize, setJobPageSize] = useState(20);
   const [jobProjectsTotal, setJobProjectsTotal] = useState(0);
@@ -993,7 +1001,7 @@ function App() {
       const result = await fetchAdminProjectsPage({
         page: jobPage,
         pageSize: jobPageSize,
-        tab: jobTab,
+        tab: "active",
         q: debouncedQuery || undefined,
         fileStatus: jobStatusFilterToCanonical(statusFilter),
       });
@@ -1015,7 +1023,48 @@ function App() {
         setJobProjectsLoading(false);
       }
     }
-  }, [authStatus, debouncedQuery, jobPage, jobPageSize, jobTab, mapOverviewProjectsToItems, statusFilter]);
+  }, [authStatus, debouncedQuery, jobPage, jobPageSize, mapOverviewProjectsToItems, statusFilter]);
+
+  const loadCompletedJobProjects = useCallback(async (options?: { silent?: boolean }) => {
+    if (authStatus !== "authed") return;
+    const silent = options?.silent ?? false;
+    if (!silent) {
+      setCompletedProjectsLoading(true);
+    }
+    try {
+      const result = await fetchAdminProjectsPage({
+        page: completedPage,
+        pageSize: completedPageSize,
+        tab: "completed",
+        q: completedDebouncedQuery || undefined,
+        fileStatus: jobStatusFilterToCanonical(completedStatusFilter),
+      });
+      setCompletedProjectsUseFallback(false);
+      setCompletedProjectsTotal(result.total);
+      setCompletedTableProjects(result.projects.map((project) => mapApiProjectToItem(project)));
+    } catch (err) {
+      console.error(err);
+      const fallback = overviewProjectsRef.current.filter((project) => project.status === "completed");
+      if (fallback.length > 0) {
+        setCompletedProjectsUseFallback(true);
+        setCompletedProjectsTotal(fallback.length);
+        setCompletedTableProjects(mapOverviewProjectsToItems(fallback));
+      } else if (!silent) {
+        window.alert(err instanceof Error ? err.message : "완료 의뢰 목록을 불러올 수 없습니다.");
+      }
+    } finally {
+      if (!silent) {
+        setCompletedProjectsLoading(false);
+      }
+    }
+  }, [
+    authStatus,
+    completedDebouncedQuery,
+    completedPage,
+    completedPageSize,
+    completedStatusFilter,
+    mapOverviewProjectsToItems,
+  ]);
 
   const ensureProjectFilesLoaded = async (
     projectId: string,
@@ -1061,12 +1110,35 @@ function App() {
 
   useEffect(() => {
     setJobPage(1);
-  }, [debouncedQuery, jobTab, statusFilter, jobPageSize]);
+  }, [debouncedQuery, statusFilter, jobPageSize]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setCompletedDebouncedQuery(completedQuery.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [completedQuery]);
+
+  useEffect(() => {
+    if (!completedModalOpen) return;
+    setCompletedPage(1);
+  }, [completedDebouncedQuery, completedModalOpen, completedPageSize, completedStatusFilter]);
 
   useEffect(() => {
     if (activeMenu !== "jobs" || authStatus !== "authed") return;
     void loadJobProjects();
-  }, [activeMenu, authStatus, debouncedQuery, jobPage, jobPageSize, jobTab, loadJobProjects, statusFilter]);
+  }, [activeMenu, authStatus, debouncedQuery, jobPage, jobPageSize, loadJobProjects, statusFilter]);
+
+  useEffect(() => {
+    if (!completedModalOpen || authStatus !== "authed") return;
+    void loadCompletedJobProjects();
+  }, [
+    authStatus,
+    completedDebouncedQuery,
+    completedModalOpen,
+    completedPage,
+    completedPageSize,
+    completedStatusFilter,
+    loadCompletedJobProjects,
+  ]);
 
   const transcribers = useMemo<Transcriber[]>(() => {
     return (overview?.transcribers ?? []).map((person) => ({
@@ -1254,6 +1326,9 @@ function App() {
       if (activeMenu === "jobs") {
         setProjectFilesCache({});
         await loadJobProjects();
+        if (completedModalOpen) {
+          await loadCompletedJobProjects();
+        }
       }
       setActionNotice({ kind: "success", message: successMessage });
     } catch (err) {
@@ -1697,7 +1772,171 @@ function App() {
     }
   };
 
+  const isCompletedProjectExpanded = (projectId: string) => completedExpandedProjects[projectId] ?? false;
+
+  const toggleCompletedProjectExpanded = (projectId: string) => {
+    const project = completedTableProjects.find((item) => item.id === projectId);
+    const nextExpanded = !isCompletedProjectExpanded(projectId);
+    setCompletedExpandedProjects((prev) => ({ ...prev, [projectId]: nextExpanded }));
+    if (nextExpanded) {
+      void ensureProjectFilesLoaded(projectId, project?.files ?? []);
+    }
+  };
+
+  const openCompletedProjectsModal = () => {
+    setCompletedPage(1);
+    setCompletedModalOpen(true);
+    setJobsScopeSelect("active");
+  };
+
+  const closeCompletedProjectsModal = () => {
+    setCompletedModalOpen(false);
+    setJobsScopeSelect("active");
+  };
+
   const jobTotalPages = Math.max(1, Math.ceil(jobProjectsTotal / jobPageSize));
+  const completedJobTotalPages = Math.max(1, Math.ceil(completedProjectsTotal / completedPageSize));
+
+  const renderProjectTableRows = (
+    projects: ProjectItem[],
+    isExpanded: (projectId: string) => boolean,
+    onToggleExpanded: (projectId: string) => void,
+  ) =>
+    projects.map((project) => {
+      const hydrated = mergeProjectFiles(project, projectFilesCache[project.id] ?? []);
+      const expanded = isExpanded(project.id);
+      const filesLoading = Boolean(projectFilesLoading[project.id]);
+      return (
+        <Fragment key={project.id}>
+          <tr className="border-t border-slate-800 bg-slate-950/50 text-slate-200 hover:bg-slate-900/60">
+            <td className="sticky left-0 z-[1] border-r border-slate-800 bg-slate-950/95 px-3 py-2">
+              <button
+                type="button"
+                onClick={() => onToggleExpanded(project.id)}
+                className="rounded-md px-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+              >
+                {expanded ? "▾" : "▸"}
+              </button>
+            </td>
+            <td
+              className="sticky left-[49px] z-[1] max-w-[220px] border-r border-slate-800 bg-slate-950/95 px-3 py-2"
+              title={project.title}
+            >
+              <div className="truncate font-semibold text-white">{project.title}</div>
+              <div className="mt-1 font-mono text-[11px] text-slate-500">{project.id}</div>
+            </td>
+            <td className="max-w-[140px] truncate whitespace-nowrap px-3 py-2" title={project.client}>
+              {project.client}
+            </td>
+            <td className="whitespace-nowrap px-3 py-2 text-slate-400">
+              {formatProjectFileCount(project.fileCount, project.totalDurationSeconds)}
+            </td>
+            <td className="whitespace-nowrap px-3 py-2 text-slate-300">
+              {project.completedCount}/{project.fileCount}
+            </td>
+            <td className="max-w-[120px] truncate whitespace-nowrap px-3 py-2">{project.assignee}</td>
+            <td className="whitespace-nowrap px-3 py-2 text-slate-400">
+              {hydrated.files.find((file) => file.assignedAt !== "-")?.assignedAt ?? "-"}
+            </td>
+            <td className="whitespace-nowrap px-3 py-2 text-slate-400">{project.dueAt}</td>
+            <td className="whitespace-nowrap px-3 py-2">
+              <span
+                className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ${projectStatusTone(project.rawStatus)}`}
+              >
+                {project.statusLabel}
+              </span>
+            </td>
+            <td className="whitespace-nowrap px-3 py-2">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => openProjectDetailModal(hydrated)}
+                  className="rounded-md border border-slate-700 px-2.5 py-1.5 text-[11px] font-medium text-slate-200 transition hover:bg-slate-800"
+                >
+                  상세
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openAssignProjectModal(hydrated)}
+                  className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] font-medium text-cyan-300 transition hover:bg-cyan-500/20"
+                >
+                  {projectAssignButtonLabel(project)}
+                </button>
+              </div>
+            </td>
+          </tr>
+          {expanded && filesLoading ? (
+            <tr className="bg-slate-950/25 text-slate-400">
+              <td colSpan={10} className="px-3 py-3 text-center text-sm">
+                파일 목록을 불러오는 중입니다.
+              </td>
+            </tr>
+          ) : null}
+          {expanded && !filesLoading && hydrated.files.length === 0 ? (
+            <tr className="bg-slate-950/25 text-slate-400">
+              <td colSpan={10} className="px-3 py-3 text-center text-sm">
+                {projectFilesError[project.id] ?? "등록된 파일이 없습니다."}
+              </td>
+            </tr>
+          ) : null}
+          {expanded && !filesLoading
+            ? hydrated.files.map((file) => (
+                <tr key={`${project.id}-${file.id}`} className="bg-slate-950/25 text-slate-300 hover:bg-slate-900/50">
+                  <td className="sticky left-0 z-[1] border-r border-slate-800 bg-slate-950/95 px-3 py-1.5" />
+                  <td
+                    className="sticky left-[49px] z-[1] border-r border-slate-800 bg-slate-950/95 px-3 py-1.5 pl-8 font-mono text-[11px] text-slate-500"
+                    title={file.id}
+                  >
+                    {file.id}
+                  </td>
+                  <td className="max-w-[140px] truncate px-3 py-1.5 text-slate-400" title={project.client}>
+                    {project.client}
+                  </td>
+                  <td className="max-w-[220px] truncate px-3 py-1.5 text-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => void openDetailModal(file.id)}
+                      className="max-w-full truncate text-left text-cyan-300 transition hover:text-cyan-200"
+                      title={file.filename}
+                    >
+                      {file.filename}
+                    </button>
+                    <div className="mt-1 text-[11px] text-slate-500">{file.title}</div>
+                  </td>
+                  <td className="px-3 py-1.5 text-slate-400">파일 단위</td>
+                  <td className="px-3 py-1.5">{file.assignee}</td>
+                  <td className="px-3 py-1.5 text-slate-400">{file.assignedAt}</td>
+                  <td className="px-3 py-1.5 text-slate-400">{file.dueAt}</td>
+                  <td className="px-3 py-1.5">
+                    <div className="flex items-center gap-2">
+                      {file.admin_inquiry_badges?.map((badge) => (
+                        <span
+                          key={`${file.id}-${badge}`}
+                          className="inline-flex rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] font-semibold text-amber-200"
+                        >
+                          {badge}
+                        </span>
+                      ))}
+                      <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ${statusTone(file.status)}`}>
+                        {file.status}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <button
+                      type="button"
+                      onClick={() => void openDetailModal(file.id)}
+                      className="rounded-md border border-slate-700 px-2.5 py-1 text-[11px] font-medium text-slate-200"
+                    >
+                      파일 상세
+                    </button>
+                  </td>
+                </tr>
+              ))
+            : null}
+        </Fragment>
+      );
+    });
 
   const dashboardStats = useMemo(() => {
     return {
@@ -1791,13 +2030,19 @@ function App() {
           className="min-w-[280px] flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-cyan-400"
         />
         <select
-          value={jobTab}
-          onChange={(e) => setJobTab(e.target.value as JobProjectsTab)}
+          value={jobsScopeSelect}
+          onChange={(e) => {
+            const value = e.target.value as "active" | "completed";
+            if (value === "completed") {
+              openCompletedProjectsModal();
+              return;
+            }
+            setJobsScopeSelect("active");
+          }}
           className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-400"
         >
           <option value="active">진행 중 의뢰</option>
           <option value="completed">완료 의뢰</option>
-          <option value="all">전체 의뢰</option>
         </select>
         <select
           value={statusFilter}
@@ -1856,135 +2101,7 @@ function App() {
                 <th className="whitespace-nowrap px-3 py-2">동작</th>
               </tr>
             </thead>
-            <tbody>
-              {visibleProjects.map((project) => {
-                const hydrated = mergeProjectFiles(project, projectFilesCache[project.id] ?? []);
-                const expanded = isProjectExpanded(project.id);
-                const filesLoading = Boolean(projectFilesLoading[project.id]);
-                return (
-                  <Fragment key={project.id}>
-                    <tr className="border-t border-slate-800 bg-slate-950/50 text-slate-200 hover:bg-slate-900/60">
-                      <td className="sticky left-0 z-[1] border-r border-slate-800 bg-slate-950/95 px-3 py-2">
-            <button
-              type="button"
-                          onClick={() => toggleProjectExpanded(project.id)}
-                          className="rounded-md px-1 text-slate-400 hover:bg-slate-800 hover:text-white"
-            >
-                          {expanded ? "▾" : "▸"}
-            </button>
-                      </td>
-                      <td className="sticky left-[49px] z-[1] max-w-[220px] border-r border-slate-800 bg-slate-950/95 px-3 py-2" title={project.title}>
-                        <div className="truncate font-semibold text-white">{project.title}</div>
-                        <div className="mt-1 font-mono text-[11px] text-slate-500">{project.id}</div>
-                      </td>
-                      <td className="max-w-[140px] truncate whitespace-nowrap px-3 py-2" title={project.client}>
-                        {project.client}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-slate-400">
-                        {formatProjectFileCount(project.fileCount, project.totalDurationSeconds)}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-slate-300">
-                        {project.completedCount}/{project.fileCount}
-                      </td>
-                      <td className="max-w-[120px] truncate whitespace-nowrap px-3 py-2">{project.assignee}</td>
-                      <td className="whitespace-nowrap px-3 py-2 text-slate-400">
-                        {hydrated.files.find((file) => file.assignedAt !== "-")?.assignedAt ?? "-"}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-slate-400">{project.dueAt}</td>
-                      <td className="whitespace-nowrap px-3 py-2">
-                        <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ${projectStatusTone(project.rawStatus)}`}>
-                          {project.statusLabel}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2">
-                        <div className="flex gap-2">
-            <button
-              type="button"
-                            onClick={() => openProjectDetailModal(hydrated)}
-                            className="rounded-md border border-slate-700 px-2.5 py-1.5 text-[11px] font-medium text-slate-200 transition hover:bg-slate-800"
-            >
-                            상세
-            </button>
-            <button
-              type="button"
-                            onClick={() => openAssignProjectModal(hydrated)}
-                            className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] font-medium text-cyan-300 transition hover:bg-cyan-500/20"
-            >
-                            {projectAssignButtonLabel(project)}
-            </button>
-                        </div>
-                      </td>
-                    </tr>
-                    {expanded && filesLoading ? (
-                      <tr className="bg-slate-950/25 text-slate-400">
-                        <td colSpan={10} className="px-3 py-3 text-center text-sm">
-                          파일 목록을 불러오는 중입니다.
-                        </td>
-                      </tr>
-                    ) : null}
-                    {expanded && !filesLoading && hydrated.files.length === 0 ? (
-                      <tr className="bg-slate-950/25 text-slate-400">
-                        <td colSpan={10} className="px-3 py-3 text-center text-sm">
-                          {projectFilesError[project.id] ?? "등록된 파일이 없습니다."}
-                        </td>
-                      </tr>
-                    ) : null}
-                    {expanded && !filesLoading
-                      ? hydrated.files.map((file) => (
-                          <tr key={`${project.id}-${file.id}`} className="bg-slate-950/25 text-slate-300 hover:bg-slate-900/50">
-                            <td className="sticky left-0 z-[1] border-r border-slate-800 bg-slate-950/95 px-3 py-1.5" />
-                            <td className="sticky left-[49px] z-[1] border-r border-slate-800 bg-slate-950/95 px-3 py-1.5 pl-8 font-mono text-[11px] text-slate-500" title={file.id}>
-                              {file.id}
-                            </td>
-                            <td className="max-w-[140px] truncate px-3 py-1.5 text-slate-400" title={project.client}>
-                              {project.client}
-                            </td>
-                            <td className="max-w-[220px] truncate px-3 py-1.5 text-slate-200">
-            <button
-              type="button"
-                                onClick={() => void openDetailModal(file.id)}
-                                className="max-w-full truncate text-left text-cyan-300 transition hover:text-cyan-200"
-                                title={file.filename}
-                              >
-                                {file.filename}
-            </button>
-                              <div className="mt-1 text-[11px] text-slate-500">{file.title}</div>
-                            </td>
-                            <td className="px-3 py-1.5 text-slate-400">파일 단위</td>
-                            <td className="px-3 py-1.5">{file.assignee}</td>
-                            <td className="px-3 py-1.5 text-slate-400">{file.assignedAt}</td>
-                            <td className="px-3 py-1.5 text-slate-400">{file.dueAt}</td>
-                            <td className="px-3 py-1.5">
-                              <div className="flex items-center gap-2">
-                                {file.admin_inquiry_badges?.map((badge) => (
-                                  <span
-                                    key={`${file.id}-${badge}`}
-                                    className="inline-flex rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] font-semibold text-amber-200"
-                                  >
-                                    {badge}
-                                  </span>
-                                ))}
-                                <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ${statusTone(file.status)}`}>
-                                  {file.status}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="px-3 py-1.5">
-                              <button
-                                type="button"
-                                onClick={() => void openDetailModal(file.id)}
-                                className="rounded-md border border-slate-700 px-2.5 py-1 text-[11px] font-medium text-slate-200"
-                              >
-                                파일 상세
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      : null}
-                  </Fragment>
-                );
-              })}
-            </tbody>
+            <tbody>{renderProjectTableRows(visibleProjects, isProjectExpanded, toggleProjectExpanded)}</tbody>
           </table>
         )}
           </div>
@@ -2708,6 +2825,134 @@ function App() {
               ? "알림이 차단되어 있습니다. 브라우저 설정에서 허용해 주세요."
               : "신규 가입 · 문의 · 검토 요청을 이 기기로 받습니다."}
           </p>
+        </div>
+      ) : null}
+
+      {completedModalOpen ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/75 px-3 py-6 backdrop-blur-sm">
+          <div className="flex max-h-[92vh] w-full max-w-[min(96vw,1480px)] flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-800 px-5 py-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">완료 의뢰 조회</p>
+                <h3 className="mt-1 text-xl font-semibold text-white">완료된 의뢰 목록</h3>
+                <p className="mt-2 text-sm text-slate-400">모든 파일이 완료된 프로젝트를 검색·조회합니다.</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeCompletedProjectsModal}
+                className="shrink-0 rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300"
+              >
+                닫기
+              </button>
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-4">
+              {completedProjectsUseFallback ? (
+                <p className="mb-3 text-xs text-amber-300">
+                  페이지 목록 API를 사용할 수 없어 완료 의뢰 전체 목록을 표시합니다.
+                </p>
+              ) : null}
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <input
+                  value={completedQuery}
+                  onChange={(e) => setCompletedQuery(e.target.value)}
+                  placeholder="프로젝트명, 의뢰인, 파일명, 작업번호 검색"
+                  className="min-w-[260px] flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-cyan-400"
+                />
+                <select
+                  value={completedStatusFilter}
+                  onChange={(e) => setCompletedStatusFilter(e.target.value as "전체" | JobStatus)}
+                  className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-400"
+                >
+                  <option value="전체">전체 상태</option>
+                  <option value="배정 대기">배정 대기</option>
+                  <option value="속기사 작업 중">속기사 작업 중</option>
+                  <option value="의뢰인 검토">의뢰인 검토</option>
+                  <option value="녹취록 요청">녹취록 요청</option>
+                  <option value="속기사검토">속기사검토</option>
+                  <option value="PDF 전달">PDF 전달</option>
+                </select>
+                <select
+                  value={completedPageSize}
+                  onChange={(e) => setCompletedPageSize(Number(e.target.value))}
+                  className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-400"
+                >
+                  <option value={20}>20개씩</option>
+                  <option value={50}>50개씩</option>
+                  <option value={100}>100개씩</option>
+                </select>
+                <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-400">
+                  전체 {completedProjectsTotal.toLocaleString("ko-KR")}건
+                </span>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-slate-800 bg-slate-950/70">
+                {completedProjectsLoading ? (
+                  <div className="px-4 py-10 text-center text-sm text-slate-400">완료 의뢰 목록을 불러오는 중입니다.</div>
+                ) : completedTableProjects.length === 0 ? (
+                  <EmptyState message="표시할 완료 의뢰가 없습니다." />
+                ) : (
+                  <table className="w-full min-w-[1220px] border-collapse text-[13px]">
+                    <thead>
+                      <tr className="border-b border-slate-800 bg-slate-950 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                        <th className="sticky left-0 z-10 whitespace-nowrap border-r border-slate-800 bg-slate-950 px-3 py-2" />
+                        <th className="sticky left-[49px] z-10 whitespace-nowrap border-r border-slate-800 bg-slate-950 px-3 py-2">
+                          프로젝트
+                        </th>
+                        <th className="whitespace-nowrap px-3 py-2">의뢰인</th>
+                        <th className="whitespace-nowrap px-3 py-2">파일</th>
+                        <th className="whitespace-nowrap px-3 py-2">진행</th>
+                        <th className="whitespace-nowrap px-3 py-2">담당</th>
+                        <th className="whitespace-nowrap px-3 py-2">배정일시</th>
+                        <th className="whitespace-nowrap px-3 py-2">마감</th>
+                        <th className="whitespace-nowrap px-3 py-2">상태</th>
+                        <th className="whitespace-nowrap px-3 py-2">동작</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {renderProjectTableRows(
+                        completedTableProjects,
+                        isCompletedProjectExpanded,
+                        toggleCompletedProjectExpanded,
+                      )}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-slate-500">
+                  {completedProjectsTotal === 0
+                    ? "0건"
+                    : `${completedProjectsTotal.toLocaleString("ko-KR")}건 중 ${(completedPage - 1) * completedPageSize + 1}-${Math.min(
+                        completedPage * completedPageSize,
+                        completedProjectsTotal,
+                      )}건 표시`}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCompletedPage((page) => Math.max(1, page - 1))}
+                    disabled={completedPage <= 1 || completedProjectsLoading}
+                    className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 disabled:opacity-40"
+                  >
+                    이전
+                  </button>
+                  <span className="text-xs text-slate-400">
+                    {completedPage} / {completedJobTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCompletedPage((page) => Math.min(completedJobTotalPages, page + 1))}
+                    disabled={completedPage >= completedJobTotalPages || completedProjectsLoading}
+                    className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 disabled:opacity-40"
+                  >
+                    다음
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
 

@@ -17,6 +17,16 @@ import { preloadChannelTalk, showChannelTalkMessenger } from "./lib/channelTalk"
 
 const transcriptSamplePdf = "/assets/transcript-sample.pdf";
 
+// 카카오톡 등 인앱 브라우저와 모바일 웹뷰는 PDF를 인라인 표시하지 못하고 다운로드로 처리한다.
+function supportsInlinePdf(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  if (/KAKAOTALK|KAKAOSTORY|NAVER|Instagram|FBAN|FBAV|FB_IAB|Line\/|DaumApps|; wv\)/i.test(ua)) {
+    return false;
+  }
+  return !/Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+}
+
 const navItems = [
   ["#service", "서비스 소개"],
   ["#features", "핵심 기능"],
@@ -280,6 +290,7 @@ function Quality() {
 }
 
 function Results() {
+  const [inlinePdf] = useState(supportsInlinePdf);
   return (
     <section className="results-section" id="results">
       <div>
@@ -304,11 +315,28 @@ function Results() {
             PDF 전체 보기
           </a>
         </div>
-        <iframe
-          className="pdf-sample__frame"
-          src={`${transcriptSamplePdf}#view=FitH`}
-          title="녹취록 PDF 출력 예시"
-        />
+        {inlinePdf ? (
+          <iframe
+            className="pdf-sample__frame"
+            src={`${transcriptSamplePdf}#view=FitH`}
+            title="녹취록 PDF 출력 예시"
+          />
+        ) : (
+          <div className="pdf-sample__fallback">
+            <p className="pdf-sample__fallback-title">녹취록 PDF 출력 예시</p>
+            <p className="pdf-sample__fallback-text">
+              화자 구분, 확인 문구, 페이지 번호가 포함된 문서형 녹취록입니다.
+            </p>
+            <a
+              className="pdf-sample__fallback-button"
+              href={transcriptSamplePdf}
+              target="_blank"
+              rel="noreferrer"
+            >
+              예시 PDF 열기
+            </a>
+          </div>
+        )}
       </div>
     </section>
   );
