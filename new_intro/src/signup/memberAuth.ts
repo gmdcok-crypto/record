@@ -115,6 +115,34 @@ export async function signupMember(payload: {
   return { ok: true, token };
 }
 
+export async function phoneSessionMember(payload: {
+  identityVerificationId: string;
+  name?: string;
+}): Promise<{ ok: true; token: string } | { ok: false; message: string }> {
+  const res = await memberFetch(`${getApiBase()}/api/member/auth/phone-session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      identityVerificationId: payload.identityVerificationId,
+      name: payload.name,
+    }),
+  });
+  let data: Record<string, unknown>;
+  try {
+    data = await readJsonResponse(res);
+  } catch {
+    return { ok: false, message: "서버 응답 오류입니다. 잠시 후 다시 시도해 주세요." };
+  }
+  if (!res.ok) {
+    return { ok: false, message: formatApiError(data.detail, "본인인증 로그인에 실패했습니다.") };
+  }
+  const token = typeof data.access_token === "string" ? data.access_token : "";
+  if (!token) {
+    return { ok: false, message: "본인인증 로그인에 실패했습니다." };
+  }
+  return { ok: true, token };
+}
+
 export function redirectAfterSignup(token: string): void {
   localStorage.setItem(TOKEN_KEY, token);
   const clientOrigin = new URL(CLIENT_PWA_URL).origin;

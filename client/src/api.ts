@@ -1070,3 +1070,26 @@ export async function loginMember(email: string, password: string): Promise<Memb
   localStorage.setItem(MEMBER_TOKEN_KEY, data.access_token);
   return data.member as MemberProfile;
 }
+
+export async function phoneSessionMember(payload: {
+  identityVerificationId: string;
+  name?: string;
+}): Promise<MemberProfile> {
+  const res = await fetch(`${apiBase()}/api/member/auth/phone-session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      identityVerificationId: payload.identityVerificationId,
+      name: payload.name?.trim() || undefined,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data) || "본인인증 로그인에 실패했습니다.");
+  }
+  if (!data.access_token) {
+    throw new Error("본인인증 로그인에 실패했습니다.");
+  }
+  localStorage.setItem(MEMBER_TOKEN_KEY, data.access_token);
+  return data.member as MemberProfile;
+}

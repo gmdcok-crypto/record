@@ -1,5 +1,6 @@
 import logging
 import re
+import secrets
 import time
 
 from sqlalchemy import func, select
@@ -25,6 +26,19 @@ def normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
+def normalize_phone(phone: str | None) -> str | None:
+    if not phone:
+        return None
+    digits = re.sub(r"\D", "", phone.strip())
+    if len(digits) < 10:
+        return None
+    return digits
+
+
+def phone_placeholder_email(phone: str) -> str:
+    return f"p{phone}@phone.members.local"
+
+
 def validate_email(email: str) -> str:
     normalized = normalize_email(email)
     if not EMAIL_PATTERN.fullmatch(normalized):
@@ -40,6 +54,13 @@ def validate_password(password: str) -> str:
 
 def get_member_by_email(db: Session, email: str) -> Member | None:
     return db.scalar(select(Member).where(Member.email == normalize_email(email)))
+
+
+def get_member_by_phone(db: Session, phone: str) -> Member | None:
+    normalized = normalize_phone(phone)
+    if not normalized:
+        return None
+    return db.scalar(select(Member).where(Member.phone == normalized).order_by(Member.id.asc()))
 
 
 def get_member_by_id(db: Session, member_id: int) -> Member | None:
@@ -66,17 +87,15 @@ def register_member(
     normalized_email = validate_email(email)
     normalized_password = validate_password(password)
     normalized_name = name.strip()
-    normalized_phone: str | None = None
-    if phone:
-        digits = re.sub(r"\D", "", phone.strip())
-        if len(digits) >= 10:
-            normalized_phone = digits
+    normalized_phone = normalize_phone(phone)
 
     if not normalized_name:
         raise MemberAuthError("이름을 입력해 주세요")
 
     if get_member_by_email(db, normalized_email) is not None:
         raise MemberAuthError("이미 사용 중인 이메일입니다")
+    if normalized_phone and get_member_by_phone(db, normalized_phone) is not None:
+        raise MemberAuthError("이미 가입된 휴대폰 번호입니다")
 
     member = Member(
         email=normalized_email,
@@ -88,6 +107,44 @@ def register_member(
     db.commit()
     db.refresh(member)
     return member
+
+
+def register_or_login_member_with_phone(
+    db: Session,
+    *,
+    phone: str,
+    name: str | None = None,
+) -> tuple[Member, bool]:
+    """Authenticate by verified phone. Creates a member when none exists.
+
+    Returns (member, created).
+    """
+    normalized_phone = normalize_phone(phone)
+    if not normalized_phone:
+        raise MemberAuthError("본인인증 정보에서 휴대폰 번호를 확인하지 못했습니다")
+
+    existing = get_member_by_phone(db, normalized_phone)
+    if existing is not None:
+        if not existing.is_active:
+            raise MemberAuthError("비활성화된 계정입니다")
+        if name and name.strip() and not (existing.name or "").strip():
+            existing.name = name.strip()
+            db.commit()
+            db.refresh(existing)
+        return existing, False
+
+    resolved_name = (name or "").strip() or f"회원{normalized_phone[-4:]}"
+    placeholder_email = phone_placeholder_email(normalized_phone)
+    # Unusable random password: phone-auth members sign in via PortOne only.
+    random_password = f"A{secrets.token_hex(4)}!{secrets.randbelow(90) + 10}"
+    member = register_member(
+        db,
+        email=placeholder_email,
+        password=random_password,
+        name=resolved_name,
+        phone=normalized_phone,
+    )
+    return member, True
 
 
 def authenticate_member(db: Session, *, email: str, password: str) -> Member:

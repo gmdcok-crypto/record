@@ -26,6 +26,7 @@ from app.services.member_auth import (
     get_member_by_email,
     get_member_by_id,
     register_member,
+    register_or_login_member_with_phone,
     serialize_member,
     validate_email,
 )
@@ -53,6 +54,13 @@ class MemberSignupRequest(BaseModel):
 
 class PortOneIdentityLookupRequest(BaseModel):
     identity_verification_id: str = Field(alias="identityVerificationId", min_length=1)
+
+    model_config = {"populate_by_name": True}
+
+
+class MemberPhoneSessionRequest(BaseModel):
+    identity_verification_id: str = Field(alias="identityVerificationId", min_length=1)
+    name: str | None = None
 
     model_config = {"populate_by_name": True}
 
@@ -351,6 +359,40 @@ def lookup_member_identity_verification(body: PortOneIdentityLookupRequest) -> d
         "name": parsed["name"],
         "phone": parsed["phone"],
     }
+
+
+@router.post("/phone-session", response_model=MemberAuthTokenResponse)
+def member_phone_session(
+    body: MemberPhoneSessionRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> MemberAuthTokenResponse:
+    """Sign up or log in with a completed PortOne phone identity verification."""
+    if not settings.jwt_configured:
+        raise HTTPException(status_code=503, detail="JWT is not configured")
+    if not settings.portone_identity_enabled:
+        raise HTTPException(status_code=503, detail="본인인증이 설정되지 않았습니다.")
+
+    verification = _fetch_portone_json(f"/identity-verifications/{body.identity_verification_id}")
+    parsed = parse_portone_identity_verification(verification)
+    phone = parsed.get("phone")
+    if not phone:
+        raise HTTPException(status_code=400, detail="본인인증 정보에서 휴대폰 번호를 확인하지 못했습니다.")
+
+    verified_name = (parsed.get("name") or "").strip() or None
+    requested_name = (body.name or "").strip() or None
+
+    try:
+        member, created = register_or_login_member_with_phone(
+            db,
+            phone=str(phone),
+            name=requested_name or verified_name,
+        )
+    except MemberAuthError as exc:
+        raise _auth_error_to_http(exc) from exc
+
+    if created:
+        _notify_admins_member_signup(db, member)
+    return _issue_token(member)
 
 
 def _notify_admins_member_signup(db: Session, member: Member) -> None:

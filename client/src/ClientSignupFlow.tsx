@@ -1,12 +1,9 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 import * as PortOne from "@portone/browser-sdk/v2";
 import {
-  EMAIL_PATTERN,
-  PASSWORD_PATTERN,
-  checkEmailAvailability,
   fetchPortOnePublicConfig,
   lookupMemberIdentityVerification,
-  signupMember,
+  phoneSessionMember,
   type MemberProfile,
 } from "./api";
 import {
@@ -18,7 +15,7 @@ import "./styles/signup-modal.css";
 type TermsKey = "service" | "privacy" | "collection";
 
 const REQUIRED_TERMS: TermsKey[] = ["service", "privacy", "collection"];
-const IDENTITY_VERIFICATION_HINT = "안전한 의뢰를 위해 본인인증를 완료해주세요";
+const IDENTITY_VERIFICATION_HINT = "휴대폰 본인인증으로 시작하기";
 
 type Props = {
   open: boolean;
@@ -344,26 +341,37 @@ function SignupModal({
   onIdentityVerificationHandled?: () => void;
 }) {
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [passwordConfirm, setPasswordConfirm] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
-  const [emailHint, setEmailHint] = useState<{ message: string; ok: boolean } | null>(null);
   const [error, setError] = useState("");
-  const [checkingEmail, setCheckingEmail] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [verifyingIdentity, setVerifyingIdentity] = useState(false);
-  const [identityRequired, setIdentityRequired] = useState(false);
+  const [identityEnabled, setIdentityEnabled] = useState(false);
   const [verifiedPhone, setVerifiedPhone] = useState("");
-  const [identityVerificationId, setIdentityVerificationId] = useState("");
 
   useEffect(() => {
     if (!open) return;
     void fetchPortOnePublicConfig()
-      .then((config) => setIdentityRequired(Boolean(config.portoneIdentityEnabled)))
-      .catch(() => setIdentityRequired(false));
+      .then((config) => setIdentityEnabled(Boolean(config.portoneIdentityEnabled)))
+      .catch(() => setIdentityEnabled(false));
   }, [open]);
+
+  const completePhoneSession = useCallback(
+    async (verificationId: string, nextName?: string) => {
+      setSubmitting(true);
+      setError("");
+      try {
+        const member = await phoneSessionMember({
+          identityVerificationId: verificationId,
+          name: nextName?.trim() || undefined,
+        });
+        onSuccess(member);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "본인인증 로그인에 실패했습니다.");
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [onSuccess],
+  );
 
   useEffect(() => {
     const pendingId = initialIdentityVerificationId;
@@ -371,11 +379,12 @@ function SignupModal({
 
     setVerifyingIdentity(true);
     void lookupMemberIdentityVerification(pendingId)
-      .then((verified) => {
-        setIdentityVerificationId(pendingId);
+      .then(async (verified) => {
         setVerifiedPhone(verified.phone ?? "");
-        setName((current) => current.trim() || verified.name || "");
+        const resolvedName = verified.name || "";
+        setName((current) => current.trim() || resolvedName);
         setError("");
+        await completePhoneSession(pendingId, resolvedName);
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : "본인인증 결과를 불러오지 못했습니다.");
@@ -384,21 +393,14 @@ function SignupModal({
         onIdentityVerificationHandled?.();
         setVerifyingIdentity(false);
       });
-  }, [open, initialIdentityVerificationId, onIdentityVerificationHandled]);
+  }, [open, initialIdentityVerificationId, onIdentityVerificationHandled, completePhoneSession]);
 
   useEffect(() => {
     if (!open) return;
     if (initialIdentityVerificationId) return;
     setName("");
-    setEmail("");
-    setPassword("");
-    setPasswordConfirm("");
-    setShowPassword(false);
-    setShowPasswordConfirm(false);
-    setEmailHint(null);
     setError("");
     setVerifiedPhone("");
-    setIdentityVerificationId("");
   }, [open, initialIdentityVerificationId]);
 
   if (!open) return null;
@@ -423,76 +425,14 @@ function SignupModal({
         throw new Error(response.message || "본인인증이 취소되었습니다.");
       }
       const verified = await lookupMemberIdentityVerification(nextIdentityVerificationId);
-      setIdentityVerificationId(nextIdentityVerificationId);
       setVerifiedPhone(verified.phone ?? "");
-      if (verified.name && !name.trim()) {
-        setName(verified.name);
-      }
+      const resolvedName = name.trim() || verified.name || "";
+      if (resolvedName) setName(resolvedName);
+      await completePhoneSession(nextIdentityVerificationId, resolvedName);
     } catch (err) {
       setError(err instanceof Error ? err.message : "본인인증에 실패했습니다.");
     } finally {
       setVerifyingIdentity(false);
-    }
-  };
-
-  const handleCheckEmail = async () => {
-    const normalized = email.trim().toLowerCase();
-    if (!EMAIL_PATTERN.test(normalized)) {
-      setEmailHint({ message: "올바른 이메일 형식이 아닙니다.", ok: false });
-      return;
-    }
-    setCheckingEmail(true);
-    try {
-      const result = await checkEmailAvailability(normalized);
-      setEmailHint({ message: result.message, ok: result.ok });
-    } catch {
-      setEmailHint({ message: "서버 연결에 실패했습니다.", ok: false });
-    } finally {
-      setCheckingEmail(false);
-    }
-  };
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError("");
-
-    const trimmedName = name.trim();
-    const normalizedEmail = email.trim().toLowerCase();
-
-    if (!trimmedName) {
-      setError("이름을 입력해 주세요.");
-      return;
-    }
-    if (!EMAIL_PATTERN.test(normalizedEmail)) {
-      setError("올바른 이메일 형식이 아닙니다.");
-      return;
-    }
-    if (!PASSWORD_PATTERN.test(password)) {
-      setError("비밀번호는 영문, 숫자, 특수문자(#?!@$%^&*-) 포함 8~16자리여야 합니다.");
-      return;
-    }
-    if (password !== passwordConfirm) {
-      setError("비밀번호가 일치하지 않습니다.");
-      return;
-    }
-    if (identityRequired && (!verifiedPhone || !identityVerificationId)) {
-      setError("회원가입 전에 본인인증을 완료해 주세요.");
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const member = await signupMember({
-        name: trimmedName,
-        email: normalizedEmail,
-        password,
-        identityVerificationId: identityVerificationId || undefined,
-      });
-      onSuccess(member);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "회원가입에 실패했습니다.");
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -509,136 +449,61 @@ function SignupModal({
         <button type="button" className="modal-close-btn" aria-label="닫기" onClick={onClose}>
           ×
         </button>
-        <p className="signup-modal__eyebrow">회원 가입</p>
+        <p className="signup-modal__eyebrow">회원 가입 / 로그인</p>
         <h2 className="terms-modal__title" id="client-signup-modal-title">
-          회원가입
+          휴대폰 본인인증
         </h2>
         <p className="terms-modal__desc" id="client-signup-modal-desc">
-          불판녹취속기사무소
+          본인 명의 휴대폰으로 인증하면 가입과 로그인이 완료됩니다.
         </p>
 
-        <form className="signup-form" noValidate onSubmit={handleSubmit}>
+        <div className="signup-form">
           <label className="signup-field">
             <input
               type="text"
               name="name"
-              placeholder="이름을 입력해 주세요."
+              placeholder="이름 (선택, 인증 후 자동 입력)"
               autoComplete="name"
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
-            <button
-              type="button"
-              className="signup-clear"
-              aria-label="이름 지우기"
-              onClick={() => setName("")}
-            >
+            <button type="button" className="signup-clear" aria-label="이름 지우기" onClick={() => setName("")}>
               ×
             </button>
           </label>
-
-          <div className="signup-split">
-            <label className="signup-field signup-field--grow">
-              <input
-                type="email"
-                name="email"
-                placeholder="이메일을 입력해 주세요."
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-              <button
-                type="button"
-                className="signup-clear"
-                aria-label="이메일 지우기"
-                onClick={() => setEmail("")}
-              >
-                ×
-              </button>
-            </label>
-            <button
-              type="button"
-              className="signup-side-btn"
-              disabled={checkingEmail}
-              onClick={() => void handleCheckEmail()}
-            >
-              중복확인
-            </button>
-          </div>
-          {emailHint ? (
-            <p className={`signup-hint signup-hint--${emailHint.ok ? "ok" : "error"}`}>
-              {emailHint.message}
-            </p>
-          ) : null}
-
-          <label className="signup-field">
-            <input
-              type={showPassword ? "text" : "password"}
-              name="password"
-              placeholder="비밀번호"
-              autoComplete="new-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-            <button
-              type="button"
-              className="signup-toggle-pw"
-              aria-label={showPassword ? "비밀번호 숨기기" : "비밀번호 표시"}
-              onClick={() => setShowPassword((prev) => !prev)}
-            >
-              👁
-            </button>
-          </label>
-
-          <label className="signup-field">
-            <input
-              type={showPasswordConfirm ? "text" : "password"}
-              name="password_confirm"
-              placeholder="비밀번호 확인"
-              autoComplete="new-password"
-              value={passwordConfirm}
-              onChange={(event) => setPasswordConfirm(event.target.value)}
-            />
-            <button
-              type="button"
-              className="signup-toggle-pw"
-              aria-label={showPasswordConfirm ? "비밀번호 확인 숨기기" : "비밀번호 확인 표시"}
-              onClick={() => setShowPasswordConfirm((prev) => !prev)}
-            >
-              👁
-            </button>
-          </label>
-          <p className="signup-rule">✓ 영문, 숫자, 특수문자 (#?!@$%^&*-) 포함 8~16자리</p>
 
           <div className="signup-identity" aria-label="본인인증">
             <button
               type="button"
               className="signup-side-btn"
-              disabled={verifyingIdentity || !identityRequired}
+              disabled={verifyingIdentity || submitting || !identityEnabled}
               onClick={() => void verifyIdentity()}
             >
-              {verifyingIdentity ? "인증 중…" : verifiedPhone ? "재인증" : "본인인증"}
+              {verifyingIdentity || submitting
+                ? "인증 처리 중…"
+                : verifiedPhone
+                  ? "다시 인증하기"
+                  : IDENTITY_VERIFICATION_HINT}
             </button>
           </div>
           {verifiedPhone ? (
-            <p className="signup-hint signup-hint--ok">
-              인증된 휴대폰: {formatVerifiedPhone(verifiedPhone)}
+            <p className="signup-hint signup-hint--ok">인증된 휴대폰: {formatVerifiedPhone(verifiedPhone)}</p>
+          ) : identityEnabled ? (
+            <p className="signup-hint">이메일·비밀번호 없이 휴대폰 본인인증만으로 이용할 수 있습니다.</p>
+          ) : (
+            <p className="signup-hint signup-hint--error">
+              본인인증 설정이 완료되지 않았습니다. 관리자에게 문의해 주세요.
             </p>
-          ) : identityRequired ? (
-            <p className="signup-hint">{IDENTITY_VERIFICATION_HINT}</p>
-          ) : null}
+          )}
 
           {error ? <p className="signup-error">{error}</p> : null}
 
           <div className="terms-modal__actions signup-modal__actions">
-            <button type="submit" className="terms-btn terms-btn--primary" disabled={submitting}>
-              {submitting ? "가입 중…" : "가입하기"}
-            </button>
             <button type="button" className="terms-btn terms-btn--ghost" onClick={onClose}>
               취소
             </button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );
