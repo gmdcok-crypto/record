@@ -1,3 +1,11 @@
+function shouldKeepServiceWorker(scriptUrl: string): boolean {
+  if (!scriptUrl) return false;
+  if (scriptUrl.includes("push-sw.js")) return true;
+  if (scriptUrl.includes("/sw.js")) return true;
+  if (scriptUrl.includes("workbox-")) return true;
+  return false;
+}
+
 export async function clearStaleClientPwaServiceWorkers(): Promise<boolean> {
   if (!("serviceWorker" in navigator)) return false;
 
@@ -9,7 +17,7 @@ export async function clearStaleClientPwaServiceWorkers(): Promise<boolean> {
       registration.installing?.scriptURL ||
       registration.waiting?.scriptURL ||
       "";
-    if (scriptUrl.includes("push-sw.js")) {
+    if (shouldKeepServiceWorker(scriptUrl)) {
       continue;
     }
     removed = (await registration.unregister()) || removed;
