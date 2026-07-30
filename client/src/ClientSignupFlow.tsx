@@ -344,14 +344,15 @@ function SignupModal({
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [verifyingIdentity, setVerifyingIdentity] = useState(false);
-  const [identityEnabled, setIdentityEnabled] = useState(false);
+  const [identityState, setIdentityState] = useState<"loading" | "on" | "off">("loading");
   const [verifiedPhone, setVerifiedPhone] = useState("");
 
   useEffect(() => {
     if (!open) return;
+    setIdentityState("loading");
     void fetchPortOnePublicConfig()
-      .then((config) => setIdentityEnabled(Boolean(config.portoneIdentityEnabled)))
-      .catch(() => setIdentityEnabled(false));
+      .then((config) => setIdentityState(config.portoneIdentityEnabled ? "on" : "off"))
+      .catch(() => setIdentityState("off"));
   }, [open]);
 
   const completePhoneSession = useCallback(
@@ -476,24 +477,26 @@ function SignupModal({
             <button
               type="button"
               className="signup-side-btn"
-              disabled={verifyingIdentity || submitting || !identityEnabled}
+              disabled={verifyingIdentity || submitting || identityState === "loading"}
               onClick={() => void verifyIdentity()}
             >
               {verifyingIdentity || submitting
                 ? "인증 처리 중…"
-                : verifiedPhone
-                  ? "다시 인증하기"
-                  : IDENTITY_VERIFICATION_HINT}
+                : identityState === "loading"
+                  ? "본인인증 준비 중…"
+                  : verifiedPhone
+                    ? "다시 인증하기"
+                    : IDENTITY_VERIFICATION_HINT}
             </button>
           </div>
           {verifiedPhone ? (
             <p className="signup-hint signup-hint--ok">인증된 휴대폰: {formatVerifiedPhone(verifiedPhone)}</p>
-          ) : identityEnabled ? (
-            <p className="signup-hint">이메일·비밀번호 없이 휴대폰 본인인증만으로 이용할 수 있습니다.</p>
-          ) : (
+          ) : identityState === "off" ? (
             <p className="signup-hint signup-hint--error">
-              본인인증 설정이 완료되지 않았습니다. 관리자에게 문의해 주세요.
+              본인인증 서버 설정을 확인하지 못했습니다. 버튼을 눌러 다시 시도해 주세요.
             </p>
+          ) : (
+            <p className="signup-hint">이메일·비밀번호 없이 휴대폰 본인인증만으로 이용할 수 있습니다.</p>
           )}
 
           {error ? <p className="signup-error">{error}</p> : null}

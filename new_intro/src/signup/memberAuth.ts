@@ -15,16 +15,10 @@ export function getApiBase(): string {
   const origin = window.location.origin;
   const host = window.location.hostname;
 
-  if (host.endsWith(".netlify.app") || host.endsWith(".github.io")) {
-    return RAILWAY_API_BASE;
-  }
-  if (origin === "null" || origin.startsWith("file:")) {
-    return RAILWAY_API_BASE;
-  }
   if (host === "record-production.up.railway.app") {
     return origin;
   }
-  return origin || RAILWAY_API_BASE;
+  return RAILWAY_API_BASE;
 }
 
 export function formatApiError(detail: unknown, fallback: string): string {

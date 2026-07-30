@@ -37,12 +37,29 @@ export type PortOnePublicConfig = {
   portoneIdentityEnabled: boolean;
 };
 
+const RAILWAY_API_BASE = "https://record-production.up.railway.app";
+
+async function fetchPublicConfigJson(): Promise<Partial<PortOnePublicConfig>> {
+  const bases = [getApiBase(), RAILWAY_API_BASE].filter(
+    (base, index, list) => base && list.indexOf(base) === index,
+  );
+  for (const base of bases) {
+    try {
+      const res = await fetch(`${base}/api/public-config`, {
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      });
+      if (!res.ok) continue;
+      return (await res.json()) as Partial<PortOnePublicConfig>;
+    } catch {
+      // 같은 오리진 프록시가 없으면 Railway로 재시도한다.
+    }
+  }
+  return {};
+}
+
 export async function fetchPortOnePublicConfig(): Promise<PortOnePublicConfig> {
-  const res = await fetch(`${getApiBase()}/api/public-config`, {
-    headers: { Accept: "application/json" },
-    cache: "no-store",
-  });
-  const data = (await res.json().catch(() => ({}))) as Partial<PortOnePublicConfig>;
+  const data = await fetchPublicConfigJson();
   return {
     portoneStoreId: data.portoneStoreId?.trim() ?? "",
     portonePaymentChannelKey: data.portonePaymentChannelKey?.trim() ?? "",
@@ -56,18 +73,11 @@ export async function fetchPortOnePublicConfig(): Promise<PortOnePublicConfig> {
 function getApiBase(): string {
   const origin = window.location.origin;
   const host = window.location.hostname;
-  const railwayApiBase = "https://record-production.up.railway.app";
 
-  if (host.endsWith(".netlify.app") || host.endsWith(".github.io")) {
-    return railwayApiBase;
-  }
-  if (origin === "null" || origin.startsWith("file:")) {
-    return railwayApiBase;
-  }
   if (host === "record-production.up.railway.app") {
     return origin;
   }
-  return origin || railwayApiBase;
+  return RAILWAY_API_BASE;
 }
 
 export async function lookupMemberIdentityVerification(identityVerificationId: string): Promise<{
