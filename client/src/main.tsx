@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
 import App from "./App";
 import InAppBrowserBanner from "./InAppBrowserBanner";
+import PwaInstallPrompt from "./PwaInstallPrompt";
 import SharedTranscriptPage from "./SharedTranscriptPage";
 import "./styles/client-theme.css";
 import "./index.css";
@@ -26,5 +27,6 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <InAppBrowserBanner />
     {shareMatch ? <SharedTranscriptPage token={decodeURIComponent(shareMatch[1])} /> : <App />}
+    <PwaInstallPrompt />
   </StrictMode>,
 );

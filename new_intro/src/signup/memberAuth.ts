@@ -1,5 +1,5 @@
 const RAILWAY_API_BASE = "https://record-production.up.railway.app";
-const CLIENT_PWA_URL = "https://bulpen-user.netlify.app/";
+const CLIENT_PWA_URL = "https://user.bulpen.co.kr/";
 
 export const TOKEN_KEY = "member_access_token";
 export const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[#?!@$%^&*\-]).{8,16}$/;
