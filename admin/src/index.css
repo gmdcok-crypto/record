@@ -350,6 +350,11 @@ body {
 }
 
 /* Sidebar content must stay dark after light-theme utility remapping. */
+.admin-esl-theme .admin-esl-sidebar {
+  background: var(--admin-navy) !important;
+  color: rgba(255, 255, 255, 0.88) !important;
+}
+
 .admin-esl-sidebar [class*="bg-slate-"],
 .admin-esl-sidebar [class*="bg-cyan-"] {
   background-color: transparent !important;
