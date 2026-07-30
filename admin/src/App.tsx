@@ -2599,8 +2599,10 @@ function App() {
 
   if (authStatus === "loading") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-300">
-        관리자 세션을 확인하는 중입니다...
+      <div className="admin-esl-login flex min-h-screen items-center justify-center bg-slate-950 text-slate-300">
+        <div className="admin-esl-login-card rounded-2xl border border-slate-800 bg-slate-900/95 px-6 py-5 text-sm">
+          관리자 세션을 확인하는 중입니다...
+        </div>
       </div>
     );
   }
@@ -2610,11 +2612,11 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="relative min-h-screen">
-        <div className="relative mx-auto grid min-h-screen max-w-[1880px] gap-4 px-3 py-3 lg:grid-cols-[232px_minmax(0,1fr)] lg:px-4">
-          <aside className="rounded-2xl border border-slate-800 bg-slate-950/95 p-4">
-            <div className="border-b border-slate-800 pb-4">
+    <div className="admin-esl-theme min-h-screen bg-slate-950 text-slate-100">
+      <div className="admin-esl-shell relative min-h-screen">
+        <div className="admin-esl-layout relative mx-auto grid min-h-screen max-w-[1880px] gap-4 px-3 py-3 lg:grid-cols-[232px_minmax(0,1fr)] lg:px-4">
+          <aside className="admin-esl-sidebar rounded-2xl border border-slate-800 bg-slate-950/95 p-4">
+            <div className="admin-esl-brand border-b border-slate-800 pb-4">
               <div className="flex items-center gap-4">
                 <img
                   src="/bulpen-logo.png"
@@ -2628,7 +2630,7 @@ function App() {
               </div>
             </div>
 
-            <nav className="mt-4 space-y-1.5">
+            <nav className="admin-esl-nav mt-4 space-y-1.5">
               {menuItems.map((item) => {
                 const active = item.key === activeMenu;
                 return (
@@ -2678,8 +2680,8 @@ function App() {
             </div>
           </aside>
 
-          <main className={`space-y-4 ${!adminPushRegistered ? "pb-28 lg:pb-0" : ""}`}>
-            <section className="rounded-2xl border border-slate-800 bg-slate-900/92 px-4 py-3">
+          <main className={`admin-esl-main space-y-4 ${!adminPushRegistered ? "pb-28 lg:pb-0" : ""}`}>
+            <section className="admin-esl-topbar rounded-2xl border border-slate-800 bg-slate-900/92 px-4 py-3">
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Workspace</p>
               <div
                 className={`mt-1 gap-3 ${
@@ -2805,7 +2807,7 @@ function App() {
           </section>
             ) : null}
 
-            {content}
+            <div className="admin-esl-content">{content}</div>
           </main>
         </div>
       </div>

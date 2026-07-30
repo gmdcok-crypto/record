@@ -27,8 +27,8 @@ export default function AdminLogin({ onSuccess }: AdminLoginProps) {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-10 text-slate-100">
-      <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/95 p-6 shadow-2xl">
+    <div className="admin-esl-login flex min-h-screen items-center justify-center bg-slate-950 px-4 py-10 text-slate-100">
+      <div className="admin-esl-login-card w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/95 p-6 shadow-2xl">
         <div className="mb-6 flex items-center gap-5">
           <img
             src="/bulpen-logo.png"
