@@ -97,6 +97,8 @@ export type AdminOverviewStats = {
   waiting_assignment: number;
   working: number;
   final_done: number;
+  final_done_from?: string | null;
+  final_done_to?: string | null;
   total_sales: number;
   total_settlements: number;
   outstanding: number;
@@ -643,8 +645,14 @@ export async function fetchJob(jobId: string): Promise<JobResponse> {
   return res.json();
 }
 
-export async function fetchAdminOverview(): Promise<AdminOverview> {
-  const res = await adminFetch(`${apiBase()}/api/jobs/admin/overview`);
+export async function fetchAdminOverview(params?: {
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<AdminOverview> {
+  const url = new URL(`${apiBase()}/api/jobs/admin/overview`);
+  if (params?.dateFrom) url.searchParams.set("date_from", params.dateFrom);
+  if (params?.dateTo) url.searchParams.set("date_to", params.dateTo);
+  const res = await adminFetch(url.toString());
   if (!res.ok) {
     throw await parseApiError(res, "관리자 데이터를 불러올 수 없습니다");
   }

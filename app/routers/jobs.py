@@ -673,10 +673,15 @@ def admin_list_project_files(
 
 
 @router.get("/admin/overview")
-def admin_overview(db: Annotated[Session, Depends(get_db)], _admin: AdminAuth) -> dict:
+def admin_overview(
+    db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> dict:
     sales = safe_list_payment_records(db)
     try:
-        payload = dashboard_overview(db)
+        payload = dashboard_overview(db, date_from=date_from, date_to=date_to)
         if not payload.get("sales"):
             payload["sales"] = sales
         return payload
@@ -689,6 +694,8 @@ def admin_overview(db: Annotated[Session, Depends(get_db)], _admin: AdminAuth) -
                 "waiting_assignment": 0,
                 "working": 0,
                 "final_done": 0,
+                "final_done_from": date_from,
+                "final_done_to": date_to,
                 "total_sales": 0,
                 "total_settlements": 0,
                 "outstanding": 0,

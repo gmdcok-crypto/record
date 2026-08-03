@@ -54,6 +54,8 @@ THREAD_TRANSCRIBER_ADMIN = "transcriber_admin"
 
 # DB에 레거시 final_done 으로 남아 있어도 정산 대상으로 포함합니다.
 SETTLEMENT_ELIGIBLE_JOB_STATUSES = (PDF_SENT, "final_done")
+DASHBOARD_WAITING_STATUSES = (WAITING_ASSIGNMENT, "uploaded")
+DASHBOARD_WORKING_STATUSES = (WORKING, CLIENT_REVIEW, TRANSCRIBER_REVIEW, TRANSCRIPT_REQUEST)
 
 
 def _is_pdf_sent_job(job: Job) -> bool:
@@ -62,6 +64,66 @@ def _is_pdf_sent_job(job: Job) -> bool:
 
 def _settlement_eligible_jobs_filter():
     return Job.status.in_(SETTLEMENT_ELIGIBLE_JOB_STATUSES)
+
+
+def _parse_overview_date(raw: str | None) -> date | None:
+    if not raw:
+        return None
+    cleaned = raw.strip()
+    if not cleaned:
+        return None
+    return date.fromisoformat(cleaned[:10])
+
+
+def _kst_day_utc_range(day: date) -> tuple[datetime, datetime]:
+    start = datetime(day.year, day.month, day.day, tzinfo=KST).astimezone(timezone.utc)
+    return start, start + timedelta(days=1)
+
+
+def _count_jobs_with_statuses(db: Session, statuses: tuple[str, ...]) -> int:
+    try:
+        return int(db.scalar(select(func.count()).select_from(Job).where(Job.status.in_(statuses))) or 0)
+    except Exception:
+        db.rollback()
+        return 0
+
+
+def _count_pdf_delivered_in_range(db: Session, date_from: date, date_to: date) -> int:
+    if date_to < date_from:
+        date_from, date_to = date_to, date_from
+    range_start, _ = _kst_day_utc_range(date_from)
+    _, range_end = _kst_day_utc_range(date_to)
+
+    counted: set[str] = set()
+    try:
+        log_job_ids = db.scalars(
+            select(JobStatusLog.job_id)
+            .where(
+                JobStatusLog.to_status.in_(SETTLEMENT_ELIGIBLE_JOB_STATUSES),
+                JobStatusLog.changed_at >= range_start,
+                JobStatusLog.changed_at < range_end,
+            )
+            .distinct()
+        ).all()
+        counted.update(str(job_id) for job_id in log_job_ids)
+    except Exception:
+        db.rollback()
+
+    try:
+        jobs = db.scalars(
+            select(Job).where(
+                _settlement_eligible_jobs_filter(),
+                Job.completed_at.is_not(None),
+                Job.completed_at >= range_start,
+                Job.completed_at < range_end,
+            )
+        ).all()
+        for job in jobs:
+            counted.add(job.job_id)
+    except Exception:
+        db.rollback()
+
+    return len(counted)
 
 
 def empty_transcript_json(filename: str) -> dict:
@@ -2009,7 +2071,12 @@ def safe_list_payment_records(db: Session) -> list[dict]:
         return []
 
 
-def dashboard_overview(db: Session) -> dict:
+def dashboard_overview(
+    db: Session,
+    *,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> dict:
     payment_records = safe_list_payment_records(db)
     try:
         sync_generated_settlements(db)
@@ -2053,6 +2120,13 @@ def dashboard_overview(db: Session) -> dict:
         if job.payment_status != "paid"
     )
 
+    today = datetime.now(KST).date()
+    parsed_from = _parse_overview_date(date_from) or date(today.year, today.month, 1)
+    parsed_to = _parse_overview_date(date_to) or today
+    waiting_assignment = _count_jobs_with_statuses(db, DASHBOARD_WAITING_STATUSES)
+    working = _count_jobs_with_statuses(db, DASHBOARD_WORKING_STATUSES)
+    final_done = _count_pdf_delivered_in_range(db, parsed_from, parsed_to)
+
     from app.services.member_auth import list_members_admin
     from app.services.project_store import list_projects
 
@@ -2075,14 +2149,11 @@ def dashboard_overview(db: Session) -> dict:
     return {
         "stats": {
             "total_jobs": len(jobs),
-            "waiting_assignment": sum(1 for job in jobs if display_statuses[job.job_id] == "waiting_assignment"),
-            "working": sum(
-                1
-                for job in jobs
-                if display_statuses[job.job_id]
-                in {WORKING, CLIENT_REVIEW, TRANSCRIBER_REVIEW, TRANSCRIPT_REQUEST}
-            ),
-            "final_done": sum(1 for job in jobs if display_statuses[job.job_id] == PDF_SENT),
+            "waiting_assignment": waiting_assignment,
+            "working": working,
+            "final_done": final_done,
+            "final_done_from": parsed_from.isoformat(),
+            "final_done_to": parsed_to.isoformat(),
             "total_sales": total_sales,
             "total_settlements": total_settlements,
             "outstanding": outstanding,
