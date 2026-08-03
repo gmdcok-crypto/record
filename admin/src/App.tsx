@@ -2006,16 +2006,13 @@ function App() {
       <SectionCard title="진행현황(당월)" subtitle={`당월 현재 기준 · ${monthLabel}`}>
         <div className="grid gap-3 lg:grid-cols-3">
           {[
-            { title: "배정 대기", count: `${dashboardStats.waitingAssign}건`, tone: "amber" as const },
-            { title: "속기사 작업 중", count: `${dashboardStats.working}건`, tone: "cyan" as const },
-            { title: "완료", count: `${dashboardStats.finalDone}건`, tone: "emerald" as const },
+            { title: "배정 대기", count: `${dashboardStats.waitingAssign}건` },
+            { title: "속기사 작업 중", count: `${dashboardStats.working}건` },
+            { title: "완료", count: `${dashboardStats.finalDone}건` },
           ].map((item) => (
             <div key={item.title} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.title}</p>
               <p className="mt-2 text-2xl font-semibold text-white">{item.count}</p>
-              <div className="mt-3">
-                <SummaryChip label="집계" value="당월" tone={item.tone} />
-              </div>
             </div>
           ))}
         </div>
