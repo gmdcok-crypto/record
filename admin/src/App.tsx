@@ -2614,51 +2614,46 @@ function App() {
   return (
     <div className="admin-esl-theme min-h-screen bg-slate-950 text-slate-100">
       <div className="admin-esl-shell relative min-h-screen">
-        <div className="admin-esl-layout relative mx-auto grid min-h-screen max-w-[1880px] gap-4 px-3 py-3 lg:grid-cols-[232px_minmax(0,1fr)] lg:px-4">
-          <aside className="admin-esl-sidebar rounded-2xl border border-slate-800 bg-slate-950/95 p-4">
-            <div className="admin-esl-brand border-b border-slate-800 pb-4">
-              <div className="flex items-center gap-4">
-                <img
-                  src="/bulpen-logo.png"
-                  alt="BULPEN"
-                  className="h-14 w-14 shrink-0 rounded-xl bg-white object-contain p-1"
-                />
-                <div className="min-w-0 pl-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-300">Bulpen Admin</p>
-                  <h1 className="mt-1 text-base font-semibold text-white">Operations Console</h1>
-                </div>
-              </div>
-            </div>
+        <div className="admin-esl-layout relative mx-auto grid min-h-screen max-w-[1880px] gap-4 px-3 py-3 lg:grid-cols-[220px_minmax(0,1fr)] lg:px-4">
+          <aside className="admin-esl-sidebar" aria-label="주 메뉴">
+            <div className="admin-esl-logo">불판관리자</div>
 
-            <nav className="admin-esl-nav mt-4 space-y-1.5">
-              {menuItems.map((item) => {
-                const active = item.key === activeMenu;
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => setActiveMenu(item.key)}
-                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left transition ${
-                      active
-                        ? "bg-cyan-500 text-slate-950"
-                        : "bg-slate-900/60 text-slate-300 hover:bg-slate-800 hover:text-white"
-                    }`}
-                  >
-                    <span className="text-sm font-medium">{item.label}</span>
-                  </button>
-                );
-              })}
+            <nav className="admin-esl-nav" aria-label="메뉴">
+              <div className="admin-esl-menu-group">
+                <div className="admin-esl-menu-title">
+                  운영 관리
+                  <span className="admin-esl-chev" aria-hidden="true">
+                    ▾
+                  </span>
+                </div>
+                <ul className="admin-esl-submenu">
+                  {menuItems.map((item) => {
+                    const active = item.key === activeMenu;
+                    return (
+                      <li key={item.key}>
+                        <button
+                          type="button"
+                          onClick={() => setActiveMenu(item.key)}
+                          className={`admin-esl-menu-item${active ? " is-active" : ""}`}
+                        >
+                          {item.label}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             </nav>
 
-            <div className="mt-4 rounded-xl border border-cyan-500/25 bg-cyan-500/10 p-3 lg:hidden">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300">모바일 알림</p>
-              <p className="mt-1.5 text-xs leading-5 text-cyan-50/90">
+            <div className="admin-esl-sidebar-push lg:hidden">
+              <p className="admin-esl-sidebar-push-title">모바일 알림</p>
+              <p className="admin-esl-sidebar-push-copy">
                 {adminPushRegistered
                   ? "이 기기에서 신규 가입, 문의, 검토 요청 알림을 받고 있습니다."
                   : "신규 가입, 의뢰인 문의, 검토 요청을 이 기기로 받으려면 알림을 허용해 주세요."}
               </p>
-              <div className="mt-3 flex flex-col gap-2">
-                <span className="text-[11px] text-slate-400">
+              <div className="admin-esl-sidebar-push-actions">
+                <span>
                   상태:{" "}
                   {adminPushRegistered
                     ? "웹푸시 등록됨"
@@ -2671,12 +2666,18 @@ function App() {
                     type="button"
                     onClick={() => void enableAdminPushNotifications()}
                     disabled={adminPushLoading || adminPushPermission === "unsupported"}
-                    className="w-full rounded-xl border border-cyan-500/40 bg-cyan-500/15 px-3 py-2.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="admin-esl-sidebar-push-btn"
                   >
                     {adminPushLoading ? "등록 중..." : "관리자 알림 받기"}
                   </button>
                 ) : null}
               </div>
+            </div>
+
+            <div className="admin-esl-sidebar-foot">
+              <button type="button" className="admin-esl-menu-item" onClick={handleLogout}>
+                로그아웃
+              </button>
             </div>
           </aside>
 
