@@ -700,8 +700,6 @@ function App() {
   const [adminForm, setAdminForm] = useState<AdminForm>(EMPTY_ADMIN_FORM);
   const [salesDateFrom, setSalesDateFrom] = useState(() => todayKstDateKey());
   const [salesDateTo, setSalesDateTo] = useState(() => todayKstDateKey());
-  const [dashboardDateFrom, setDashboardDateFrom] = useState(() => monthStartKstDateKey());
-  const [dashboardDateTo, setDashboardDateTo] = useState(() => todayKstDateKey());
   const [salesTargetInput, setSalesTargetInput] = useState("");
   const [salesTargetLoading, setSalesTargetLoading] = useState(false);
   const [salesTargetModalOpen, setSalesTargetModalOpen] = useState(false);
@@ -738,10 +736,14 @@ function App() {
     setLoading(false);
   };
 
-  const loadOverview = async (options?: { silent?: boolean; dateFrom?: string; dateTo?: string }) => {
+  const currentMonthRange = () => ({
+    dateFrom: monthStartKstDateKey(),
+    dateTo: todayKstDateKey(),
+  });
+
+  const loadOverview = async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
-    const dateFrom = options?.dateFrom ?? dashboardDateFrom;
-    const dateTo = options?.dateTo ?? dashboardDateTo;
+    const { dateFrom, dateTo } = currentMonthRange();
     try {
       if (!silent) {
         setLoading(true);
@@ -789,8 +791,12 @@ function App() {
       if (!alive) return;
       setLoading(true);
       try {
+        const monthRange = {
+          dateFrom: monthStartKstDateKey(),
+          dateTo: todayKstDateKey(),
+        };
         const [data, sales] = await Promise.all([
-          fetchAdminOverview({ dateFrom: dashboardDateFrom, dateTo: dashboardDateTo }),
+          fetchAdminOverview(monthRange),
           fetchAdminSales().catch((err) => {
             console.error(err);
             return [];
@@ -880,15 +886,6 @@ function App() {
       document.removeEventListener("visibilitychange", refreshVisibleData);
     };
   }, [authStatus, adminProfile?.id]);
-
-  useEffect(() => {
-    if (authStatus !== "authed" || !adminProfile) return;
-    void loadOverview({
-      silent: true,
-      dateFrom: dashboardDateFrom,
-      dateTo: dashboardDateTo,
-    });
-  }, [dashboardDateFrom, dashboardDateTo]);
 
   useEffect(() => {
     if (!adminProfile) return;
@@ -2003,67 +2000,28 @@ function App() {
     [transcribers],
   );
 
-  const renderDashboard = () => (
-    <SectionCard title="진행 현황" subtitle="배정·작업은 현재 건수, PDF 전달은 선택한 기간 집계입니다.">
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-2 text-[11px] text-slate-400">
-          <span className="shrink-0">PDF 집계 시작</span>
-          <input
-            type="date"
-            value={dashboardDateFrom}
-            max={dashboardDateTo}
-            onChange={(event) => {
-              const nextFrom = event.target.value;
-              setDashboardDateFrom(nextFrom);
-              if (nextFrom > dashboardDateTo) {
-                setDashboardDateTo(nextFrom);
-              }
-            }}
-            className="rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1.5 text-[12px] text-slate-200"
-          />
-        </label>
-        <span className="text-xs text-slate-500">~</span>
-        <label className="flex items-center gap-2 text-[11px] text-slate-400">
-          <span className="shrink-0">PDF 집계 종료</span>
-          <input
-            type="date"
-            value={dashboardDateTo}
-            min={dashboardDateFrom}
-            onChange={(event) => {
-              const nextTo = event.target.value;
-              setDashboardDateTo(nextTo);
-              if (nextTo < dashboardDateFrom) {
-                setDashboardDateFrom(nextTo);
-              }
-            }}
-            className="rounded-md border border-slate-700 bg-slate-950/70 px-2.5 py-1.5 text-[12px] text-slate-200"
-          />
-        </label>
-        <span className="text-[11px] text-slate-500">기본: 이번 달 1일 ~ 오늘</span>
-      </div>
-      <div className="grid gap-3 lg:grid-cols-3">
-        {[
-          { title: "배정 대기", count: `${dashboardStats.waitingAssign}건`, tone: "amber" as const, hint: "현재" },
-          { title: "속기사 작업 중", count: `${dashboardStats.working}건`, tone: "cyan" as const, hint: "현재" },
-          {
-            title: "PDF 전달",
-            count: `${dashboardStats.finalDone}건`,
-            tone: "emerald" as const,
-            hint: `${dashboardDateFrom} ~ ${dashboardDateTo}`,
-          },
-        ].map((item) => (
-          <div key={item.title} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.title}</p>
-            <p className="mt-2 text-2xl font-semibold text-white">{item.count}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <SummaryChip label="상태" value={item.title} tone={item.tone} />
-              <SummaryChip label="집계" value={item.hint} tone="slate" />
+  const renderDashboard = () => {
+    const monthLabel = `${monthStartKstDateKey().slice(0, 7)} · 1일~오늘`;
+    return (
+      <SectionCard title="진행현황(당월)" subtitle={`당월 현재 기준 · ${monthLabel}`}>
+        <div className="grid gap-3 lg:grid-cols-3">
+          {[
+            { title: "배정 대기", count: `${dashboardStats.waitingAssign}건`, tone: "amber" as const },
+            { title: "속기사 작업 중", count: `${dashboardStats.working}건`, tone: "cyan" as const },
+            { title: "완료", count: `${dashboardStats.finalDone}건`, tone: "emerald" as const },
+          ].map((item) => (
+            <div key={item.title} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.title}</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{item.count}</p>
+              <div className="mt-3">
+                <SummaryChip label="집계" value="당월" tone={item.tone} />
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-    </SectionCard>
-  );
+          ))}
+        </div>
+      </SectionCard>
+    );
+  };
 
   const renderJobs = () => (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/92 p-4 shadow-[0_10px_30px_rgba(2,6,23,0.28)]">
