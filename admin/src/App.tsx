@@ -539,46 +539,88 @@ function statusTone(status: JobStatus | SettlementStatus | PaymentStatus | Trans
   }
 }
 
-function DashboardKpiCard({
+function DashboardStatusCard({
   label,
   value,
-  hint,
+  tone,
+  icon,
 }: {
   label: string;
-  value: string;
-  hint?: string;
+  value: number;
+  tone: "blue" | "amber" | "violet" | "cyan" | "teal" | "orange";
+  icon: string;
 }) {
   return (
-    <div className="admin-esl-dash-kpi">
-      <p className="admin-esl-dash-kpi-label">{label}</p>
-      <p className="admin-esl-dash-kpi-value">{value}</p>
-      {hint ? <p className="admin-esl-dash-kpi-hint">{hint}</p> : null}
+    <div className={`admin-ref-status-card is-${tone}`}>
+      <span className="admin-ref-status-icon" aria-hidden="true">
+        {icon}
+      </span>
+      <div className="admin-ref-status-copy">
+        <p className="admin-ref-status-label">{label}</p>
+        <p className="admin-ref-status-value">{value}</p>
+      </div>
     </div>
   );
 }
 
-function DashboardPanel({
-  title,
-  subtitle,
-  action,
-  children,
+function DashboardWeekChart({
+  labels,
+  counts,
 }: {
-  title: string;
-  subtitle?: string;
-  action?: React.ReactNode;
-  children: React.ReactNode;
+  labels: string[];
+  counts: number[];
 }) {
+  const max = Math.max(...counts, 1);
+  const width = 560;
+  const height = 180;
+  const padX = 28;
+  const padY = 24;
+  const innerW = width - padX * 2;
+  const innerH = height - padY * 2;
+  const step = counts.length > 1 ? innerW / (counts.length - 1) : innerW;
+  const points = counts
+    .map((count, index) => {
+      const x = padX + step * index;
+      const y = padY + innerH - (count / max) * innerH;
+      return `${x},${y}`;
+    })
+    .join(" ");
+
   return (
-    <section className="admin-esl-dash-panel">
-      <div className="admin-esl-dash-panel-head">
-        <div>
-          <h3 className="admin-esl-dash-panel-title">{title}</h3>
-          {subtitle ? <p className="admin-esl-dash-panel-subtitle">{subtitle}</p> : null}
-        </div>
-        {action}
+    <div className="admin-ref-chart">
+      <svg viewBox={`0 0 ${width} ${height}`} className="admin-ref-chart-svg" role="img" aria-label="주간 의뢰 추이">
+        {[0.25, 0.5, 0.75].map((ratio) => {
+          const y = padY + innerH * (1 - ratio);
+          return <line key={ratio} x1={padX} x2={width - padX} y1={y} y2={y} className="admin-ref-chart-grid" />;
+        })}
+        <polyline points={points} className="admin-ref-chart-line" fill="none" />
+        {counts.map((count, index) => {
+          const x = padX + step * index;
+          const y = padY + innerH - (count / max) * innerH;
+          return <circle key={index} cx={x} cy={y} r={4.5} className="admin-ref-chart-dot" />;
+        })}
+      </svg>
+      <div className="admin-ref-chart-labels">
+        {labels.map((label) => (
+          <span key={label}>{label}</span>
+        ))}
       </div>
-      <div className="admin-esl-dash-panel-body">{children}</div>
-    </section>
+    </div>
+  );
+}
+
+function DashboardSalesBars({ amounts }: { amounts: number[] }) {
+  const max = Math.max(...amounts, 1);
+  return (
+    <div className="admin-ref-sales-bars" aria-hidden="true">
+      {amounts.map((amount, index) => (
+        <span
+          key={index}
+          className="admin-ref-sales-bar"
+          style={{ height: `${Math.max(12, Math.round((amount / max) * 100))}%` }}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -2043,108 +2085,212 @@ function App() {
     [transcribers],
   );
 
+  const dashboardJobMetrics = useMemo(() => {
+    const today = todayKstDateKey();
+    const reviewStatuses = new Set<JobStatus>(["의뢰인 검토", "속기사검토", "녹취록 요청"]);
+    let newRequests = 0;
+    let pendingReview = 0;
+    let dueToday = 0;
+
+    for (const raw of overview?.jobs ?? []) {
+      const status = mapJobStatus(raw.status);
+      if (status === "배정 대기" && getKstDateKey(raw.uploaded_at) === today) {
+        newRequests += 1;
+      }
+      if (reviewStatuses.has(status)) pendingReview += 1;
+      if (getKstDateKey(raw.due_at) === today) dueToday += 1;
+    }
+
+    return {
+      newRequests,
+      pendingPayment: 0,
+      pendingAssign: dashboardStats.waitingAssign,
+      inProgress: dashboardStats.working,
+      pendingReview,
+      dueToday,
+    };
+  }, [overview?.jobs, dashboardStats.waitingAssign, dashboardStats.working]);
+
+  const dashboardWeekSeries = useMemo(() => {
+    const weekdayLabels = ["일", "월", "화", "수", "목", "금", "토"];
+    const keys: string[] = [];
+    for (let offset = 6; offset >= 0; offset -= 1) {
+      const date = new Date();
+      date.setDate(date.getDate() - offset);
+      keys.push(todayKstDateKey(date));
+    }
+    const counts = keys.map(() => 0);
+    for (const raw of overview?.jobs ?? []) {
+      const key = getKstDateKey(raw.uploaded_at);
+      const index = key ? keys.indexOf(key) : -1;
+      if (index >= 0) counts[index] += 1;
+    }
+    const labels = keys.map((key) => {
+      const day = new Date(`${key}T12:00:00+09:00`).getUTCDay();
+      return weekdayLabels[day];
+    });
+    return { labels, counts };
+  }, [overview?.jobs]);
+
+  const dashboardSalesSnapshot = useMemo(() => {
+    const today = todayKstDateKey();
+    const monthPrefix = today.slice(0, 7);
+    const dayKeys: string[] = [];
+    for (let offset = 6; offset >= 0; offset -= 1) {
+      const date = new Date();
+      date.setDate(date.getDate() - offset);
+      dayKeys.push(todayKstDateKey(date));
+    }
+    const dailyAmounts = dayKeys.map(() => 0);
+    let todayTotal = 0;
+    let monthTotal = 0;
+    for (const item of sales) {
+      if (!item.paidAtKey) continue;
+      if (item.paidAtKey === today) todayTotal += item.amount;
+      if (item.paidAtKey.startsWith(monthPrefix)) monthTotal += item.amount;
+      const index = dayKeys.indexOf(item.paidAtKey);
+      if (index >= 0) dailyAmounts[index] += item.amount;
+    }
+    return { todayTotal, monthTotal, dailyAmounts };
+  }, [sales]);
+
+  const dashboardTranscriberStrip = useMemo(
+    () => [
+      {
+        label: "활동 가능",
+        value: transcribers.filter((person) => person.status === "작업 가능").length,
+        tone: "emerald" as const,
+        icon: "✓",
+      },
+      {
+        label: "작업 중",
+        value: transcribers.filter((person) => person.status === "작업 중").length,
+        tone: "blue" as const,
+        icon: "↻",
+      },
+      {
+        label: "휴면",
+        value: transcribers.filter((person) => person.status === "휴무" || person.status === "비활성").length,
+        tone: "slate" as const,
+        icon: "—",
+      },
+    ],
+    [transcribers],
+  );
+
   const renderDashboard = () => {
-    const monthLabel = `${monthStartKstDateKey().slice(0, 7)} · 1일~오늘`;
-    const recentJobs = jobs.slice(0, 8);
-    const statusCounts = jobs.reduce<Record<string, number>>((acc, job) => {
-      acc[job.status] = (acc[job.status] ?? 0) + 1;
-      return acc;
-    }, {});
+    const recentJobs = jobs.slice(0, 6);
+    const canShowSales = adminProfile ? canAccessMenu(adminProfile.role, "sales") : false;
 
     return (
-      <div className="admin-esl-dashboard">
-        <div className="admin-esl-dash-kpi-grid">
-          <DashboardKpiCard label="전체 의뢰" value={`${dashboardStats.totalJobs}건`} hint="최근 50건 기준" />
-          <DashboardKpiCard label="배정 대기" value={`${dashboardStats.waitingAssign}건`} hint="즉시 배정 필요" />
-          <DashboardKpiCard label="작업 중" value={`${dashboardStats.working}건`} hint="속기사 작업 진행" />
-          <DashboardKpiCard label="당월 완료" value={`${dashboardStats.finalDone}건`} hint={monthLabel} />
+      <div className="admin-ref-dashboard">
+        <div className="admin-ref-dash-header">
+          <div>
+            <h2 className="admin-ref-dash-title">대시보드</h2>
+            <p className="admin-ref-dash-subtitle">오늘 처리해야 할 의뢰와 운영 현황을 한눈에 확인합니다.</p>
+          </div>
+          <button type="button" className="admin-ref-primary-btn" onClick={() => setActiveMenu("jobs")}>
+            + 신규 의뢰 등록
+          </button>
         </div>
 
-        <div className="admin-esl-dash-main-grid">
-          <DashboardPanel title="진행현황(당월)" subtitle={`당월 PDF 전달 완료 · ${monthLabel}`}>
-            <div className="admin-esl-dash-pipeline">
-              {[
-                { title: "배정 대기", count: `${dashboardStats.waitingAssign}건`, tone: "is-waiting" as const },
-                { title: "속기사 작업 중", count: `${dashboardStats.working}건`, tone: "is-working" as const },
-                { title: "완료", count: `${dashboardStats.finalDone}건`, tone: "is-done" as const },
-              ].map((item) => (
-                <div key={item.title} className={`admin-esl-dash-pipeline-card ${item.tone}`}>
-                  <p className="admin-esl-dash-pipeline-label">{item.title}</p>
-                  <p className="admin-esl-dash-pipeline-value">{item.count}</p>
+        <div className="admin-ref-status-grid">
+          <DashboardStatusCard label="신규 의뢰" value={dashboardJobMetrics.newRequests} tone="blue" icon="＋" />
+          <DashboardStatusCard label="입금 대기" value={dashboardJobMetrics.pendingPayment} tone="amber" icon="₩" />
+          <DashboardStatusCard label="배정 대기" value={dashboardJobMetrics.pendingAssign} tone="violet" icon="◎" />
+          <DashboardStatusCard label="작업 중" value={dashboardJobMetrics.inProgress} tone="cyan" icon="↻" />
+          <DashboardStatusCard label="검수 대기" value={dashboardJobMetrics.pendingReview} tone="teal" icon="⌕" />
+          <DashboardStatusCard label="오늘 마감" value={dashboardJobMetrics.dueToday} tone="orange" icon="⏱" />
+        </div>
+
+        <div className={`admin-ref-mid-grid${canShowSales ? "" : " is-wide-chart"}`}>
+          <section className="admin-ref-panel">
+            <div className="admin-ref-panel-head">
+              <h3 className="admin-ref-panel-title">주간 의뢰 현황</h3>
+              <span className="admin-ref-select">이번 주</span>
+            </div>
+            <DashboardWeekChart labels={dashboardWeekSeries.labels} counts={dashboardWeekSeries.counts} />
+          </section>
+
+          {canShowSales ? (
+            <section className="admin-ref-panel">
+              <div className="admin-ref-panel-head">
+                <h3 className="admin-ref-panel-title">매출 요약</h3>
+                <button type="button" className="admin-ref-link-btn" onClick={() => setActiveMenu("sales")}>
+                  상세
+                </button>
+              </div>
+              <div className="admin-ref-sales-grid">
+                <div>
+                  <p className="admin-ref-sales-label">오늘 매출</p>
+                  <p className="admin-ref-sales-value">{formatCurrency(dashboardSalesSnapshot.todayTotal)}</p>
+                  <DashboardSalesBars amounts={dashboardSalesSnapshot.dailyAmounts} />
+                </div>
+                <div>
+                  <p className="admin-ref-sales-label">이번 달 매출</p>
+                  <p className="admin-ref-sales-value">{formatCurrency(dashboardSalesSnapshot.monthTotal)}</p>
+                  <DashboardSalesBars amounts={dashboardSalesSnapshot.dailyAmounts} />
+                </div>
+              </div>
+            </section>
+          ) : null}
+        </div>
+
+        <div className="admin-ref-bottom-grid">
+          <section className="admin-ref-panel">
+            <div className="admin-ref-panel-head">
+              <h3 className="admin-ref-panel-title">속기사 현황</h3>
+            </div>
+            <div className="admin-ref-transcriber-grid">
+              {dashboardTranscriberStrip.map((item) => (
+                <div key={item.label} className={`admin-ref-transcriber-card is-${item.tone}`}>
+                  <span className="admin-ref-transcriber-icon">{item.icon}</span>
+                  <div>
+                    <p className="admin-ref-transcriber-label">{item.label}</p>
+                    <p className="admin-ref-transcriber-value">{item.value}명</p>
+                  </div>
                 </div>
               ))}
             </div>
-          </DashboardPanel>
+          </section>
 
-          <DashboardPanel
-            title="최근 의뢰"
-            subtitle="최근 업데이트된 작업입니다."
-            action={
-              <button type="button" className="admin-esl-dash-link-btn" onClick={() => setActiveMenu("jobs")}>
+          <section className="admin-ref-panel">
+            <div className="admin-ref-panel-head">
+              <h3 className="admin-ref-panel-title">최근 접수 의뢰</h3>
+              <button type="button" className="admin-ref-link-btn" onClick={() => setActiveMenu("jobs")}>
                 전체 보기
               </button>
-            }
-          >
+            </div>
             {recentJobs.length === 0 ? (
-              <div className="admin-esl-dash-empty">표시할 의뢰가 없습니다.</div>
+              <div className="admin-ref-empty">표시할 의뢰가 없습니다.</div>
             ) : (
-              <div className="admin-esl-dash-table-wrap">
-                <table className="admin-esl-dash-table">
+              <div className="admin-ref-table-wrap">
+                <table className="admin-ref-table">
                   <thead>
                     <tr>
-                      <th>의뢰인</th>
-                      <th>파일</th>
+                      <th>의뢰명</th>
                       <th>상태</th>
-                      <th>담당</th>
+                      <th>마감</th>
                     </tr>
                   </thead>
                   <tbody>
                     {recentJobs.map((job) => (
                       <tr key={job.id}>
-                        <td>{job.client}</td>
                         <td>
-                          <div className="font-medium">{job.title}</div>
-                          <div className="mt-0.5 text-[0.74rem] text-[var(--admin-muted)]">{job.filename}</div>
+                          <div className="admin-ref-table-title">{job.title}</div>
+                          <div className="admin-ref-table-sub">{job.client}</div>
                         </td>
                         <td>
-                          <span className={`admin-esl-dash-status ${statusTone(job.status)}`}>{job.status}</span>
+                          <span className={`admin-ref-badge ${statusTone(job.status)}`}>{job.status}</span>
                         </td>
-                        <td>{job.assignee}</td>
+                        <td className="admin-ref-table-due">{job.dueAt}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-          </DashboardPanel>
-        </div>
-
-        <div className="admin-esl-dash-secondary-grid">
-          <DashboardPanel title="상태별 요약" subtitle="최근 의뢰 기준 분포">
-            {jobs.length === 0 ? (
-              <div className="admin-esl-dash-empty">집계할 데이터가 없습니다.</div>
-            ) : (
-              <div className="admin-esl-dash-chip-grid">
-                {Object.entries(statusCounts).map(([status, count]) => (
-                  <div key={status} className="admin-esl-dash-chip">
-                    <p className="admin-esl-dash-chip-label">{status}</p>
-                    <p className="admin-esl-dash-chip-value">{count}건</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </DashboardPanel>
-
-          <DashboardPanel title="속기사 현황" subtitle="배정 가능 인력 요약">
-            <div className="admin-esl-dash-chip-grid">
-              {transcriberSummaryMetrics.map((metric) => (
-                <div key={metric.label} className="admin-esl-dash-chip">
-                  <p className="admin-esl-dash-chip-label">{metric.label}</p>
-                  <p className="admin-esl-dash-chip-value">{metric.value}</p>
-                </div>
-              ))}
-            </div>
-          </DashboardPanel>
+          </section>
         </div>
       </div>
     );
@@ -2818,6 +2964,7 @@ function App() {
           </aside>
 
           <main className={`admin-esl-main space-y-4 ${!adminPushRegistered ? "pb-28 lg:pb-0" : ""}`}>
+            {activeMenu !== "dashboard" ? (
             <section className="admin-esl-topbar rounded-2xl border border-slate-800 bg-slate-900/92 px-4 py-3">
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Workspace</p>
               <div
@@ -2830,21 +2977,19 @@ function App() {
                 <h2 className="text-lg font-semibold text-white">
                   {activeMenu === "jobs"
                     ? "작업 운영 시트"
-                    : activeMenu === "dashboard"
-                      ? "운영 대시보드"
-                      : activeMenu === "transcribers"
-                        ? "속기사 관리"
-                        : activeMenu === "members"
-                          ? "회원 관리"
-                          : activeMenu === "sales"
-                                ? "매출 관리"
-                                : activeMenu === "expenses"
-                                  ? "지출 관리"
-                                : activeMenu === "reports"
-                                  ? "집계"
-                                  : activeMenu === "admins"
-                                    ? "관리자 관리"
-                                  : "분석"}
+                    : activeMenu === "transcribers"
+                      ? "속기사 관리"
+                      : activeMenu === "members"
+                        ? "회원 관리"
+                        : activeMenu === "sales"
+                          ? "매출 관리"
+                          : activeMenu === "expenses"
+                            ? "지출 관리"
+                            : activeMenu === "reports"
+                              ? "집계"
+                              : activeMenu === "admins"
+                                ? "관리자 관리"
+                                : "분석"}
                 </h2>
                 {activeMenu === "sales" ? (
                   <div className="flex flex-wrap items-center justify-center gap-2 lg:px-4">
@@ -2937,6 +3082,7 @@ function App() {
                 </div>
               </div>
             </section>
+            ) : null}
 
             {loading ? (
               <section className="rounded-2xl border border-slate-800 bg-slate-950/80 px-5 py-10 text-center text-slate-400">
