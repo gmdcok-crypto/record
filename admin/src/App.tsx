@@ -539,6 +539,49 @@ function statusTone(status: JobStatus | SettlementStatus | PaymentStatus | Trans
   }
 }
 
+function DashboardKpiCard({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  return (
+    <div className="admin-esl-dash-kpi">
+      <p className="admin-esl-dash-kpi-label">{label}</p>
+      <p className="admin-esl-dash-kpi-value">{value}</p>
+      {hint ? <p className="admin-esl-dash-kpi-hint">{hint}</p> : null}
+    </div>
+  );
+}
+
+function DashboardPanel({
+  title,
+  subtitle,
+  action,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="admin-esl-dash-panel">
+      <div className="admin-esl-dash-panel-head">
+        <div>
+          <h3 className="admin-esl-dash-panel-title">{title}</h3>
+          {subtitle ? <p className="admin-esl-dash-panel-subtitle">{subtitle}</p> : null}
+        </div>
+        {action}
+      </div>
+      <div className="admin-esl-dash-panel-body">{children}</div>
+    </section>
+  );
+}
+
 function StatCard({
   label,
   value,
@@ -2002,21 +2045,108 @@ function App() {
 
   const renderDashboard = () => {
     const monthLabel = `${monthStartKstDateKey().slice(0, 7)} · 1일~오늘`;
+    const recentJobs = jobs.slice(0, 8);
+    const statusCounts = jobs.reduce<Record<string, number>>((acc, job) => {
+      acc[job.status] = (acc[job.status] ?? 0) + 1;
+      return acc;
+    }, {});
+
     return (
-      <SectionCard title="진행현황(당월)" subtitle={`당월 현재 기준 · ${monthLabel}`}>
-        <div className="grid gap-3 lg:grid-cols-3">
-          {[
-            { title: "배정 대기", count: `${dashboardStats.waitingAssign}건` },
-            { title: "속기사 작업 중", count: `${dashboardStats.working}건` },
-            { title: "완료", count: `${dashboardStats.finalDone}건` },
-          ].map((item) => (
-            <div key={item.title} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.title}</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{item.count}</p>
-            </div>
-          ))}
+      <div className="admin-esl-dashboard">
+        <div className="admin-esl-dash-kpi-grid">
+          <DashboardKpiCard label="전체 의뢰" value={`${dashboardStats.totalJobs}건`} hint="최근 50건 기준" />
+          <DashboardKpiCard label="배정 대기" value={`${dashboardStats.waitingAssign}건`} hint="즉시 배정 필요" />
+          <DashboardKpiCard label="작업 중" value={`${dashboardStats.working}건`} hint="속기사 작업 진행" />
+          <DashboardKpiCard label="당월 완료" value={`${dashboardStats.finalDone}건`} hint={monthLabel} />
         </div>
-      </SectionCard>
+
+        <div className="admin-esl-dash-main-grid">
+          <DashboardPanel title="진행현황(당월)" subtitle={`당월 PDF 전달 완료 · ${monthLabel}`}>
+            <div className="admin-esl-dash-pipeline">
+              {[
+                { title: "배정 대기", count: `${dashboardStats.waitingAssign}건`, tone: "is-waiting" as const },
+                { title: "속기사 작업 중", count: `${dashboardStats.working}건`, tone: "is-working" as const },
+                { title: "완료", count: `${dashboardStats.finalDone}건`, tone: "is-done" as const },
+              ].map((item) => (
+                <div key={item.title} className={`admin-esl-dash-pipeline-card ${item.tone}`}>
+                  <p className="admin-esl-dash-pipeline-label">{item.title}</p>
+                  <p className="admin-esl-dash-pipeline-value">{item.count}</p>
+                </div>
+              ))}
+            </div>
+          </DashboardPanel>
+
+          <DashboardPanel
+            title="최근 의뢰"
+            subtitle="최근 업데이트된 작업입니다."
+            action={
+              <button type="button" className="admin-esl-dash-link-btn" onClick={() => setActiveMenu("jobs")}>
+                전체 보기
+              </button>
+            }
+          >
+            {recentJobs.length === 0 ? (
+              <div className="admin-esl-dash-empty">표시할 의뢰가 없습니다.</div>
+            ) : (
+              <div className="admin-esl-dash-table-wrap">
+                <table className="admin-esl-dash-table">
+                  <thead>
+                    <tr>
+                      <th>의뢰인</th>
+                      <th>파일</th>
+                      <th>상태</th>
+                      <th>담당</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentJobs.map((job) => (
+                      <tr key={job.id}>
+                        <td>{job.client}</td>
+                        <td>
+                          <div className="font-medium">{job.title}</div>
+                          <div className="mt-0.5 text-[0.74rem] text-[var(--admin-muted)]">{job.filename}</div>
+                        </td>
+                        <td>
+                          <span className={`admin-esl-dash-status ${statusTone(job.status)}`}>{job.status}</span>
+                        </td>
+                        <td>{job.assignee}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </DashboardPanel>
+        </div>
+
+        <div className="admin-esl-dash-secondary-grid">
+          <DashboardPanel title="상태별 요약" subtitle="최근 의뢰 기준 분포">
+            {jobs.length === 0 ? (
+              <div className="admin-esl-dash-empty">집계할 데이터가 없습니다.</div>
+            ) : (
+              <div className="admin-esl-dash-chip-grid">
+                {Object.entries(statusCounts).map(([status, count]) => (
+                  <div key={status} className="admin-esl-dash-chip">
+                    <p className="admin-esl-dash-chip-label">{status}</p>
+                    <p className="admin-esl-dash-chip-value">{count}건</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </DashboardPanel>
+
+          <DashboardPanel title="속기사 현황" subtitle="배정 가능 인력 요약">
+            <div className="admin-esl-dash-chip-grid">
+              {transcriberSummaryMetrics.map((metric) => (
+                <div key={metric.label} className="admin-esl-dash-chip">
+                  <p className="admin-esl-dash-chip-label">{metric.label}</p>
+                  <p className="admin-esl-dash-chip-value">{metric.value}</p>
+                </div>
+              ))}
+            </div>
+          </DashboardPanel>
+        </div>
+      </div>
     );
   };
 
