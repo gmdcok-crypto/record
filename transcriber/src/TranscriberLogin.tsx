@@ -56,19 +56,15 @@ export default function TranscriberLogin({ onSuccess, onSignup }: TranscriberLog
         <button
           type="submit"
           disabled={submitting}
-          className="min-h-12 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-12 rounded-xl bg-sky-500 text-sm font-semibold text-slate-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {submitting ? "로그인 중…" : "로그인"}
         </button>
       </form>
 
-      <p className="text-center text-sm text-[var(--esl-muted)]">
+      <p className="text-center text-sm text-slate-400">
         아직 계정이 없으신가요?{" "}
-        <button
-          type="button"
-          onClick={onSignup}
-          className="font-semibold text-[var(--esl-navy)] hover:text-[var(--esl-navy-hover)]"
-        >
+        <button type="button" onClick={onSignup} className="font-semibold text-sky-400 hover:text-sky-300">
           회원가입
         </button>
       </p>

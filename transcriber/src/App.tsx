@@ -150,14 +150,14 @@ function fileWorkflowStatus(file: { status: string; workflow_status?: string }):
 function renderTranscriberInquiryBadge(status?: "reply_pending" | "reply_arrived" | null) {
   if (status === "reply_pending") {
     return (
-      <span className="inline-flex rounded-full border border-amber-500/30 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+      <span className="inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
         답변 필요
       </span>
     );
   }
   if (status === "reply_arrived") {
     return (
-      <span className="inline-flex rounded-full border border-violet-500/30 bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
+      <span className="inline-flex rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
         답변 도착
       </span>
     );
@@ -168,19 +168,19 @@ function renderTranscriberInquiryBadge(status?: "reply_pending" | "reply_arrived
 function fileStatusStyle(status: string): string {
   switch (normalizeWorkflowStatus(status)) {
     case "pdf_sent":
-      return "border border-emerald-500/30 bg-emerald-50 text-emerald-700";
+      return "border border-emerald-400/40 bg-emerald-500/25 text-emerald-100";
     case "client_review":
     case "transcriber_review":
     case "transcript_request":
-      return "border border-violet-500/30 bg-violet-50 text-violet-700";
+      return "border border-violet-400/40 bg-violet-500/25 text-violet-100";
     case "working":
-      return "border border-cyan-500/30 bg-cyan-50 text-cyan-700";
+      return "border border-cyan-400/40 bg-cyan-500/25 text-cyan-100";
     default:
-      return "border border-amber-500/30 bg-amber-50 text-amber-800";
+      return "border border-amber-400/40 bg-amber-500/25 text-amber-100";
   }
 }
 
-function sidebarStatusStyle(status: string): string {
+function projectStatusStyle(status: string): string {
   switch (status) {
     case "completed":
       return "border border-emerald-400/40 bg-emerald-500/25 text-emerald-100";
@@ -192,6 +192,7 @@ function sidebarStatusStyle(status: string): string {
       return "border border-amber-400/40 bg-amber-500/25 text-amber-100";
   }
 }
+
 function buildEditableSegments(transcript?: TranscriptJson | null): EditableSegment[] {
   const segments = transcript?.segments ?? [];
   if (segments.length) {
@@ -796,8 +797,8 @@ export default function App() {
 
   if (authStatus === "loading") {
     return (
-      <div className="esl-login flex min-h-dvh items-center justify-center">
-        <p className="text-sm text-[var(--esl-muted)]">로그인 확인 중…</p>
+      <div className="flex min-h-dvh items-center justify-center bg-slate-950 text-slate-400">
+        로그인 확인 중…
       </div>
     );
   }
@@ -820,136 +821,132 @@ export default function App() {
   }
 
   return (
-    <div className="esl-theme esl-shell relative min-h-screen">
-      <div className="esl-layout relative mx-auto grid min-h-screen max-w-[1880px] lg:grid-cols-[220px_minmax(0,1fr)]">
-        <aside className="esl-sidebar" aria-label="프로젝트">
-          <div className="esl-logo">불판속기사</div>
-
-          <nav className="esl-nav" aria-label="배정 사건">
-            <div className="esl-menu-group">
-              <div className="esl-menu-title">
-                배정 사건 <span className="esl-chev">▾</span>
-              </div>
-              <div className="esl-submenu">
-                {loadingProjectsAfterLogin && !projects.length ? (
-                  <p className="esl-sidebar-empty">프로젝트를 불러오는 중입니다.</p>
-                ) : loadingProjects ? (
-                  <p className="esl-sidebar-empty">불러오는 중…</p>
-                ) : projects.length === 0 ? (
-                  <p className="esl-sidebar-empty">배정된 프로젝트가 없습니다.</p>
-                ) : (
-                  projects.map((project) => {
-                    const key = projectKey(project);
-                    const active = key === selectedProjectKey;
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => selectProject(project)}
-                        className={`esl-menu-item${active ? " is-active" : ""}`}
-                      >
-                        <span className="esl-menu-item__title">{project.title}</span>
-                        <span className="esl-menu-item__meta">{project.client.name}</span>
-                        <span className="esl-menu-item__meta">
-                          배정 {formatKstDateTime(project.files.find((file) => file.assigned_at)?.assigned_at)}
-                        </span>
-                        <span className="mt-2 flex items-center justify-between gap-2">
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${sidebarStatusStyle(project.status)}`}>
-                            {mapProjectStatus(project.status)}
-                          </span>
-                          <span className="esl-menu-item__meta !mt-0">
-                            {formatProjectFileCount(project.file_count, project.total_duration_seconds ?? 0)}
-                          </span>
-                        </span>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </nav>
-
-          <div className="esl-sidebar-foot">
-            <button type="button" className="esl-menu-item" onClick={handleLogout}>
-              로그아웃
-            </button>
-          </div>
-        </aside>
-
-        <main className="esl-main">
-          <section className="esl-topbar px-4 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--esl-muted)]">Workspace</p>
-            <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0">
-                <h2 className="text-lg font-semibold">
-                  {transcriberName ? `${transcriberName}님` : "속기사"} · 녹취 작업
-                </h2>
-                {currentProject && currentFile ? (
-                  <p className="mt-1 truncate text-sm text-[var(--esl-muted)]">
-                    {currentProject.title} &gt; {currentFile.filename}
-                  </p>
-                ) : (
-                  <p className="mt-1 text-sm text-[var(--esl-muted)]">프로젝트와 파일을 선택하세요.</p>
-                )}
-              </div>
-              <div className="flex shrink-0 flex-wrap items-center gap-2">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="relative min-h-screen overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.12),transparent_24%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.12),transparent_22%),linear-gradient(to_bottom,rgba(15,23,42,0.84),rgba(2,6,23,0.98))]" />
+        <div className="relative mx-auto min-h-screen max-w-[1680px] px-4 py-4 lg:px-6">
+          <header className="mb-4 flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-cyan-300">속기사 녹취</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-bold text-white">
+                  {transcriberName ? `${transcriberName}님` : "속기사"}
+                </h1>
                 <button
                   type="button"
                   onClick={() => void openProfileSettings()}
-                  className="rounded-md border px-3 py-1.5 text-[11px] font-semibold transition hover:bg-[#f7f9fc]"
+                  className="rounded-lg border border-white/10 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5 hover:text-white"
                 >
                   설정
                 </button>
-                {(!pushRegistered || pushPermission !== "granted") ? (
-                  <button
-                    type="button"
-                    onClick={() => void handleEnablePush()}
-                    disabled={enablingPush}
-                    className="rounded-md border px-3 py-1.5 text-[11px] font-semibold transition hover:bg-[#f7f9fc] disabled:opacity-50"
-                  >
-                    {enablingPush ? "알림 설정 중..." : "알림 받기"}
-                  </button>
-                ) : null}
               </div>
             </div>
-          </section>
+            <div className="flex shrink-0 items-center gap-2">
+              {(!pushRegistered || pushPermission !== "granted") ? (
+                <button
+                  type="button"
+                  onClick={() => void handleEnablePush()}
+                  disabled={enablingPush}
+                  className="rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-sm font-medium text-cyan-200 transition hover:bg-cyan-500/20 disabled:opacity-50"
+                >
+                  {enablingPush ? "알림 설정 중..." : "알림 받기"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-xl border border-white/10 px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white"
+              >
+                로그아웃
+              </button>
+            </div>
+          </header>
 
-          <div className="esl-content">
-            <div className="esl-workspace grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
-              <aside className="esl-file-panel">
-                <h3 className="esl-file-panel-title">녹음 목록</h3>
-                <p className="esl-file-panel-subtitle">{currentProject?.title || "프로젝트 선택"}</p>
-                <div className="esl-file-list">
-                  {currentProject?.files.length ? (
-                    currentProject.files.map((file) => {
-                      const active = file.job_id === selectedJobId;
-                      return (
-                        <button
-                          key={file.job_id}
-                          type="button"
-                          onClick={() => setSelectedJobId(file.job_id)}
-                          disabled={loadingJob}
-                          className={`esl-file-item${active ? " is-active" : ""}`}
-                        >
-                          <p className="truncate text-sm font-medium">{file.filename}</p>
-                          <p className="mt-1 text-[11px] text-[var(--esl-muted)]">마감 {formatKstDateTime(file.due_at)}</p>
-                          <p className="mt-1 text-[11px] text-[var(--esl-muted)]">배정 {formatKstDateTime(file.assigned_at)}</p>
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
-                            {renderTranscriberInquiryBadge(file.transcriber_inquiry_status)}
-                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${fileStatusStyle(fileWorkflowStatus(file))}`}>
-                              {mapFileStatusLabel(fileWorkflowStatus(file))}
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <p className="esl-file-empty">선택한 프로젝트에 파일이 없습니다.</p>
-                  )}
-                </div>
-              </aside>
+          <div className="grid min-h-[calc(100vh-6rem)] gap-4 lg:grid-cols-[220px_240px_minmax(0,1fr)]">
+          <aside className="rounded-[28px] border border-white/10 bg-slate-950/70 p-4 backdrop-blur-xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-300">프로젝트</p>
+            <h2 className="mt-2 text-lg font-semibold text-white">배정 사건</h2>
+            <div className="mt-4 space-y-2">
+              {loadingProjectsAfterLogin && !projects.length ? (
+                <p className="text-sm text-slate-400">프로젝트를 불러오는 중입니다.</p>
+              ) : loadingProjects ? (
+                <p className="text-sm text-slate-400">불러오는 중…</p>
+              ) : projects.length === 0 ? (
+                <p className="text-sm text-slate-400">배정된 프로젝트가 없습니다.</p>
+              ) : (
+                projects.map((project) => {
+                  const key = projectKey(project);
+                  const active = key === selectedProjectKey;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => selectProject(project)}
+                      className={`block w-full rounded-2xl border px-3 py-3 text-left transition ${
+                        active
+                          ? "border-cyan-400/50 bg-cyan-500/15"
+                          : "border-slate-700/80 bg-slate-900/80 hover:border-slate-600 hover:bg-slate-900"
+                      }`}
+                    >
+                      <p className="truncate text-sm font-semibold text-slate-50">{project.title}</p>
+                      <p className="mt-1 truncate text-xs text-slate-300">{project.client.name}</p>
+                      <p className="mt-1 truncate text-[11px] text-slate-400">
+                        배정 {formatKstDateTime(project.files.find((file) => file.assigned_at)?.assigned_at)}
+                      </p>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${projectStatusStyle(project.status)}`}>
+                          {mapProjectStatus(project.status)}
+                        </span>
+                        <span className="text-[11px] font-medium text-slate-200">
+                          {formatProjectFileCount(project.file_count, project.total_duration_seconds ?? 0)}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </aside>
 
-              <div className="min-w-0 space-y-4">
+          <aside className="rounded-[28px] border border-white/10 bg-slate-950/70 p-4 backdrop-blur-xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-violet-300">파일</p>
+            <h2 className="mt-2 text-lg font-semibold text-white">녹음 목록</h2>
+            <p className="mt-1 truncate text-xs text-slate-400">{currentProject?.title || "프로젝트 선택"}</p>
+            <div className="mt-4 space-y-2">
+              {currentProject?.files.length ? (
+                currentProject.files.map((file) => {
+                  const active = file.job_id === selectedJobId;
+                  return (
+                    <button
+                      key={file.job_id}
+                      type="button"
+                      onClick={() => setSelectedJobId(file.job_id)}
+                      disabled={loadingJob}
+                      className={`block w-full rounded-2xl border px-3 py-3 text-left transition ${
+                        active
+                          ? "border-violet-400/50 bg-violet-500/15"
+                          : "border-slate-700/80 bg-slate-900/80 hover:border-slate-600 hover:bg-slate-900"
+                      } disabled:cursor-not-allowed disabled:opacity-60`}
+                    >
+                      <p className="truncate text-sm font-medium text-slate-50">{file.filename}</p>
+                      <p className="mt-1 text-[11px] text-slate-400">마감 {formatKstDateTime(file.due_at)}</p>
+                      <p className="mt-1 text-[11px] text-slate-400">배정 {formatKstDateTime(file.assigned_at)}</p>
+                      <div className="mt-2 flex items-center gap-2">
+                        {renderTranscriberInquiryBadge(file.transcriber_inquiry_status)}
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${fileStatusStyle(fileWorkflowStatus(file))}`}>
+                          {mapFileStatusLabel(fileWorkflowStatus(file))}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (
+                <p className="text-sm text-slate-400">선택한 프로젝트에 파일이 없습니다.</p>
+              )}
+            </div>
+          </aside>
+
+          <main className="space-y-4">
             {loadingJob ? (
               <section className="rounded-3xl border border-slate-800 bg-slate-900/95 p-12 text-center text-sm text-slate-400 shadow-2xl shadow-black/20">
                 파일을 불러오는 중입니다...
@@ -1045,7 +1042,7 @@ export default function App() {
                             key={segment.id}
                             className={`rounded-xl border px-3 py-2.5 transition-colors ${
                               hasActiveWord
-                                ? "esl-segment-active border-violet-300/70 bg-violet-400/10"
+                                ? "border-violet-300/70 bg-violet-400/10"
                                 : "border-slate-700/80 bg-slate-950/80"
                             }`}
                           >
@@ -1175,11 +1172,9 @@ export default function App() {
                 왼쪽에서 프로젝트와 파일을 선택하세요.
               </section>
             )}
-              </div>
-            </div>
+          </main>
           </div>
-        </main>
-      </div>
+        </div>
 
         <SpeakerSettingsModal
           open={speakerSettingsOpen}
@@ -1226,6 +1221,7 @@ export default function App() {
           onCancel={() => setAiDraftConfirmOpen(false)}
           onConfirm={() => setAiDraftConfirmOpen(false)}
         />
+      </div>
     </div>
   );
 }
