@@ -658,6 +658,17 @@ export default function App() {
     void playSegmentAudio(audio, segmentEndRef, startMs, endMs);
   };
 
+  const requestedRanges = useMemo(
+    () => selectedUploadSegments.filter((segment) => segment.selected !== false && segment.end_ms > segment.start_ms),
+    [selectedUploadSegments],
+  );
+
+  const playRequestedRange = (startMs: number, endMs: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    void playSegmentAudio(audio, segmentEndRef, startMs, endMs);
+  };
+
   const updateSegment = (index: number, patch: Partial<TranscriptSegment>) => {
     setSegments((prev) =>
       prev.map((segment, currentIndex) => (currentIndex === index ? { ...segment, ...patch } : segment)),
@@ -1118,6 +1129,49 @@ export default function App() {
                       className="w-full rounded-xl"
                     />
                   </div>
+
+                  {requestedRanges.length ? (
+                    <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/5 px-4 py-3">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-cyan-200">의뢰 구간</p>
+                          <p className="mt-1 text-xs text-slate-400">
+                            의뢰인이 선택한 구간입니다. 이 구간을 기준으로 녹취록을 작성하세요. PDF에는 이 구간만 반영됩니다.
+                          </p>
+                        </div>
+                        <span className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2 py-1 text-[11px] font-semibold text-cyan-200">
+                          {requestedRanges.length}개
+                        </span>
+                      </div>
+                      <div className="mt-3 grid gap-2">
+                        {requestedRanges.map((range, index) => (
+                          <div
+                            key={`${range.start_ms}-${range.end_ms}-${index}`}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-700/80 bg-slate-950/70 px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-slate-100">
+                                구간 {index + 1}
+                              </p>
+                              <p className="mt-0.5 font-mono text-xs text-slate-300">
+                                {formatSegmentTime(range.start_ms)} ~ {formatSegmentTime(range.end_ms)}
+                                <span className="ml-2 text-slate-500">
+                                  ({formatSegmentTime(Math.max(0, range.end_ms - range.start_ms))})
+                                </span>
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => playRequestedRange(range.start_ms, range.end_ms)}
+                              className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
+                            >
+                              재생
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div>
                     <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
