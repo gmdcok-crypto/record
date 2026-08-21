@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 
 import ActionNoticeModal, { type ActionNotice } from "./ActionNoticeModal";
 import AdminLogin from "./AdminLogin";
+import AdminProxyUploadModal from "./AdminProxyUploadModal";
 import AdminTranscriptEditor from "./AdminTranscriptEditor";
 import ExpenseManagement from "./ExpenseManagement";
 import PhoneConsultationManagement from "./PhoneConsultationManagement";
@@ -746,6 +747,7 @@ function App() {
   const [detailProject, setDetailProject] = useState<ProjectItem | null>(null);
   const [memberQuery, setMemberQuery] = useState("");
   const [detailMember, setDetailMember] = useState<MemberItem | null>(null);
+  const [proxyUploadOpen, setProxyUploadOpen] = useState(false);
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [jobsScopeSelect, setJobsScopeSelect] = useState<"active" | "completed">("active");
   const [completedModalOpen, setCompletedModalOpen] = useState(false);
@@ -2454,6 +2456,13 @@ function App() {
             placeholder="이름, 이메일, 휴대폰, 의뢰인 코드 검색"
             className="w-full max-w-xl flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-cyan-400"
           />
+          <button
+            type="button"
+            onClick={() => setProxyUploadOpen(true)}
+            className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm font-semibold text-cyan-200 hover:bg-cyan-500/20"
+          >
+            대신 업로드
+          </button>
           <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-400">
             활성 {members.filter((member) => member.isActive).length} / 전체 {members.length}
           </span>
@@ -3377,6 +3386,22 @@ function App() {
           </div>
         </div>
       ) : null}
+
+      <AdminProxyUploadModal
+        open={proxyUploadOpen}
+        onClose={() => setProxyUploadOpen(false)}
+        members={visibleMembers.map((member) => ({
+          id: member.id,
+          name: member.name,
+          email: member.email,
+          phone: member.phone,
+          isActive: member.isActive,
+        }))}
+        initialMemberId={visibleMembers.length === 1 ? visibleMembers[0]?.id : null}
+        onUploaded={() => {
+          void loadOverview({ silent: true });
+        }}
+      />
 
       {detailProject ? (
         <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/60 backdrop-blur-sm">
