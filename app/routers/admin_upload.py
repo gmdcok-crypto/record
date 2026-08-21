@@ -311,9 +311,12 @@ async def admin_upload_voice(
     file: UploadFile = File(...),
     project_id: Annotated[str | None, Form()] = None,
     project_title: Annotated[str | None, Form()] = None,
+    selected_segments_json: Annotated[str | None, Form()] = None,
     billable_duration_ms: Annotated[int | None, Form()] = None,
     request_id: Annotated[str | None, Header(alias="X-Upload-Request-Id")] = None,
 ) -> VoiceUploadResponse:
+    import json
+
     _require_upload_operator(admin)
     started = perf_counter()
     if not file.filename:
@@ -358,6 +361,15 @@ async def admin_upload_voice(
     except ProjectAccessError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    selected_segments: list[dict] | None = None
+    if selected_segments_json:
+        try:
+            parsed = json.loads(selected_segments_json)
+            if isinstance(parsed, list):
+                selected_segments = parsed
+        except Exception:
+            selected_segments = None
+
     note = _proxy_note(admin)
     job = create_job_record(
         db,
@@ -367,6 +379,7 @@ async def admin_upload_voice(
         voice_key=upload_result["object_key"],
         member=member,
         project_id=project.project_id,
+        selected_segments=selected_segments,
         duration_seconds=int(billable_duration_ms // 1000) if billable_duration_ms and billable_duration_ms > 0 else None,
         internal_note=note,
         change_note=note,

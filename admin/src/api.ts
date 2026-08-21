@@ -514,6 +514,8 @@ export async function uploadVoiceForMember(
   options?: {
     projectId?: string | null;
     projectTitle?: string | null;
+    selectedSegments?: SelectedUploadSegment[];
+    billableDurationMs?: number | null;
     onProgress?: (percent: number) => void;
   },
 ): Promise<ProxyUploadResult> {
@@ -524,6 +526,11 @@ export async function uploadVoiceForMember(
   const token = localStorage.getItem(ADMIN_TOKEN_KEY);
   const contentType = file.type || "application/octet-stream";
   const base = uploadApiBase();
+  const selectedSegments = options?.selectedSegments ?? [];
+  const billableDurationMs =
+    options?.billableDurationMs != null && options.billableDurationMs > 0
+      ? Math.floor(options.billableDurationMs)
+      : null;
 
   const uploadViaBackend = () =>
     new Promise<ProxyUploadResult>((resolve, reject) => {
@@ -532,6 +539,12 @@ export async function uploadVoiceForMember(
       form.append("member_id", String(memberId));
       if (options?.projectId) form.append("project_id", options.projectId);
       if (options?.projectTitle) form.append("project_title", options.projectTitle);
+      if (selectedSegments.length) {
+        form.append("selected_segments_json", JSON.stringify(selectedSegments));
+      }
+      if (billableDurationMs != null) {
+        form.append("billable_duration_ms", String(billableDurationMs));
+      }
 
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${base}/api/admin/upload/voice`);
@@ -623,6 +636,8 @@ export async function uploadVoiceForMember(
         content_type: contentType,
         project_id: options?.projectId ?? null,
         project_title: options?.projectTitle ?? null,
+        selected_segments: selectedSegments,
+        billable_duration_ms: billableDurationMs,
       }),
     });
     const completeData = (await completeRes.json().catch(() => ({}))) as ProxyUploadResult & { detail?: unknown };
