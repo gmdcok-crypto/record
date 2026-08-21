@@ -1864,6 +1864,23 @@ function App() {
     }
   }, [visibleMembers, selectedMember]);
 
+  const proxyUploadMember = useMemo(() => {
+    if (!selectedMember) return null;
+    return {
+      id: selectedMember.id,
+      name: selectedMember.name,
+      email: selectedMember.email,
+      phone: selectedMember.phone,
+      isActive: selectedMember.isActive,
+    };
+  }, [
+    selectedMember?.id,
+    selectedMember?.name,
+    selectedMember?.email,
+    selectedMember?.phone,
+    selectedMember?.isActive,
+  ]);
+
   const memberProjects = useMemo(() => {
     if (!detailMember?.clientId) return [];
     return projects.filter((project) => {
@@ -3419,17 +3436,7 @@ function App() {
       <AdminProxyUploadModal
         open={proxyUploadOpen}
         onClose={() => setProxyUploadOpen(false)}
-        member={
-          selectedMember
-            ? {
-                id: selectedMember.id,
-                name: selectedMember.name,
-                email: selectedMember.email,
-                phone: selectedMember.phone,
-                isActive: selectedMember.isActive,
-              }
-            : null
-        }
+        member={proxyUploadMember}
         onUploaded={() => {
           void loadOverview({ silent: true });
         }}

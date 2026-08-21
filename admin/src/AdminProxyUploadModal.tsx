@@ -71,6 +71,9 @@ export default function AdminProxyUploadModal({ open, onClose, member, onUploade
   const [isDragActive, setIsDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [doneCount, setDoneCount] = useState(0);
+  const memberId = member?.id ?? null;
+  const sessionKeyRef = useRef<string | null>(null);
+  const userTouchedRef = useRef(false);
 
   const projectReady = useMemo(() => {
     if (projectMode === "existing") return Boolean(projectId);
@@ -86,12 +89,15 @@ export default function AdminProxyUploadModal({ open, onClose, member, onUploade
 
   const billingReady = useMemo(() => isUploadBillingReady(billingEntries), [billingEntries]);
 
-  const loadProjects = useCallback(async (memberId: number, memberName: string) => {
+  const loadProjects = useCallback(async (targetMemberId: number, memberName: string, sessionKey: string) => {
     setLoadingProjects(true);
     setError(null);
     try {
-      const list = await fetchMemberProjectsForProxyUpload(memberId);
+      const list = await fetchMemberProjectsForProxyUpload(targetMemberId);
+      if (sessionKeyRef.current !== sessionKey) return;
       setProjects(list);
+      // Don't clobber project/file choices the user already made while this request was in flight.
+      if (userTouchedRef.current) return;
       setNewProjectTitle(memberName.trim() ? `${memberName.trim()} 녹취` : "");
       if (list.length > 0) {
         setProjectMode("existing");
@@ -101,15 +107,30 @@ export default function AdminProxyUploadModal({ open, onClose, member, onUploade
         setProjectId("");
       }
     } catch (err) {
+      if (sessionKeyRef.current !== sessionKey) return;
       setProjects([]);
       setError(err instanceof Error ? err.message : "프로젝트 목록을 불러올 수 없습니다.");
     } finally {
-      setLoadingProjects(false);
+      if (sessionKeyRef.current === sessionKey) {
+        setLoadingProjects(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    if (!open || !member) return;
+    if (!open) {
+      sessionKeyRef.current = null;
+      return;
+    }
+    if (memberId == null || !member) return;
+
+    const sessionKey = String(memberId);
+    // Parent often recreates the member object on re-render; only reset when the modal
+    // opens or the selected member actually changes.
+    if (sessionKeyRef.current === sessionKey) return;
+    sessionKeyRef.current = sessionKey;
+    userTouchedRef.current = false;
+
     setSelectedFiles([]);
     setBillingEntries([]);
     setProgress([]);
@@ -121,13 +142,18 @@ export default function AdminProxyUploadModal({ open, onClose, member, onUploade
     setProjectId("");
     setProjectMode("new");
     setNewProjectTitle(member.name.trim() ? `${member.name.trim()} 녹취` : "");
-    void loadProjects(member.id, member.name);
-  }, [open, member, loadProjects]);
+    void loadProjects(member.id, member.name, sessionKey);
+  }, [open, memberId, member, loadProjects]);
+
+  const markTouched = () => {
+    userTouchedRef.current = true;
+  };
 
   const appendFiles = (list: FileList | File[] | null) => {
     if (!list) return;
     const incoming = Array.from(list);
     if (!incoming.length) return;
+    markTouched();
     setSelectedFiles((prev) => {
       const keys = new Set(prev.map(fileIdentity));
       const next = [...prev];
@@ -145,6 +171,7 @@ export default function AdminProxyUploadModal({ open, onClose, member, onUploade
   };
 
   const removeFile = (file: File) => {
+    markTouched();
     const key = fileIdentity(file);
     setSelectedFiles((prev) => prev.filter((item) => fileIdentity(item) !== key));
     setProgress([]);
@@ -294,7 +321,10 @@ export default function AdminProxyUploadModal({ open, onClose, member, onUploade
               <button
                 type="button"
                 disabled={!projects.length || uploading || !member.isActive}
-                onClick={() => setProjectMode("existing")}
+                onClick={() => {
+                  markTouched();
+                  setProjectMode("existing");
+                }}
                 className={`rounded-lg border px-3 py-1.5 text-sm ${
                   projectMode === "existing"
                     ? "border-cyan-500/40 bg-cyan-500/15 text-cyan-100"
@@ -306,7 +336,10 @@ export default function AdminProxyUploadModal({ open, onClose, member, onUploade
               <button
                 type="button"
                 disabled={uploading || !member.isActive}
-                onClick={() => setProjectMode("new")}
+                onClick={() => {
+                  markTouched();
+                  setProjectMode("new");
+                }}
                 className={`rounded-lg border px-3 py-1.5 text-sm ${
                   projectMode === "new"
                     ? "border-cyan-500/40 bg-cyan-500/15 text-cyan-100"
@@ -323,7 +356,10 @@ export default function AdminProxyUploadModal({ open, onClose, member, onUploade
                 <select
                   value={projectId}
                   disabled={uploading}
-                  onChange={(event) => setProjectId(event.target.value)}
+                  onChange={(event) => {
+                    markTouched();
+                    setProjectId(event.target.value);
+                  }}
                   className="mt-3 min-h-10 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none"
                 >
                   {projects.map((project) => (
@@ -344,7 +380,10 @@ export default function AdminProxyUploadModal({ open, onClose, member, onUploade
                 <input
                   value={newProjectTitle}
                   disabled={uploading}
-                  onChange={(event) => setNewProjectTitle(event.target.value)}
+                  onChange={(event) => {
+                    markTouched();
+                    setNewProjectTitle(event.target.value);
+                  }}
                   placeholder="예: ○○사건 통화녹취"
                   className="min-h-10 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none"
                 />
