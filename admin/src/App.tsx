@@ -4,6 +4,7 @@ import ActionNoticeModal, { type ActionNotice } from "./ActionNoticeModal";
 import AdminLogin from "./AdminLogin";
 import AdminTranscriptEditor from "./AdminTranscriptEditor";
 import ExpenseManagement from "./ExpenseManagement";
+import PhoneConsultationManagement from "./PhoneConsultationManagement";
 import TranscriberSettlementPanel from "./TranscriberSettlementPanel";
 import {
   assignProject,
@@ -57,6 +58,7 @@ type MenuKey =
   | "jobs"
   | "transcribers"
   | "members"
+  | "phone_consultations"
   | "sales"
   | "expenses"
   | "reports"
@@ -243,6 +245,7 @@ const MENU_BASE: Array<Omit<MenuItem, "count">> = [
   { key: "jobs", label: "의뢰 / 파일 관리" },
   { key: "transcribers", label: "속기사 관리" },
   { key: "members", label: "회원 관리" },
+  { key: "phone_consultations", label: "전화상담관리" },
   { key: "sales", label: "매출 관리" },
   { key: "expenses", label: "지출 관리" },
   { key: "reports", label: "집계" },
@@ -2864,6 +2867,8 @@ function App() {
         return renderTranscribers();
       case "members":
         return renderMembers();
+      case "phone_consultations":
+        return <PhoneConsultationManagement />;
       case "sales":
         return renderSales();
       case "expenses":
@@ -2975,21 +2980,18 @@ function App() {
                 }`}
               >
                 <h2 className="text-lg font-semibold text-white">
-                  {activeMenu === "jobs"
-                    ? "작업 운영 시트"
-                    : activeMenu === "transcribers"
-                      ? "속기사 관리"
-                      : activeMenu === "members"
-                        ? "회원 관리"
-                        : activeMenu === "sales"
-                          ? "매출 관리"
-                          : activeMenu === "expenses"
-                            ? "지출 관리"
-                            : activeMenu === "reports"
-                              ? "집계"
-                              : activeMenu === "admins"
-                                ? "관리자 관리"
-                                : "분석"}
+                  {{
+                    dashboard: "대시보드",
+                    jobs: "작업 운영 시트",
+                    transcribers: "속기사 관리",
+                    members: "회원 관리",
+                    phone_consultations: "전화상담관리",
+                    sales: "매출 관리",
+                    expenses: "지출 관리",
+                    reports: "집계",
+                    analytics: "분석",
+                    admins: "관리자 관리",
+                  }[activeMenu]}
                 </h2>
                 {activeMenu === "sales" ? (
                   <div className="flex flex-wrap items-center justify-center gap-2 lg:px-4">

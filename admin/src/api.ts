@@ -418,6 +418,42 @@ export type ExpensesOverview = {
   records_error?: string | null;
 };
 
+export type PhoneConsultation = {
+  id: number;
+  customer_name: string;
+  phone: string;
+  inquiry_type: string;
+  order_type: string;
+  file_kind: string;
+  file_count: string;
+  range_start: string;
+  range_end: string;
+  duration_seconds: number;
+  estimated_amount: number;
+  deadline: string | null;
+  delivery_method: string;
+  memo: string;
+  assignee: string;
+  status: string;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export async function fetchPhoneConsultations(params?: {
+  status?: string;
+  q?: string;
+  limit?: number;
+}): Promise<PhoneConsultation[]> {
+  const url = new URL(`${apiBase()}/api/admin/phone-consultations`);
+  if (params?.status) url.searchParams.set("status", params.status);
+  if (params?.q) url.searchParams.set("q", params.q);
+  if (params?.limit) url.searchParams.set("limit", String(params.limit));
+  const res = await adminFetch(url.toString());
+  if (!res.ok) throw await parseApiError(res, "전화상담 내역을 불러올 수 없습니다");
+  const data = (await res.json()) as { consultations?: PhoneConsultation[] };
+  return data.consultations ?? [];
+}
+
 function formatApiDetail(detail: unknown): string | undefined {
   if (typeof detail === "string" && detail.trim()) return detail;
   if (Array.isArray(detail)) {

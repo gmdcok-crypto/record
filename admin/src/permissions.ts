@@ -5,6 +5,7 @@ export type AdminMenuKey =
   | "jobs"
   | "transcribers"
   | "members"
+  | "phone_consultations"
   | "sales"
   | "expenses"
   | "reports"
@@ -27,6 +28,7 @@ const MENU_PERMISSIONS: Record<AdminMenuKey, AdminRole[]> = {
   jobs: ["owner", "manager", "operator", "viewer"],
   transcribers: ["owner", "manager", "viewer"],
   members: ["owner", "manager", "operator", "viewer"],
+  phone_consultations: ["owner", "manager", "operator", "viewer"],
   sales: ["owner", "manager", "accounting"],
   expenses: ["owner", "manager", "accounting"],
   reports: ["owner", "manager", "accounting", "viewer"],
