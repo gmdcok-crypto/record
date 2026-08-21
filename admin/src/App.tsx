@@ -747,6 +747,7 @@ function App() {
   const [detailProject, setDetailProject] = useState<ProjectItem | null>(null);
   const [memberQuery, setMemberQuery] = useState("");
   const [detailMember, setDetailMember] = useState<MemberItem | null>(null);
+  const [selectedMember, setSelectedMember] = useState<MemberItem | null>(null);
   const [proxyUploadOpen, setProxyUploadOpen] = useState(false);
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [jobsScopeSelect, setJobsScopeSelect] = useState<"active" | "completed">("active");
@@ -1851,6 +1852,18 @@ function App() {
     });
   }, [members, memberQuery]);
 
+  useEffect(() => {
+    if (!selectedMember) {
+      if (visibleMembers.length === 1) {
+        setSelectedMember(visibleMembers[0] ?? null);
+      }
+      return;
+    }
+    if (!visibleMembers.some((member) => member.id === selectedMember.id)) {
+      setSelectedMember(visibleMembers.length === 1 ? visibleMembers[0] ?? null : null);
+    }
+  }, [visibleMembers, selectedMember]);
+
   const memberProjects = useMemo(() => {
     if (!detailMember?.clientId) return [];
     return projects.filter((project) => {
@@ -2458,13 +2471,20 @@ function App() {
           />
           <button
             type="button"
-            onClick={() => setProxyUploadOpen(true)}
-            className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm font-semibold text-cyan-200 hover:bg-cyan-500/20"
+            disabled={!selectedMember}
+            onClick={() => {
+              if (!selectedMember) return;
+              setProxyUploadOpen(true);
+            }}
+            className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm font-semibold text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            title={selectedMember ? `${selectedMember.name} 대신 업로드` : "회원을 먼저 선택하세요"}
           >
             대신 업로드
           </button>
           <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-400">
-            활성 {members.filter((member) => member.isActive).length} / 전체 {members.length}
+            {selectedMember
+              ? `선택: ${selectedMember.name || selectedMember.phone || `ID ${selectedMember.id}`}`
+              : `활성 ${members.filter((member) => member.isActive).length} / 전체 ${members.length}`}
           </span>
         </div>
       </div>
@@ -2487,8 +2507,16 @@ function App() {
               </tr>
             </thead>
             <tbody>
-              {visibleMembers.map((member) => (
-                <tr key={member.id} className="border-t border-slate-800 bg-slate-950/40 text-slate-300 hover:bg-slate-900/50">
+              {visibleMembers.map((member) => {
+                const isSelected = selectedMember?.id === member.id;
+                return (
+                <tr
+                  key={member.id}
+                  className={`cursor-pointer border-t border-slate-800 text-slate-300 hover:bg-slate-900/50 ${
+                    isSelected ? "bg-cyan-500/10 ring-1 ring-inset ring-cyan-500/30" : "bg-slate-950/40"
+                  }`}
+                  onClick={() => setSelectedMember(member)}
+                >
                   <td className="px-3 py-2 font-mono text-[11px] text-slate-400">{member.id}</td>
                   <td className="px-3 py-2 font-medium text-white">{member.name}</td>
                   <td className="max-w-[220px] truncate px-3 py-2" title={member.email}>
@@ -2508,7 +2536,7 @@ function App() {
                     </span>
                   </td>
                   <td className="px-3 py-2">
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2" onClick={(event) => event.stopPropagation()}>
                       <button
                         type="button"
                         onClick={() => setDetailMember(member)}
@@ -2530,7 +2558,8 @@ function App() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -3390,14 +3419,17 @@ function App() {
       <AdminProxyUploadModal
         open={proxyUploadOpen}
         onClose={() => setProxyUploadOpen(false)}
-        members={visibleMembers.map((member) => ({
-          id: member.id,
-          name: member.name,
-          email: member.email,
-          phone: member.phone,
-          isActive: member.isActive,
-        }))}
-        initialMemberId={visibleMembers.length === 1 ? visibleMembers[0]?.id : null}
+        member={
+          selectedMember
+            ? {
+                id: selectedMember.id,
+                name: selectedMember.name,
+                email: selectedMember.email,
+                phone: selectedMember.phone,
+                isActive: selectedMember.isActive,
+              }
+            : null
+        }
         onUploaded={() => {
           void loadOverview({ silent: true });
         }}

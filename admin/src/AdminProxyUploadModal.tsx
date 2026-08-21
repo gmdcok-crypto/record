@@ -21,8 +21,7 @@ export type ProxyUploadCandidate = {
 type Props = {
   open: boolean;
   onClose: () => void;
-  members: ProxyUploadCandidate[];
-  initialMemberId?: number | null;
+  member: ProxyUploadCandidate | null;
   onUploaded?: (result: { jobId: string; projectId: string | null; filename: string }) => void;
 };
 
@@ -34,15 +33,7 @@ type FileProgress = {
   jobId?: string;
 };
 
-export default function AdminProxyUploadModal({
-  open,
-  onClose,
-  members,
-  initialMemberId = null,
-  onUploaded,
-}: Props) {
-  const activeMembers = useMemo(() => members.filter((member) => member.isActive), [members]);
-  const [selectedMemberId, setSelectedMemberId] = useState<number | "">("");
+export default function AdminProxyUploadModal({ open, onClose, member, onUploaded }: Props) {
   const [projects, setProjects] = useState<ProxyUploadProject[]>([]);
   const [projectMode, setProjectMode] = useState<"existing" | "new">("new");
   const [projectId, setProjectId] = useState("");
@@ -53,11 +44,6 @@ export default function AdminProxyUploadModal({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [doneCount, setDoneCount] = useState(0);
-
-  const selectedMember = useMemo(
-    () => activeMembers.find((member) => member.id === selectedMemberId) ?? null,
-    [activeMembers, selectedMemberId],
-  );
 
   const loadProjects = useCallback(async (memberId: number, memberName: string) => {
     setLoadingProjects(true);
@@ -82,7 +68,7 @@ export default function AdminProxyUploadModal({
   }, []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !member) return;
     setFiles([]);
     setProgress([]);
     setUploading(false);
@@ -91,46 +77,15 @@ export default function AdminProxyUploadModal({
     setProjects([]);
     setProjectId("");
     setProjectMode("new");
-
-    const preferred =
-      (initialMemberId && activeMembers.find((member) => member.id === initialMemberId)) ||
-      (activeMembers.length === 1 ? activeMembers[0] : null);
-
-    if (preferred) {
-      setSelectedMemberId(preferred.id);
-      setNewProjectTitle(preferred.name.trim() ? `${preferred.name.trim()} 녹취` : "");
-      void loadProjects(preferred.id, preferred.name);
-    } else {
-      setSelectedMemberId("");
-      setNewProjectTitle("");
-    }
-    // Only re-init when the modal opens or the preferred member changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialMemberId, loadProjects]);
-
-  const handleSelectMember = (memberIdRaw: string) => {
-    if (!memberIdRaw) {
-      setSelectedMemberId("");
-      setProjects([]);
-      setProjectId("");
-      setNewProjectTitle("");
-      return;
-    }
-    const memberId = Number(memberIdRaw);
-    const member = activeMembers.find((item) => item.id === memberId);
-    if (!member) return;
-    setSelectedMemberId(memberId);
-    setFiles([]);
-    setProgress([]);
-    setDoneCount(0);
-    void loadProjects(memberId, member.name);
-  };
+    setNewProjectTitle(member.name.trim() ? `${member.name.trim()} 녹취` : "");
+    void loadProjects(member.id, member.name);
+  }, [open, member, loadProjects]);
 
   const canSubmit = useMemo(() => {
-    if (!selectedMember || uploading || loadingProjects || files.length === 0) return false;
+    if (!member || !member.isActive || uploading || loadingProjects || files.length === 0) return false;
     if (projectMode === "existing") return Boolean(projectId);
     return Boolean(newProjectTitle.trim());
-  }, [selectedMember, uploading, loadingProjects, files.length, projectMode, projectId, newProjectTitle]);
+  }, [member, uploading, loadingProjects, files.length, projectMode, projectId, newProjectTitle]);
 
   const handleFiles = (list: FileList | null) => {
     if (!list?.length) return;
@@ -141,7 +96,7 @@ export default function AdminProxyUploadModal({
   };
 
   const handleUpload = async () => {
-    if (!selectedMember || !canSubmit) return;
+    if (!member || !canSubmit) return;
     setUploading(true);
     setError(null);
     setDoneCount(0);
@@ -151,7 +106,7 @@ export default function AdminProxyUploadModal({
 
     try {
       if (projectMode === "new") {
-        const created = await createMemberProjectForProxyUpload(selectedMember.id, newProjectTitle.trim());
+        const created = await createMemberProjectForProxyUpload(member.id, newProjectTitle.trim());
         resolvedProjectId = created.project_id;
         projectTitle = null;
         setProjects((prev) => [created, ...prev]);
@@ -176,7 +131,7 @@ export default function AdminProxyUploadModal({
           ),
         );
         try {
-          const result = await uploadVoiceForMember(selectedMember.id, file, {
+          const result = await uploadVoiceForMember(member.id, file, {
             projectId: resolvedProjectId,
             projectTitle,
             onProgress: (percent) => {
@@ -217,7 +172,7 @@ export default function AdminProxyUploadModal({
     }
   };
 
-  if (!open) return null;
+  if (!open || !member) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4" onClick={onClose}>
@@ -228,9 +183,7 @@ export default function AdminProxyUploadModal({
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold text-white">대신 업로드</h3>
-            <p className="mt-1 text-sm text-slate-400">
-              회원을 선택한 뒤 녹취 파일을 대신 등록합니다.
-            </p>
+            <p className="mt-1 text-sm text-slate-400">선택한 회원 명의로 녹취 파일을 등록합니다.</p>
           </div>
           <button
             type="button"
@@ -242,32 +195,21 @@ export default function AdminProxyUploadModal({
           </button>
         </div>
 
-        <div className="mt-4 space-y-4">
-          <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">회원</p>
-            <select
-              value={selectedMemberId === "" ? "" : String(selectedMemberId)}
-              disabled={uploading || activeMembers.length === 0}
-              onChange={(event) => handleSelectMember(event.target.value)}
-              className="min-h-10 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none"
-            >
-              <option value="">회원을 선택하세요</option>
-              {activeMembers.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name || "이름 없음"} · {member.phone || member.email || `ID ${member.id}`}
-                </option>
-              ))}
-            </select>
-            {activeMembers.length === 0 ? (
-              <p className="mt-2 text-xs text-amber-300">활성 회원이 없습니다. 검색 조건을 확인해 주세요.</p>
-            ) : null}
-            {selectedMember ? (
-              <p className="mt-2 text-xs text-slate-400">
-                {selectedMember.email || "이메일 없음"} · ID {selectedMember.id}
-              </p>
-            ) : null}
-          </div>
+        <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-3 text-sm text-slate-200">
+          <p className="font-medium text-white">{member.name || "회원"}</p>
+          <p className="mt-1 text-slate-400">
+            {member.phone || member.email || "—"} · ID {member.id}
+            {!member.isActive ? " · 비활성" : ""}
+          </p>
+        </div>
 
+        {!member.isActive ? (
+          <p className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+            비활성 회원에는 파일을 업로드할 수 없습니다.
+          </p>
+        ) : null}
+
+        <div className="mt-4 space-y-4">
           {error ? (
             <p className="whitespace-pre-wrap rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
               {error}
@@ -279,7 +221,7 @@ export default function AdminProxyUploadModal({
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                disabled={!projects.length || uploading || !selectedMember}
+                disabled={!projects.length || uploading || !member.isActive}
                 onClick={() => setProjectMode("existing")}
                 className={`rounded-lg border px-3 py-1.5 text-sm ${
                   projectMode === "existing"
@@ -291,7 +233,7 @@ export default function AdminProxyUploadModal({
               </button>
               <button
                 type="button"
-                disabled={uploading || !selectedMember}
+                disabled={uploading || !member.isActive}
                 onClick={() => setProjectMode("new")}
                 className={`rounded-lg border px-3 py-1.5 text-sm ${
                   projectMode === "new"
@@ -322,7 +264,7 @@ export default function AdminProxyUploadModal({
             ) : (
               <input
                 value={newProjectTitle}
-                disabled={uploading || !selectedMember}
+                disabled={uploading || !member.isActive}
                 onChange={(event) => setNewProjectTitle(event.target.value)}
                 placeholder="프로젝트 제목"
                 className="mt-2 min-h-10 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none"
@@ -336,7 +278,7 @@ export default function AdminProxyUploadModal({
               type="file"
               multiple
               accept={ACCEPT}
-              disabled={uploading || !selectedMember}
+              disabled={uploading || !member.isActive}
               onChange={(event) => handleFiles(event.target.files)}
               className="block w-full text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-100"
             />
