@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 
-import AdminProxyUploadModal from "./AdminProxyUploadModal";
 import { fetchPhoneConsultations, type PhoneConsultation } from "./api";
 
 const INQUIRY_LABELS: Record<string, string> = {
@@ -82,7 +81,6 @@ export default function PhoneConsultationManagement() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selected, setSelected] = useState<PhoneConsultation | null>(null);
-  const [uploadTarget, setUploadTarget] = useState<PhoneConsultation | null>(null);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -278,36 +276,9 @@ export default function PhoneConsultationManagement() {
                 {selected.memo || "메모 없음"}
               </p>
             </div>
-
-            <div className="mt-5 flex justify-end gap-2 border-t border-slate-800 pt-4">
-              <button
-                type="button"
-                className="rounded-xl border border-slate-600 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800"
-                onClick={() => setSelected(null)}
-              >
-                닫기
-              </button>
-              <button
-                type="button"
-                className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-400"
-                onClick={() => {
-                  setUploadTarget(selected);
-                  setSelected(null);
-                }}
-              >
-                이 회원으로 녹취 업로드
-              </button>
-            </div>
           </div>
         </div>
       ) : null}
-
-      <AdminProxyUploadModal
-        open={Boolean(uploadTarget)}
-        onClose={() => setUploadTarget(null)}
-        memberName={uploadTarget?.customer_name}
-        memberPhone={uploadTarget?.phone}
-      />
     </div>
   );
 }

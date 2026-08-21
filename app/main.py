@@ -17,7 +17,6 @@ from app.services.database_migrate import ensure_jobs_status_column
 from app.services.database_reset import purge_all_data
 from app.routers import (
     admin_auth,
-    admin_upload,
     admin_users,
     expenses,
     jobs,
@@ -149,7 +148,6 @@ app.add_middleware(RailwayHealthMiddleware)
 
 app.include_router(transcribe.router)
 app.include_router(upload.router)
-app.include_router(admin_upload.router)
 app.include_router(transcriber_auth.router)
 app.include_router(admin_auth.router)
 app.include_router(admin_users.router)

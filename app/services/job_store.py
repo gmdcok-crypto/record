@@ -377,8 +377,6 @@ def create_job_record(
     project_id: str | None = None,
     selected_segments: list[dict] | None = None,
     duration_seconds: int | None = None,
-    internal_note: str | None = None,
-    change_note: str | None = None,
 ) -> Job:
     if member is not None:
         client = get_or_create_client_for_member(db, member)
@@ -416,7 +414,7 @@ def create_job_record(
         transcript_version=1,
         speaker_count=len((transcript_json or {}).get("speaker_labels") or {}),
         memo=None,
-        internal_note=(internal_note or "").strip() or None,
+        internal_note=None,
         sales_amount=0,
         extra_amount=0,
         discount_amount=0,
@@ -433,7 +431,7 @@ def create_job_record(
             job_id=job.job_id,
             from_status=None,
             to_status=job.status,
-            change_note=(change_note or "").strip() or "업로드 및 초기 작업 생성",
+            change_note="업로드 및 초기 작업 생성",
         )
     )
 
