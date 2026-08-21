@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 
 import ActionNoticeModal, { type ActionNotice } from "./ActionNoticeModal";
 import AdminLogin from "./AdminLogin";
+import AdminProxyUploadModal from "./AdminProxyUploadModal";
 import AdminTranscriptEditor from "./AdminTranscriptEditor";
 import ExpenseManagement from "./ExpenseManagement";
 import PhoneConsultationManagement from "./PhoneConsultationManagement";
@@ -746,6 +747,7 @@ function App() {
   const [detailProject, setDetailProject] = useState<ProjectItem | null>(null);
   const [memberQuery, setMemberQuery] = useState("");
   const [detailMember, setDetailMember] = useState<MemberItem | null>(null);
+  const [proxyUploadMember, setProxyUploadMember] = useState<MemberItem | null>(null);
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [jobsScopeSelect, setJobsScopeSelect] = useState<"active" | "completed">("active");
   const [completedModalOpen, setCompletedModalOpen] = useState(false);
@@ -2509,6 +2511,13 @@ function App() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => setProxyUploadMember(member)}
+                        className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-medium text-cyan-200"
+                      >
+                        대신 업로드
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => void toggleMemberActive(member)}
                         className={`rounded-md border px-2.5 py-1 text-[11px] font-medium ${
                           member.isActive
@@ -3363,6 +3372,16 @@ function App() {
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
+                  onClick={() => {
+                    setProxyUploadMember(detailMember);
+                    setDetailMember(null);
+                  }}
+                  className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-200"
+                >
+                  대신 업로드
+                </button>
+                <button
+                  type="button"
                   onClick={() => void toggleMemberActive(detailMember)}
                   className={`rounded-lg px-4 py-2 text-sm font-semibold ${
                     detailMember.isActive
@@ -3377,6 +3396,17 @@ function App() {
           </div>
         </div>
       ) : null}
+
+      <AdminProxyUploadModal
+        open={Boolean(proxyUploadMember)}
+        onClose={() => setProxyUploadMember(null)}
+        memberId={proxyUploadMember?.id}
+        memberName={proxyUploadMember?.name}
+        memberPhone={proxyUploadMember?.phone}
+        onUploaded={() => {
+          void loadOverview({ silent: true });
+        }}
+      />
 
       {detailProject ? (
         <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/60 backdrop-blur-sm">
