@@ -38,6 +38,7 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_job_workflow_statuses.sql",
     SCRIPTS_DIR / "migrate_sales_monthly_targets.sql",
     SCRIPTS_DIR / "migrate_phone_consultations.sql",
+    SCRIPTS_DIR / "migrate_phone_consultations_v2.sql",
 ]
 
 

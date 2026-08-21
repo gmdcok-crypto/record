@@ -1,109 +1,152 @@
-export type WorkScope = 'full' | 'partial' | 'undecided'
-export type FileFormat = 'audio' | 'video' | 'document'
-export type Priority = 'normal' | 'priority' | 'urgent'
+export type InquiryType = 'recording' | 'onsite' | 'foreign' | 'phone_restore'
+export type OrderType = 'reorder' | 'new' | 'company'
+export type FileKind = 'field' | 'call'
+export type DeliveryMethod = 'pdf' | 'registered'
 export type ConsultationStatus = 'draft' | 'completed'
 
 export interface Consultation {
   id?: number
   customerName: string
+  /** Full phone digits, e.g. 01012345678 */
   phone: string
-  inquiryType: string
-  purpose: string
-  estimatedDuration: string
-  workScope: WorkScope
-  region: string
+  inquiryType: InquiryType | ''
+  orderType: OrderType | ''
+  fileKind: FileKind | ''
+  fileCount: string
+  /** HH:MM:SS */
+  rangeStart: string
+  /** HH:MM:SS */
+  rangeEnd: string
+  /** duration seconds (auto) */
+  durationSeconds: number
+  /** estimated KRW (auto) */
+  estimatedAmount: number
   deadline: string
-  fileFormat: FileFormat
-  inflowChannel: string
-  priority: Priority
+  deliveryMethod: DeliveryMethod | ''
   memo: string
+  assignee: string
   status: ConsultationStatus
   createdAt: string
   updatedAt: string
 }
 
-export const INQUIRY_TYPES = [
-  '녹취록 작성',
-  '속기·타이핑',
-  '번역·통역',
-  '증거자료 정리',
-  '기타',
-] as const
-
-export const PURPOSES = [
-  '법원',
-  '검찰',
-  '경찰',
-  '개인보관',
-  '기업·내부',
-  '기타',
-] as const
-
-export const REGIONS = [
-  '서울',
-  '경기',
-  '인천',
-  '부산',
-  '대구',
-  '광주',
-  '대전',
-  '울산',
-  '세종',
-  '강원',
-  '충북',
-  '충남',
-  '전북',
-  '전남',
-  '경북',
-  '경남',
-  '제주',
-  '기타',
-] as const
-
-export const INFLOW_CHANNELS = [
-  '전화 인입',
-  '네이버',
-  '카카오톡',
-  '지인 소개',
-  '기존 고객',
-  '기타',
-] as const
-
-export const WORK_SCOPE_OPTIONS: { value: WorkScope; label: string }[] = [
-  { value: 'full', label: '전체 녹취' },
-  { value: 'partial', label: '일부 구간' },
-  { value: 'undecided', label: '미정' },
+export const INQUIRY_TYPE_OPTIONS: { value: InquiryType; label: string }[] = [
+  { value: 'recording', label: '녹취' },
+  { value: 'onsite', label: '출장' },
+  { value: 'foreign', label: '외국어' },
+  { value: 'phone_restore', label: '폰복원' },
 ]
 
-export const FILE_FORMAT_OPTIONS: { value: FileFormat; label: string }[] = [
-  { value: 'audio', label: '음성' },
-  { value: 'video', label: '영상' },
-  { value: 'document', label: '문서첨부' },
+export const ORDER_TYPE_OPTIONS: { value: OrderType; label: string }[] = [
+  { value: 'reorder', label: '재주문' },
+  { value: 'new', label: '신규' },
+  { value: 'company', label: '업체' },
 ]
 
-export const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
-  { value: 'normal', label: '일반' },
-  { value: 'priority', label: '우선' },
-  { value: 'urgent', label: '긴급' },
+export const FILE_KIND_OPTIONS: { value: FileKind; label: string }[] = [
+  { value: 'field', label: '현장' },
+  { value: 'call', label: '통화' },
 ]
+
+export const DELIVERY_METHOD_OPTIONS: { value: DeliveryMethod; label: string }[] = [
+  { value: 'pdf', label: 'PDF' },
+  { value: 'registered', label: '등기' },
+]
+
+/** Placeholder assignees until staff API is wired */
+export const ASSIGNEE_OPTIONS = ['권혁균', '운영팀', '상담팀'] as const
+
+/** 분당 5,000원 (디자인 견적: 18분 30초 → 92,500원) */
+export const RATE_PER_MINUTE = 5000
+
+export const MEMO_MAX = 500
 
 export function emptyConsultation(): Omit<Consultation, 'id'> {
   const now = new Date().toISOString()
   return {
     customerName: '',
-    phone: '',
-    inquiryType: '',
-    purpose: '',
-    estimatedDuration: '',
-    workScope: 'undecided',
-    region: '',
+    phone: '010',
+    inquiryType: 'recording',
+    orderType: 'new',
+    fileKind: 'field',
+    fileCount: '',
+    rangeStart: '',
+    rangeEnd: '',
+    durationSeconds: 0,
+    estimatedAmount: 0,
     deadline: '',
-    fileFormat: 'audio',
-    inflowChannel: '',
-    priority: 'normal',
+    deliveryMethod: 'pdf',
     memo: '',
-    status: 'completed',
+    assignee: '',
+    status: 'draft',
     createdAt: now,
     updatedAt: now,
   }
+}
+
+export function parseClockToSeconds(value: string): number | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parts = trimmed.split(':').map((p) => Number(p))
+  if (parts.some((n) => Number.isNaN(n) || n < 0)) return null
+  if (parts.length === 2) {
+    const [m, s] = parts
+    if (m > 59 || s > 59) return null
+    return m * 60 + s
+  }
+  if (parts.length === 3) {
+    const [h, m, s] = parts
+    if (m > 59 || s > 59) return null
+    return h * 3600 + m * 60 + s
+  }
+  return null
+}
+
+export function formatDurationKo(totalSeconds: number): string {
+  const sec = Math.max(0, Math.floor(totalSeconds))
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = sec % 60
+  if (h > 0) return `${h}시간 ${m}분 ${s}초`
+  if (m > 0) return `${m}분 ${s}초`
+  return `${s}초`
+}
+
+export function calcDurationSeconds(start: string, end: string): number {
+  const a = parseClockToSeconds(start)
+  const b = parseClockToSeconds(end)
+  if (a == null || b == null || b < a) return 0
+  return b - a
+}
+
+export function calcEstimatedAmount(durationSeconds: number): number {
+  if (durationSeconds <= 0) return 0
+  const minutes = durationSeconds / 60
+  return Math.round(minutes * RATE_PER_MINUTE)
+}
+
+export function formatPhoneDisplay(phone: string): string {
+  const digits = phone.replace(/\D/g, '').slice(0, 11)
+  if (digits.length <= 3) return digits
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`
+}
+
+export function phoneSuffix(phone: string): string {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.startsWith('010')) return digits.slice(3)
+  return digits
+}
+
+export function phoneFromSuffix(suffix: string): string {
+  const rest = suffix.replace(/\D/g, '').slice(0, 8)
+  return `010${rest}`
+}
+
+export function labelOf<T extends string>(
+  options: { value: T; label: string }[],
+  value: T | '',
+): string {
+  if (!value) return ''
+  return options.find((o) => o.value === value)?.label ?? value
 }

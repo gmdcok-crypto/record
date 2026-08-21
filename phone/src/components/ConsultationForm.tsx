@@ -1,23 +1,86 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { db } from '../db'
-import { formatPhone } from '../lib/format'
 import {
-  FILE_FORMAT_OPTIONS,
-  INFLOW_CHANNELS,
-  INQUIRY_TYPES,
-  PRIORITY_OPTIONS,
-  PURPOSES,
-  REGIONS,
-  WORK_SCOPE_OPTIONS,
+  ASSIGNEE_OPTIONS,
+  DELIVERY_METHOD_OPTIONS,
+  FILE_KIND_OPTIONS,
+  INQUIRY_TYPE_OPTIONS,
+  MEMO_MAX,
+  ORDER_TYPE_OPTIONS,
+  calcDurationSeconds,
+  calcEstimatedAmount,
   emptyConsultation,
+  formatDurationKo,
+  phoneFromSuffix,
+  phoneSuffix,
   type Consultation,
+  type ConsultationStatus,
 } from '../types'
-import { Field } from './Field'
-import { SegmentedControl } from './SegmentedControl'
+import { ChipGroup, Field } from './Field'
 
 type Props = {
   onToast: (message: string) => void
+}
+
+function IconPerson() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M5 19.5c1.8-3.2 4.2-4.8 7-4.8s5.2 1.6 7 4.8"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+function IconDoc() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M7 3.5h7.5L19 8v12.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path d="M14.5 3.5V8H19" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function IconCal() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="3.5" y="5" width="17" height="15" rx="2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8 3.5v3M16 3.5v3M3.5 10h17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function IconMemo() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M6 4.5h12A1.5 1.5 0 0 1 19.5 6v14l-3-2-3 2-3-2-3 2-3-2V6A1.5 1.5 0 0 1 6 4.5Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path d="M8.5 9h7M8.5 13h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function IconClock() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M12 8v4.5l3 1.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
 }
 
 export function ConsultationForm({ onToast }: Props) {
@@ -31,16 +94,19 @@ export function ConsultationForm({ onToast }: Props) {
   useEffect(() => {
     if (!editingId) return
     void db.consultations.get(editingId).then((row) => {
-      if (row) {
-        const { id: _id, ...rest } = row
-        setForm(rest)
-      }
+      if (!row) return
+      const { id: _id, ...rest } = row
+      setForm({ ...emptyConsultation(), ...rest })
     })
   }, [editingId])
 
-  const title = useMemo(
-    () => (editingId ? '상담 수정' : '전화 고객 등록'),
-    [editingId],
+  const durationSeconds = useMemo(
+    () => calcDurationSeconds(form.rangeStart, form.rangeEnd),
+    [form.rangeStart, form.rangeEnd],
+  )
+  const estimatedAmount = useMemo(
+    () => calcEstimatedAmount(durationSeconds),
+    [durationSeconds],
   )
 
   function patch<K extends keyof Consultation>(key: K, value: Consultation[K]) {
@@ -49,14 +115,13 @@ export function ConsultationForm({ onToast }: Props) {
   }
 
   function validate(): string | null {
-    if (!form.customerName.trim()) return '고객 이름을 입력해 주세요.'
-    if (form.phone.replace(/\D/g, '').length < 10) {
-      return '전화번호를 확인해 주세요.'
-    }
+    if (!form.customerName.trim()) return '의뢰인 이름을 입력해 주세요.'
+    if (phoneSuffix(form.phone).length < 7) return '전화번호를 확인해 주세요.'
+    if (!form.inquiryType) return '문의 유형을 선택해 주세요.'
     return null
   }
 
-  async function persist() {
+  async function persist(status: ConsultationStatus) {
     const message = validate()
     if (message) {
       setError(message)
@@ -68,8 +133,11 @@ export function ConsultationForm({ onToast }: Props) {
     const payload: Omit<Consultation, 'id'> = {
       ...form,
       customerName: form.customerName.trim(),
-      phone: formatPhone(form.phone),
-      status: 'completed',
+      phone: form.phone.replace(/\D/g, ''),
+      durationSeconds,
+      estimatedAmount,
+      memo: form.memo.slice(0, MEMO_MAX),
+      status,
       updatedAt: now,
       createdAt: form.createdAt || now,
     }
@@ -77,15 +145,11 @@ export function ConsultationForm({ onToast }: Props) {
     try {
       if (editingId) {
         await db.consultations.update(editingId, payload)
-        onToast('상담을 저장했습니다.')
-        navigate('/')
       } else {
         await db.consultations.add(payload)
-        onToast('상담을 저장했습니다.')
-        setForm(emptyConsultation())
-        setError('')
-        window.scrollTo({ top: 0, behavior: 'smooth' })
       }
+      onToast(status === 'draft' ? '임시 저장했습니다.' : '상담을 완료했습니다.')
+      navigate('/list')
     } finally {
       setSaving(false)
     }
@@ -93,153 +157,164 @@ export function ConsultationForm({ onToast }: Props) {
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <div className="brand-mark">
-            Tel<span>Work</span>
-          </div>
-          <div className="brand-sub">{title}</div>
-        </div>
-        <Link to="/list" className="icon-btn" aria-label="상담 목록">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <header className="form-header">
+        <Link to="/list" className="back-btn" aria-label="뒤로">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
             <path
-              d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"
+              d="M15 5 8 12l7 7"
               stroke="currentColor"
               strokeWidth="2.2"
               strokeLinecap="round"
+              strokeLinejoin="round"
             />
           </svg>
         </Link>
+        <div className="form-header-text">
+          <h1>{editingId ? '상담 수정' : '상담 등록'}</h1>
+          <p>전화 상담 내용을 빠르게 기록하세요</p>
+        </div>
       </header>
 
       <main className="page">
         <section className="section">
           <div className="section-head">
-            <h2 className="section-title">고객 정보</h2>
-            <span className="section-hint">통화 중 바로 입력</span>
+            <span className="section-icon">
+              <IconPerson />
+            </span>
+            <h2 className="section-title">기본 정보</h2>
           </div>
           <div className="panel">
-            <Field label="고객 이름" required>
+            <Field label="의뢰인 이름" required>
               <input
                 className="field-control"
                 type="text"
-                inputMode="text"
                 autoComplete="name"
                 placeholder="이름을 입력하세요"
                 value={form.customerName}
                 onChange={(e) => patch('customerName', e.target.value)}
               />
             </Field>
-            <Field label="전화번호" required>
-              <input
-                className="field-control"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                placeholder="휴대폰 번호 입력"
-                value={form.phone}
-                onChange={(e) => patch('phone', formatPhone(e.target.value))}
+
+            <Field label="전화번호" required hint="010은 자동 입력됩니다">
+              <div className="phone-row">
+                <input className="field-control phone-prefix" value="010" readOnly tabIndex={-1} />
+                <input
+                  className="field-control phone-suffix"
+                  type="tel"
+                  inputMode="numeric"
+                  placeholder="뒷번호만 입력"
+                  value={phoneSuffix(form.phone)}
+                  onChange={(e) => patch('phone', phoneFromSuffix(e.target.value))}
+                />
+              </div>
+            </Field>
+
+            <Field label="문의 유형">
+              <ChipGroup
+                ariaLabel="문의 유형"
+                options={INQUIRY_TYPE_OPTIONS}
+                value={form.inquiryType}
+                onChange={(v) => patch('inquiryType', v)}
+                columns={4}
               />
             </Field>
-            <Field label="지역">
-              <select
-                className="field-control"
-                value={form.region}
-                onChange={(e) => patch('region', e.target.value)}
-              >
-                <option value="">선택하세요</option>
-                {REGIONS.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="유입경로">
-              <select
-                className="field-control"
-                value={form.inflowChannel}
-                onChange={(e) => patch('inflowChannel', e.target.value)}
-              >
-                <option value="">선택하세요</option>
-                {INFLOW_CHANNELS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+
+            <Field label="주문사항">
+              <ChipGroup
+                ariaLabel="주문사항"
+                options={ORDER_TYPE_OPTIONS}
+                value={form.orderType}
+                onChange={(v) => patch('orderType', v)}
+                columns={3}
+              />
             </Field>
           </div>
         </section>
 
         <section className="section">
           <div className="section-head">
-            <h2 className="section-title">의뢰 내용</h2>
-            <span className="section-hint">한 손 탭으로 선택</span>
+            <span className="section-icon">
+              <IconDoc />
+            </span>
+            <h2 className="section-title">파일 정보</h2>
           </div>
           <div className="panel">
-            <Field label="문의 유형">
-              <select
-                className="field-control"
-                value={form.inquiryType}
-                onChange={(e) => patch('inquiryType', e.target.value)}
-              >
-                <option value="">선택하세요</option>
-                {INQUIRY_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
+            <Field label="파일 종류">
+              <ChipGroup
+                ariaLabel="파일 종류"
+                options={FILE_KIND_OPTIONS}
+                value={form.fileKind}
+                onChange={(v) => patch('fileKind', v)}
+                columns={2}
+              />
             </Field>
-            <Field label="제출 목적">
-              <select
-                className="field-control"
-                value={form.purpose}
-                onChange={(e) => patch('purpose', e.target.value)}
-              >
-                <option value="">선택하세요 (예: 법원 / 검찰 / 개인보관)</option>
-                {PURPOSES.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="예상 분량 · 녹음시간">
+
+            <Field label="파일 개수">
               <input
                 className="field-control"
                 type="text"
-                placeholder="예: 60분 / 약 2시간"
-                value={form.estimatedDuration}
-                onChange={(e) => patch('estimatedDuration', e.target.value)}
+                inputMode="numeric"
+                placeholder="예: 3개"
+                value={form.fileCount}
+                onChange={(e) => patch('fileCount', e.target.value)}
               />
             </Field>
-            <Field label="작업 범위">
-              <SegmentedControl
-                ariaLabel="작업 범위"
-                options={WORK_SCOPE_OPTIONS}
-                value={form.workScope}
-                onChange={(v) => patch('workScope', v)}
-              />
+
+            <Field label="작성 구간">
+              <div className="range-row">
+                <input
+                  className="field-control"
+                  type="time"
+                  step={1}
+                  value={form.rangeStart}
+                  onChange={(e) => patch('rangeStart', e.target.value)}
+                  aria-label="시작 시각"
+                />
+                <span className="range-sep">~</span>
+                <input
+                  className="field-control"
+                  type="time"
+                  step={1}
+                  value={form.rangeEnd}
+                  onChange={(e) => patch('rangeEnd', e.target.value)}
+                  aria-label="종료 시각"
+                />
+                <span className="range-icon" aria-hidden>
+                  <IconClock />
+                </span>
+              </div>
+              {durationSeconds > 0 ? (
+                <span className="auto-badge">자동 계산 {formatDurationKo(durationSeconds)}</span>
+              ) : null}
             </Field>
-            <Field label="파일 형태">
-              <SegmentedControl
-                ariaLabel="파일 형태"
-                options={FILE_FORMAT_OPTIONS}
-                value={form.fileFormat}
-                onChange={(v) => patch('fileFormat', v)}
-              />
-            </Field>
+
+            <div className="quote-box">
+              <div className="quote-title">예상견적</div>
+              <div className="quote-row">
+                <span>예상분량</span>
+                <strong>{durationSeconds > 0 ? formatDurationKo(durationSeconds) : '—'}</strong>
+              </div>
+              <div className="quote-row">
+                <span>예상금액</span>
+                <strong>
+                  {estimatedAmount > 0
+                    ? `약 ${estimatedAmount.toLocaleString('ko-KR')}원`
+                    : '—'}
+                </strong>
+              </div>
+            </div>
           </div>
         </section>
 
         <section className="section">
           <div className="section-head">
-            <h2 className="section-title">일정 · 우선도</h2>
+            <span className="section-icon">
+              <IconCal />
+            </span>
+            <h2 className="section-title">납기 / 전달</h2>
           </div>
           <div className="panel">
-            <Field label="희망 마감일시">
+            <Field label="마감일시">
               <div className="datetime-wrap">
                 <input
                   className="field-control"
@@ -248,33 +323,18 @@ export function ConsultationForm({ onToast }: Props) {
                   onChange={(e) => patch('deadline', e.target.value)}
                 />
                 <span className="cal" aria-hidden>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <rect
-                      x="3"
-                      y="5"
-                      width="18"
-                      height="16"
-                      rx="2"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                    />
-                    <path
-                      d="M8 3v4M16 3v4M3 10h18"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                    />
-                  </svg>
+                  <IconCal />
                 </span>
               </div>
             </Field>
-            <Field label="긴급 여부 / 우선도">
-              <SegmentedControl
-                ariaLabel="우선도"
-                options={PRIORITY_OPTIONS}
-                value={form.priority}
-                onChange={(v) => patch('priority', v)}
-                toneMap={{ priority: 'priority', urgent: 'urgent' }}
+
+            <Field label="전달방법">
+              <ChipGroup
+                ariaLabel="전달방법"
+                options={DELIVERY_METHOD_OPTIONS}
+                value={form.deliveryMethod}
+                onChange={(v) => patch('deliveryMethod', v)}
+                columns={2}
               />
             </Field>
           </div>
@@ -282,30 +342,72 @@ export function ConsultationForm({ onToast }: Props) {
 
         <section className="section">
           <div className="section-head">
+            <span className="section-icon">
+              <IconMemo />
+            </span>
             <h2 className="section-title">상담 메모</h2>
           </div>
           <div className="panel">
-            <Field label="상담 내용">
-              <textarea
+            <Field label="메모">
+              <div className="memo-wrap">
+                <textarea
+                  className="field-control"
+                  maxLength={MEMO_MAX}
+                  placeholder="인적사항, 지역, 이메일, 요청사항, 제출목적, 유입경로"
+                  value={form.memo}
+                  onChange={(e) => patch('memo', e.target.value.slice(0, MEMO_MAX))}
+                />
+                <span className="memo-count">
+                  {form.memo.length}/{MEMO_MAX}
+                </span>
+              </div>
+            </Field>
+          </div>
+        </section>
+
+        <section className="section">
+          <div className="section-head">
+            <span className="section-icon">
+              <IconPerson />
+            </span>
+            <h2 className="section-title">담당</h2>
+          </div>
+          <div className="panel">
+            <Field label="담당자">
+              <select
                 className="field-control"
-                placeholder="상담 내용을 입력하세요"
-                value={form.memo}
-                onChange={(e) => patch('memo', e.target.value)}
-              />
+                value={form.assignee}
+                onChange={(e) => patch('assignee', e.target.value)}
+              >
+                <option value="">담당자를 선택하세요</option>
+                {ASSIGNEE_OPTIONS.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
             </Field>
             {error ? <p className="error-text">{error}</p> : null}
           </div>
         </section>
       </main>
 
-      <div className="action-bar">
+      <div className="action-bar dual">
+        <button
+          type="button"
+          className="btn btn-outline"
+          disabled={saving}
+          onClick={() => void persist('draft')}
+        >
+          임시 저장
+        </button>
         <button
           type="button"
           className="btn btn-solid"
           disabled={saving}
-          onClick={() => void persist()}
+          onClick={() => void persist('completed')}
         >
-          저장
+          상담 완료
         </button>
       </div>
     </div>

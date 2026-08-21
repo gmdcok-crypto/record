@@ -2,30 +2,39 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { liveQuery } from 'dexie'
 import { db } from '../db'
-import { formatDateTime, relativeShort } from '../lib/format'
+import { formatDateTime, formatPhone, relativeShort } from '../lib/format'
 import {
-  FILE_FORMAT_OPTIONS,
-  PRIORITY_OPTIONS,
-  WORK_SCOPE_OPTIONS,
+  DELIVERY_METHOD_OPTIONS,
+  FILE_KIND_OPTIONS,
+  INQUIRY_TYPE_OPTIONS,
+  ORDER_TYPE_OPTIONS,
+  formatDurationKo,
+  labelOf,
   type Consultation,
-  type Priority,
+  type ConsultationStatus,
 } from '../types'
 
-type Filter = 'all' | 'urgent'
+type Filter = 'all' | 'draft' | 'completed'
 
-const priorityLabel = Object.fromEntries(
-  PRIORITY_OPTIONS.map((o) => [o.value, o.label]),
-) as Record<Priority, string>
+const statusLabel: Record<ConsultationStatus, string> = {
+  draft: '임시저장',
+  completed: '완료',
+}
 
 function metaLine(row: Consultation): string[] {
   const bits: string[] = []
-  if (row.inquiryType) bits.push(row.inquiryType)
-  if (row.purpose) bits.push(row.purpose)
-  const scope = WORK_SCOPE_OPTIONS.find((o) => o.value === row.workScope)?.label
-  if (scope) bits.push(scope)
-  const file = FILE_FORMAT_OPTIONS.find((o) => o.value === row.fileFormat)?.label
+  const inquiry = labelOf(INQUIRY_TYPE_OPTIONS, row.inquiryType)
+  if (inquiry) bits.push(inquiry)
+  const order = labelOf(ORDER_TYPE_OPTIONS, row.orderType)
+  if (order) bits.push(order)
+  const file = labelOf(FILE_KIND_OPTIONS, row.fileKind)
   if (file) bits.push(file)
+  if (row.durationSeconds > 0) bits.push(formatDurationKo(row.durationSeconds))
+  if (row.estimatedAmount > 0) bits.push(`약 ${row.estimatedAmount.toLocaleString('ko-KR')}원`)
+  const delivery = labelOf(DELIVERY_METHOD_OPTIONS, row.deliveryMethod)
+  if (delivery) bits.push(delivery)
   if (row.deadline) bits.push(`마감 ${formatDateTime(row.deadline)}`)
+  if (row.assignee) bits.push(row.assignee)
   return bits
 }
 
@@ -45,7 +54,8 @@ export function ConsultationList() {
 
   const filtered = useMemo(() => {
     const list = rows ?? []
-    if (filter === 'urgent') return list.filter((r) => r.priority === 'urgent')
+    if (filter === 'draft') return list.filter((r) => r.status === 'draft')
+    if (filter === 'completed') return list.filter((r) => r.status === 'completed')
     return list
   }, [rows, filter])
 
@@ -53,7 +63,8 @@ export function ConsultationList() {
     const list = rows ?? []
     return {
       total: list.length,
-      urgent: list.filter((r) => r.priority === 'urgent').length,
+      draft: list.filter((r) => r.status === 'draft').length,
+      completed: list.filter((r) => r.status === 'completed').length,
     }
   }, [rows])
 
@@ -84,14 +95,18 @@ export function ConsultationList() {
           <p>등록한 전화 상담을 확인하고 다시 열어 수정할 수 있습니다.</p>
         </div>
 
-        <div className="stats" aria-label="요약" style={{ gridTemplateColumns: '1fr 1fr' }}>
+        <div className="stats" aria-label="요약">
           <div className="stat">
             <strong>{stats.total}</strong>
             <span>전체</span>
           </div>
           <div className="stat">
-            <strong>{stats.urgent}</strong>
-            <span>긴급</span>
+            <strong>{stats.draft}</strong>
+            <span>임시</span>
+          </div>
+          <div className="stat">
+            <strong>{stats.completed}</strong>
+            <span>완료</span>
           </div>
         </div>
 
@@ -99,7 +114,8 @@ export function ConsultationList() {
           {(
             [
               ['all', '전체'],
-              ['urgent', '긴급'],
+              ['draft', '임시저장'],
+              ['completed', '완료'],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -128,19 +144,11 @@ export function ConsultationList() {
                 <div className="card-top">
                   <div>
                     <h2 className="card-name">{row.customerName || '이름 없음'}</h2>
-                    <p className="card-phone">{row.phone || '번호 없음'}</p>
+                    <p className="card-phone">
+                      {row.phone ? formatPhone(row.phone) : '번호 없음'}
+                    </p>
                   </div>
-                  <span
-                    className={`badge ${
-                      row.priority === 'urgent'
-                        ? 'urgent'
-                        : row.priority === 'priority'
-                          ? 'priority'
-                          : ''
-                    }`}
-                  >
-                    {priorityLabel[row.priority]}
-                  </span>
+                  <span className={`badge ${row.status}`}>{statusLabel[row.status]}</span>
                 </div>
                 <div className="card-meta">
                   <span>{relativeShort(row.updatedAt)}</span>
@@ -153,6 +161,10 @@ export function ConsultationList() {
           </div>
         )}
       </main>
+
+      <Link to="/" className="fab">
+        + 상담 등록
+      </Link>
     </div>
   )
 }
