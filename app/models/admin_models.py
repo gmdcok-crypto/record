@@ -398,3 +398,26 @@ class SalesMonthlyTarget(Base):
     target_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     updated_by_admin_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id"), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class PhoneConsultation(Base):
+    """TelWork phone consultation (phone/ PWA)."""
+
+    __tablename__ = "phone_consultations"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    customer_name: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    phone: Mapped[str] = mapped_column(String(30), nullable=False, default="", index=True)
+    inquiry_type: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    purpose: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    estimated_duration: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+    work_scope: Mapped[str] = mapped_column(String(20), nullable=False, default="undecided")
+    region: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+    deadline: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    file_format: Mapped[str] = mapped_column(String(20), nullable=False, default="audio")
+    inflow_channel: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    priority: Mapped[str] = mapped_column(String(20), nullable=False, default="normal", index=True)
+    memo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="completed", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

@@ -25,6 +25,14 @@ RUN npm ci --prefer-offline --no-audit --no-fund
 COPY transcriber/ ./
 RUN npm run build
 
+WORKDIR /app/phone
+ARG VITE_BASE_PATH=/phone/
+ENV VITE_BASE_PATH=$VITE_BASE_PATH
+COPY phone/package.json phone/package-lock.json ./
+RUN npm ci --prefer-offline --no-audit --no-fund
+COPY phone/ ./
+RUN npm run build
+
 FROM python:3.12-slim
 WORKDIR /app
 
@@ -50,5 +58,6 @@ COPY scripts ./scripts
 COPY --from=frontend-build /app/client/dist ./client/dist
 COPY --from=frontend-build /app/admin/dist ./admin/dist
 COPY --from=frontend-build /app/transcriber/dist ./transcriber/dist
+COPY --from=frontend-build /app/phone/dist ./phone/dist
 
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

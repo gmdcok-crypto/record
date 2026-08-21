@@ -20,6 +20,7 @@ from app.routers import admin_auth, admin_users, expenses, jobs, member_auth, pr
 STATIC_DIR = Path(__file__).resolve().parent.parent / "client" / "dist"
 ADMIN_DIR = Path(__file__).resolve().parent.parent / "admin" / "dist"
 TRANSCRIBER_DIR = Path(__file__).resolve().parent.parent / "transcriber" / "dist"
+PHONE_DIR = Path(__file__).resolve().parent.parent / "phone" / "dist"
 INTRO_DIR = Path(__file__).resolve().parent.parent / "intro"
 
 logger = logging.getLogger(__name__)
@@ -205,6 +206,9 @@ if ADMIN_DIR.is_dir():
 
 if TRANSCRIBER_DIR.is_dir():
     app.mount("/transcriber", NoCacheHtmlStaticFiles(directory=TRANSCRIBER_DIR, html=True), name="transcriber")
+
+if PHONE_DIR.is_dir():
+    app.mount("/phone", NoCacheHtmlStaticFiles(directory=PHONE_DIR, html=True), name="phone")
 
 if INTRO_DIR.is_dir():
     app.mount("/intro", NoCacheHtmlStaticFiles(directory=INTRO_DIR, html=True), name="intro")

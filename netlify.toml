@@ -2,5 +2,6 @@
 # - Client PWA (bulpen-user): client/  -> uses client/netlify.toml
 # - Admin: admin/                    -> uses admin/netlify.toml
 # - Transcriber: transcriber/          -> uses transcriber/netlify.toml
+# - Phone reception: phone/            -> uses phone/netlify.toml
 #
 # Do not add [build] base here. A shared build base forces every site to deploy the client app.
