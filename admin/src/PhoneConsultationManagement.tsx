@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { fetchPhoneConsultations, type PhoneConsultation } from "./api";
 
@@ -72,29 +72,6 @@ function formatDateTime(value: string | null): string {
   }).format(d);
 }
 
-function SummaryChip({
-  label,
-  value,
-  tone = "slate",
-}: {
-  label: string;
-  value: string;
-  tone?: "slate" | "cyan" | "amber";
-}) {
-  const toneClass =
-    tone === "cyan"
-      ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-100"
-      : tone === "amber"
-        ? "border-amber-500/30 bg-amber-500/10 text-amber-100"
-        : "border-slate-700 bg-slate-950/70 text-slate-200";
-  return (
-    <div className={`rounded-xl border px-3 py-2 ${toneClass}`}>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-semibold">{value}</p>
-    </div>
-  );
-}
-
 type StatusFilter = "all" | "draft" | "completed";
 
 export default function PhoneConsultationManagement() {
@@ -128,22 +105,8 @@ export default function PhoneConsultationManagement() {
     void loadRows();
   }, [loadRows]);
 
-  const stats = useMemo(() => {
-    const draft = rows.filter((r) => r.status === "draft").length;
-    const completed = rows.filter((r) => r.status === "completed").length;
-    const amount = rows.reduce((sum, r) => sum + (r.estimated_amount || 0), 0);
-    return { total: rows.length, draft, completed, amount };
-  }, [rows]);
-
   return (
     <div className="space-y-4">
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryChip label="조회 건수" value={`${stats.total}건`} />
-        <SummaryChip label="임시저장" value={`${stats.draft}건`} tone="amber" />
-        <SummaryChip label="완료" value={`${stats.completed}건`} tone="cyan" />
-        <SummaryChip label="예상금액 합계" value={formatAmount(stats.amount)} />
-      </div>
-
       <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -285,9 +248,17 @@ export default function PhoneConsultationManagement() {
               <Detail
                 label="작성 구간"
                 value={
-                  selected.range_start || selected.range_end
-                    ? `${selected.range_start || "—"} ~ ${selected.range_end || "—"}`
-                    : "—"
+                  selected.ranges && selected.ranges.length > 0
+                    ? selected.ranges
+                        .map((range, index) => {
+                          const label = `파일${index + 1}`;
+                          if (!range.start && !range.end) return `${label}: —`;
+                          return `${label}: ${range.start || "—"} ~ ${range.end || "—"}`;
+                        })
+                        .join("\n")
+                    : selected.range_start || selected.range_end
+                      ? `${selected.range_start || "—"} ~ ${selected.range_end || "—"}`
+                      : "—"
                 }
               />
               <Detail label="예상분량" value={formatDuration(selected.duration_seconds)} />
@@ -316,7 +287,7 @@ function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2">
       <p className="text-[11px] text-slate-500">{label}</p>
-      <p className="mt-1 text-slate-100">{value}</p>
+      <p className="mt-1 whitespace-pre-wrap text-slate-100">{value}</p>
     </div>
   );
 }

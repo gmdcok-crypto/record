@@ -156,6 +156,7 @@ app.include_router(jobs.router)
 app.include_router(projects.router)
 app.include_router(expenses.router)
 app.include_router(phone_consultations.router)
+app.include_router(phone_consultations.intake_router)
 
 
 @app.get("/health", include_in_schema=False)

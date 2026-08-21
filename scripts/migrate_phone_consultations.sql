@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS phone_consultations (
   file_count VARCHAR(30) NOT NULL DEFAULT '',
   range_start VARCHAR(16) NOT NULL DEFAULT '',
   range_end VARCHAR(16) NOT NULL DEFAULT '',
+  ranges_json TEXT NULL,
   duration_seconds INT NOT NULL DEFAULT 0,
   estimated_amount INT NOT NULL DEFAULT 0,
   deadline DATETIME NULL,

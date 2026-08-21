@@ -414,6 +414,7 @@ class PhoneConsultation(Base):
     file_count: Mapped[str] = mapped_column(String(30), nullable=False, default="")
     range_start: Mapped[str] = mapped_column(String(16), nullable=False, default="")
     range_end: Mapped[str] = mapped_column(String(16), nullable=False, default="")
+    ranges_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     estimated_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     deadline: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)

@@ -428,6 +428,7 @@ export type PhoneConsultation = {
   file_count: string;
   range_start: string;
   range_end: string;
+  ranges?: Array<{ start: string; end: string }>;
   duration_seconds: number;
   estimated_amount: number;
   deadline: string | null;

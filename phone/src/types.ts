@@ -4,6 +4,11 @@ export type FileKind = 'field' | 'call'
 export type DeliveryMethod = 'pdf' | 'registered'
 export type ConsultationStatus = 'draft' | 'completed'
 
+export type WorkRange = {
+  start: string
+  end: string
+}
+
 export interface Consultation {
   id?: number
   customerName: string
@@ -13,11 +18,9 @@ export interface Consultation {
   orderType: OrderType | ''
   fileKind: FileKind | ''
   fileCount: string
-  /** HH:MM:SS */
-  rangeStart: string
-  /** HH:MM:SS */
-  rangeEnd: string
-  /** duration seconds (auto) */
+  /** One range per file */
+  ranges: WorkRange[]
+  /** duration seconds (auto, sum of ranges) */
   durationSeconds: number
   /** estimated KRW (auto) */
   estimatedAmount: number
@@ -60,6 +63,28 @@ export const ASSIGNEE_OPTIONS = ['권혁균', '운영팀', '상담팀'] as const
 export const RATE_PER_MINUTE = 5000
 
 export const MEMO_MAX = 500
+export const MAX_FILE_RANGES = 20
+
+export function emptyRange(): WorkRange {
+  return { start: '', end: '' }
+}
+
+export function parseFileCount(value: string): number {
+  const digits = value.replace(/\D/g, '')
+  if (!digits) return 1
+  const n = Number.parseInt(digits, 10)
+  if (!Number.isFinite(n) || n < 1) return 1
+  return Math.min(n, MAX_FILE_RANGES)
+}
+
+export function resizeRanges(ranges: WorkRange[], count: number): WorkRange[] {
+  const next = ranges.slice(0, count).map((r) => ({
+    start: r.start || '',
+    end: r.end || '',
+  }))
+  while (next.length < count) next.push(emptyRange())
+  return next
+}
 
 export function emptyConsultation(): Omit<Consultation, 'id'> {
   const now = new Date().toISOString()
@@ -69,9 +94,8 @@ export function emptyConsultation(): Omit<Consultation, 'id'> {
     inquiryType: 'recording',
     orderType: 'new',
     fileKind: 'field',
-    fileCount: '',
-    rangeStart: '',
-    rangeEnd: '',
+    fileCount: '1',
+    ranges: [emptyRange()],
     durationSeconds: 0,
     estimatedAmount: 0,
     deadline: '',
@@ -119,6 +143,10 @@ export function calcDurationSeconds(start: string, end: string): number {
   return b - a
 }
 
+export function calcRangesDurationSeconds(ranges: WorkRange[]): number {
+  return ranges.reduce((sum, range) => sum + calcDurationSeconds(range.start, range.end), 0)
+}
+
 export function calcEstimatedAmount(durationSeconds: number): number {
   if (durationSeconds <= 0) return 0
   const minutes = durationSeconds / 60
@@ -149,4 +177,23 @@ export function labelOf<T extends string>(
 ): string {
   if (!value) return ''
   return options.find((o) => o.value === value)?.label ?? value
+}
+
+/** Normalize legacy single-range rows into ranges[] */
+export function normalizeConsultationRanges(
+  row: Partial<Consultation> & {
+    rangeStart?: string
+    rangeEnd?: string
+  },
+): WorkRange[] {
+  if (Array.isArray(row.ranges) && row.ranges.length > 0) {
+    return resizeRanges(row.ranges, Math.max(row.ranges.length, parseFileCount(row.fileCount || '')))
+  }
+  const count = parseFileCount(row.fileCount || '')
+  const first = emptyRange()
+  if (row.rangeStart || row.rangeEnd) {
+    first.start = row.rangeStart || ''
+    first.end = row.rangeEnd || ''
+  }
+  return resizeRanges([first], count)
 }

@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { Consultation } from './types'
+import { normalizeConsultationRanges, type Consultation } from './types'
 
 const db = new Dexie('TelWorkDB') as Dexie & {
   consultations: EntityTable<Consultation, 'id'>
@@ -32,6 +32,21 @@ db.version(2)
         if (typeof row.inquiryType === 'string' && row.inquiryType.includes('녹취')) {
           row.inquiryType = 'recording'
         }
+      }),
+  )
+
+db.version(3)
+  .stores({
+    consultations:
+      '++id, customerName, phone, status, inquiryType, orderType, deadline, assignee, createdAt, updatedAt',
+  })
+  .upgrade((tx) =>
+    tx
+      .table('consultations')
+      .toCollection()
+      .modify((row: Record<string, unknown>) => {
+        row.ranges = normalizeConsultationRanges(row as never)
+        if (!row.fileCount) row.fileCount = String((row.ranges as unknown[]).length || 1)
       }),
   )
 
