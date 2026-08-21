@@ -34,5 +34,9 @@ transcriber/node_modules/
 transcriber/dist/
 transcriber/.env
 transcriber/tsconfig.tsbuildinfo
+phone/node_modules/
+phone/dist/
+phone/.env
+phone/tsconfig.tsbuildinfo
 new_intro/node_modules/
 new_intro/dist/
