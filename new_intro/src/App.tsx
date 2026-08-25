@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import logo from "./assets/width_1024.png";
 import uploadIcon from "./assets/DesktopPinterestFormUnifiedV3/47762f3b57e28050c36f2dd2f70879f749dbfd75.png";
 import selectIcon from "./assets/DesktopPinterestFormUnifiedV3/e3547b726ceb63cb05d0bbe146755cc2b188322d.png";
@@ -11,10 +11,10 @@ import contextIcon from "./assets/DesktopPinterestFormUnifiedV3/9de0954f6f4b0a1c
 import sadIcon from "./assets/DesktopPinterestFormUnifiedV3/7431f57c1a63f2fdfa65c2585ea00f0e644cf432.png";
 import mobileMascot from "./assets/MobilePinterestFormUnifiedV3/90d99f09138042927aebcbc452ca495efa019925.png";
 import heroStoryBanner from "./assets/hero-story-banner.png";
-import { SignupFlowProvider, useSignupFlow } from "./signup/SignupFlow";
 import QuoteModal from "./quote/QuoteModal";
 import { preloadChannelTalk, showChannelTalkMessenger } from "./lib/channelTalk";
 
+const CLIENT_PWA_URL = "https://user.bulpen.co.kr/";
 const transcriptSamplePdf = "/assets/transcript-sample.pdf";
 
 // 카카오톡 등 인앱 브라우저와 모바일 웹뷰는 PDF를 인라인 표시하지 못하고 다운로드로 처리한다.
@@ -47,7 +47,7 @@ const featureCards = [
     icon: uploadIcon,
     badge: "UPLOAD",
     title: "1분 만에 의뢰 시작",
-    text: "회원가입과 복잡한 상담 없이 파일 업로드만으로 녹취 의뢰를 시작할 수 있습니다."
+    text: "의뢰인 앱에서 파일 업로드만으로 녹취 의뢰를 바로 시작할 수 있습니다."
   },
   {
     icon: selectIcon,
@@ -78,16 +78,14 @@ const qualityCards = [
 ];
 
 function CtaButton({ className = "" }: { className?: string }) {
-  const { openSignupFlow } = useSignupFlow();
   return (
-    <button
-      type="button"
+    <a
       className={`cta-button ${className}`}
-      onClick={openSignupFlow}
+      href={CLIENT_PWA_URL}
       aria-label="녹취록 의뢰하기"
     >
       녹취록 의뢰하기
-    </button>
+    </a>
   );
 }
 
@@ -231,7 +229,7 @@ function Features() {
   return (
     <section className="section white-section" id="features">
       <SectionLabel>핵심 기능</SectionLabel>
-      <h2>모바일 회원가입과 동시에 빠르게 시작하는 핵심기능</h2>
+      <h2>모바일에서 바로 시작하는 핵심기능</h2>
       <p className="section-lead">파일 업로드부터 구간 선택, 결제, 녹취록 수령까지 온라인에서 간편하게 진행할 수 있습니다.</p>
       <div className="feature-grid">
         {featureCards.map((card) => (
@@ -343,15 +341,14 @@ function Results() {
 }
 
 function Request() {
-  const { openSignupFlow } = useSignupFlow();
   return (
     <section className="request-section" id="request">
       <img src={mobileMascot} alt="" />
       <h2>중요한 통화, 정확한 녹취록이 필요하신가요?</h2>
       <p>예상 비용을 먼저 안내하며 상담 후 진행 여부를 결정하셔도 됩니다.</p>
-      <button type="button" className="cta-button large" onClick={openSignupFlow}>
+      <a className="cta-button large" href={CLIENT_PWA_URL}>
         녹취록 의뢰하기
-      </button>
+      </a>
     </section>
   );
 }
@@ -386,11 +383,23 @@ function Footer({
   );
 }
 
+function shouldRedirectLegacySignupEntry(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  const signup = params.get("signup");
+  if (signup === "1" || signup === "true" || signup === "open") return true;
+  return window.location.hash === "#signup";
+}
+
 function AppContent() {
   const [quoteOpen, setQuoteOpen] = useState(false);
 
   useEffect(() => {
     void preloadChannelTalk();
+  }, []);
+
+  useEffect(() => {
+    if (!shouldRedirectLegacySignupEntry()) return;
+    window.location.replace(CLIENT_PWA_URL);
   }, []);
 
   const openQuote = () => setQuoteOpen(true);
@@ -420,10 +429,8 @@ function AppContent() {
 
 export default function App() {
   return (
-    <SignupFlowProvider>
-      <div className="app">
-        <AppContent />
-      </div>
-    </SignupFlowProvider>
+    <div className="app">
+      <AppContent />
+    </div>
   );
 }
