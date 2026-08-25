@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import PwaInstallPrompt from "./PwaInstallPrompt";
 import "./index.css";
 import { clearStaleClientPwaServiceWorkers } from "./serviceWorkerCleanup";
 import { registerAdminPushServiceWorker } from "./webPush";
@@ -17,6 +18,7 @@ void (async () => {
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <App />
+      <PwaInstallPrompt />
     </StrictMode>,
   );
 })();
