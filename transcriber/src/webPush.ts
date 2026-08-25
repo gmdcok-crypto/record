@@ -12,7 +12,12 @@ const PUSH_REGISTER_TIMEOUT_MS = 20_000;
 function apiBase(): string {
   if (typeof window !== "undefined") {
     const host = window.location.hostname;
-    if (host.endsWith(".netlify.app") || host.endsWith(".github.io")) {
+    if (
+      host.endsWith(".netlify.app") ||
+      host.endsWith(".github.io") ||
+      host === "bulpen.co.kr" ||
+      host.endsWith(".bulpen.co.kr")
+    ) {
       return window.location.origin;
     }
   }

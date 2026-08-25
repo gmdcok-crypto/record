@@ -108,7 +108,12 @@ export type HealthResponse = {
 };
 
 function isNetlifyLikeHost(hostname: string): boolean {
-  return hostname.endsWith(".netlify.app") || hostname.endsWith(".github.io");
+  return (
+    hostname.endsWith(".netlify.app") ||
+    hostname.endsWith(".github.io") ||
+    hostname === "bulpen.co.kr" ||
+    hostname.endsWith(".bulpen.co.kr")
+  );
 }
 
 function apiBase(): string {

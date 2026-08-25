@@ -1,4 +1,20 @@
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || ''
+const RAILWAY_API_BASE = 'https://record-production.up.railway.app'
+
+function resolveApiBase(): string {
+  if (API_BASE) return API_BASE
+  if (typeof window === 'undefined') return RAILWAY_API_BASE
+  const host = window.location.hostname
+  if (
+    host.endsWith('.netlify.app') ||
+    host.endsWith('.github.io') ||
+    host === 'bulpen.co.kr' ||
+    host.endsWith('.bulpen.co.kr')
+  ) {
+    return window.location.origin
+  }
+  return RAILWAY_API_BASE
+}
 
 export type SyncConsultationPayload = {
   customer_name: string
@@ -84,7 +100,7 @@ export type CustomerLookupResult = {
 export async function syncConsultationToServer(
   payload: SyncConsultationPayload,
 ): Promise<SyncConsultationResult> {
-  const res = await fetch(`${API_BASE}/api/phone-consultations`, {
+  const res = await fetch(`${resolveApiBase()}/api/phone-consultations`, {
     method: 'POST',
     headers: {
       Accept: 'application/json',
@@ -106,7 +122,7 @@ export async function syncConsultationToServer(
 }
 
 export async function lookupCustomerByPhone(phone: string): Promise<CustomerLookupResult> {
-  const url = new URL(`${API_BASE}/api/phone-consultations/lookup`)
+  const url = new URL(`${resolveApiBase()}/api/phone-consultations/lookup`)
   url.searchParams.set('phone', phone.replace(/\D/g, ''))
   const res = await fetch(url.toString(), {
     headers: { Accept: 'application/json' },

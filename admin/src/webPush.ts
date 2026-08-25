@@ -12,7 +12,12 @@ function isStandaloneAdminHost(): boolean {
   if (typeof window === "undefined") return false;
   const host = window.location.hostname;
   if (host === "localhost" || host === "127.0.0.1") return true;
-  if (host.endsWith(".netlify.app") || host.endsWith(".github.io")) return true;
+  if (
+    host.endsWith(".netlify.app") ||
+    host.endsWith(".github.io") ||
+    host === "bulpen.co.kr" ||
+    host.endsWith(".bulpen.co.kr")
+  ) return true;
   return !window.location.pathname.startsWith("/admin/");
 }
 

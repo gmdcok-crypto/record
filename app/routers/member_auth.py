@@ -110,7 +110,7 @@ DEFAULT_RAILWAY_API_URL = "https://record-production.up.railway.app"
 def _api_public_base() -> str:
     raw = settings.public_api_url.strip().rstrip("/") or DEFAULT_RAILWAY_API_URL
     # Payment redirect must hit Railway directly. Netlify /api/* uses a 200 rewrite that breaks 302.
-    if ".netlify.app" in raw or ".github.io" in raw:
+    if ".netlify.app" in raw or ".github.io" in raw or "bulpen.co.kr" in raw:
         return DEFAULT_RAILWAY_API_URL
     return raw
 

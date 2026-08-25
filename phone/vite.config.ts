@@ -17,6 +17,8 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
+        scope: '/',
+        id: 'https://tel-work.bulpen.co.kr/',
         lang: 'ko',
         icons: [
           {

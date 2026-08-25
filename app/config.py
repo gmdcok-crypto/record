@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     admin_bootstrap_password: str = ""
     public_client_url: str = "https://user.bulpen.co.kr"
     public_api_url: str = "https://record-production.up.railway.app"
-    public_admin_url: str = "https://ad-record.netlify.app"
-    public_transcriber_url: str = "https://speed-write.netlify.app"
+    public_admin_url: str = "https://admin.bulpen.co.kr"
+    public_transcriber_url: str = "https://stenographer.bulpen.co.kr"
     channel_talk_plugin_key: str = Field(default="", validation_alias="VITE_CHANNEL_TALK_PLUGIN_KEY")
     channel_talk_notifications_enabled: bool = False
     channel_talk_access_token: str = ""

@@ -30,7 +30,7 @@ export default defineConfig({
         orientation: "any",
         start_url: "/",
         scope: "/",
-        id: "https://speed-write.netlify.app/",
+        id: "https://stenographer.bulpen.co.kr/",
         categories: ["business", "productivity"],
         icons: [
           {
