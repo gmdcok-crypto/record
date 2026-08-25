@@ -5,7 +5,7 @@ const API_FETCH_OPTIONS = {
 };
 
 const RAILWAY_API_BASE = "https://record-production.up.railway.app";
-const CLIENT_PWA_URL = "https://user.bulpen.co.kr/";
+const CLIENT_PWA_URL = "https://us-record.netlify.app/";
 
 if ("serviceWorker" in navigator) {
   void navigator.serviceWorker.getRegistrations().then((regs) => {

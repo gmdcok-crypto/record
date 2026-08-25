@@ -14,7 +14,7 @@ import heroStoryBanner from "./assets/hero-story-banner.png";
 import QuoteModal from "./quote/QuoteModal";
 import { preloadChannelTalk, showChannelTalkMessenger } from "./lib/channelTalk";
 
-const CLIENT_PWA_URL = "https://user.bulpen.co.kr/";
+const CLIENT_PWA_URL = "https://us-record.netlify.app/";
 const transcriptSamplePdf = "/assets/transcript-sample.pdf";
 
 // 카카오톡 등 인앱 브라우저와 모바일 웹뷰는 PDF를 인라인 표시하지 못하고 다운로드로 처리한다.
