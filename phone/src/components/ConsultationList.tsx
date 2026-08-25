@@ -2,13 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { liveQuery } from 'dexie'
 import { db } from '../db'
-import { formatDateTime, formatPhone, relativeShort } from '../lib/format'
+import { formatPhone, relativeShort } from '../lib/format'
 import {
-  DELIVERY_METHOD_OPTIONS,
-  FILE_KIND_OPTIONS,
   INQUIRY_TYPE_OPTIONS,
   ORDER_TYPE_OPTIONS,
-  formatDurationKo,
   labelOf,
   type Consultation,
   type ConsultationStatus,
@@ -27,13 +24,6 @@ function metaLine(row: Consultation): string[] {
   if (inquiry) bits.push(inquiry)
   const order = labelOf(ORDER_TYPE_OPTIONS, row.orderType)
   if (order) bits.push(order)
-  const file = labelOf(FILE_KIND_OPTIONS, row.fileKind)
-  if (file) bits.push(file)
-  if (row.durationSeconds > 0) bits.push(formatDurationKo(row.durationSeconds))
-  if (row.estimatedAmount > 0) bits.push(`약 ${row.estimatedAmount.toLocaleString('ko-KR')}원`)
-  const delivery = labelOf(DELIVERY_METHOD_OPTIONS, row.deliveryMethod)
-  if (delivery) bits.push(delivery)
-  if (row.deadline) bits.push(`마감 ${formatDateTime(row.deadline)}`)
   if (row.assignee) bits.push(row.assignee)
   return bits
 }
@@ -143,10 +133,14 @@ export function ConsultationList() {
               <Link key={row.id} to={`/consultations/${row.id}`} className="card">
                 <div className="card-top">
                   <div>
-                    <h2 className="card-name">{row.customerName || '이름 없음'}</h2>
-                    <p className="card-phone">
+                    <h2 className="card-name">
                       {row.phone ? formatPhone(row.phone) : '번호 없음'}
-                    </p>
+                    </h2>
+                    {row.customerName &&
+                    row.customerName !== formatPhone(row.phone) &&
+                    !row.customerName.startsWith('010') ? (
+                      <p className="card-phone">{row.customerName}</p>
+                    ) : null}
                   </div>
                   <span className={`badge ${row.status}`}>{statusLabel[row.status]}</span>
                 </div>

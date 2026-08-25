@@ -1,18 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { db } from '../db'
 import { lookupCustomerByPhone, syncConsultationToServer, type CustomerLookupResult } from '../lib/api'
 import {
   ASSIGNEE_OPTIONS,
-  DELIVERY_METHOD_OPTIONS,
-  FILE_KIND_OPTIONS,
   INQUIRY_TYPE_OPTIONS,
   MEMO_MAX,
   ORDER_TYPE_OPTIONS,
-  calcEstimatedAmount,
-  calcRangesDurationSeconds,
   emptyConsultation,
-  formatDurationKo,
   formatPhoneDisplay,
   labelOf,
   normalizeConsultationRanges,
@@ -43,29 +38,6 @@ function IconPerson() {
   )
 }
 
-function IconDoc() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M7 3.5h7.5L19 8v12.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1Z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-      <path d="M14.5 3.5V8H19" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function IconCal() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="3.5" y="5" width="17" height="15" rx="2" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M8 3.5v3M16 3.5v3M3.5 10h17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  )
-}
-
 function IconMemo() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -76,15 +48,6 @@ function IconMemo() {
         strokeLinejoin="round"
       />
       <path d="M8.5 9h7M8.5 13h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function IconClock() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M12 8v4.5l3 1.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   )
 }
@@ -117,40 +80,12 @@ export function ConsultationForm({ onToast }: Props) {
     })
   }, [editingId])
 
-  const durationSeconds = useMemo(
-    () => calcRangesDurationSeconds(form.ranges),
-    [form.ranges],
-  )
-  const estimatedAmount = useMemo(
-    () => calcEstimatedAmount(durationSeconds),
-    [durationSeconds],
-  )
-
   function patch<K extends keyof Consultation>(key: K, value: Consultation[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
     setError('')
   }
 
-  function setFileCount(value: string) {
-    const count = parseFileCount(value)
-    setForm((prev) => ({
-      ...prev,
-      fileCount: value,
-      ranges: resizeRanges(prev.ranges, count),
-    }))
-    setError('')
-  }
-
-  function patchRange(index: number, key: 'start' | 'end', value: string) {
-    setForm((prev) => ({
-      ...prev,
-      ranges: prev.ranges.map((range, i) => (i === index ? { ...range, [key]: value } : range)),
-    }))
-    setError('')
-  }
-
   function validate(): string | null {
-    if (!form.customerName.trim()) return '의뢰인 이름을 입력해 주세요.'
     if (phoneSuffix(form.phone).length < 7) return '전화번호를 확인해 주세요.'
     if (!form.inquiryType) return '문의 유형을 선택해 주세요.'
     return null
@@ -204,14 +139,18 @@ export function ConsultationForm({ onToast }: Props) {
     setSaving(true)
     const now = new Date().toISOString()
     const ranges = resizeRanges(form.ranges, parseFileCount(form.fileCount))
+    const resolvedName =
+      form.customerName.trim() || formatPhoneDisplay(form.phone.replace(/\D/g, '')) || '전화상담'
     const payload: Omit<Consultation, 'id'> = {
       ...form,
-      customerName: form.customerName.trim(),
+      customerName: resolvedName,
       phone: form.phone.replace(/\D/g, ''),
       fileCount: String(parseFileCount(form.fileCount)),
       ranges,
-      durationSeconds,
-      estimatedAmount,
+      durationSeconds: 0,
+      estimatedAmount: 0,
+      deadline: '',
+      deliveryMethod: '',
       memo: form.memo.slice(0, MEMO_MAX),
       status,
       updatedAt: now,
@@ -303,17 +242,6 @@ export function ConsultationForm({ onToast }: Props) {
             <h2 className="section-title">기본 정보</h2>
           </div>
           <div className="panel">
-            <Field label="의뢰인 이름" required>
-              <input
-                className="field-control"
-                type="text"
-                autoComplete="name"
-                placeholder="이름을 입력하세요"
-                value={form.customerName}
-                onChange={(e) => patch('customerName', e.target.value)}
-              />
-            </Field>
-
             <Field label="전화번호" required hint="010은 자동 입력됩니다">
               <div className="phone-row phone-row-lookup">
                 <input className="field-control phone-prefix" value="010" readOnly tabIndex={-1} />
@@ -353,130 +281,6 @@ export function ConsultationForm({ onToast }: Props) {
                 value={form.orderType}
                 onChange={(v) => patch('orderType', v)}
                 columns={3}
-              />
-            </Field>
-          </div>
-        </section>
-
-        <section className="section">
-          <div className="section-head">
-            <span className="section-icon">
-              <IconDoc />
-            </span>
-            <h2 className="section-title">파일 정보</h2>
-          </div>
-          <div className="panel">
-            <Field label="파일 종류">
-              <ChipGroup
-                ariaLabel="파일 종류"
-                options={FILE_KIND_OPTIONS}
-                value={form.fileKind}
-                onChange={(v) => patch('fileKind', v)}
-                columns={2}
-              />
-            </Field>
-
-            <Field label="파일 개수" hint="개수만큼 작성 구간이 생깁니다 (최대 20)">
-              <input
-                className="field-control"
-                type="text"
-                inputMode="numeric"
-                placeholder="예: 3"
-                value={form.fileCount}
-                onChange={(e) => setFileCount(e.target.value)}
-              />
-            </Field>
-
-            <Field label="작성 구간">
-              <div className="range-list">
-                {form.ranges.map((range, index) => {
-                  const rangeSeconds = calcRangesDurationSeconds([range])
-                  return (
-                    <div key={index} className="range-item">
-                      <div className="range-item-label">파일 {index + 1}</div>
-                      <div className="range-row">
-                        <input
-                          className="field-control"
-                          type="time"
-                          step={1}
-                          value={range.start}
-                          onChange={(e) => patchRange(index, 'start', e.target.value)}
-                          aria-label={`파일 ${index + 1} 시작 시각`}
-                        />
-                        <span className="range-sep">~</span>
-                        <input
-                          className="field-control"
-                          type="time"
-                          step={1}
-                          value={range.end}
-                          onChange={(e) => patchRange(index, 'end', e.target.value)}
-                          aria-label={`파일 ${index + 1} 종료 시각`}
-                        />
-                        <span className="range-icon" aria-hidden>
-                          <IconClock />
-                        </span>
-                      </div>
-                      {rangeSeconds > 0 ? (
-                        <span className="auto-badge">자동 계산 {formatDurationKo(rangeSeconds)}</span>
-                      ) : null}
-                    </div>
-                  )
-                })}
-              </div>
-              {durationSeconds > 0 ? (
-                <span className="auto-badge auto-badge-total">
-                  합계 {formatDurationKo(durationSeconds)}
-                </span>
-              ) : null}
-            </Field>
-
-            <div className="quote-box">
-              <div className="quote-title">예상견적</div>
-              <div className="quote-row">
-                <span>예상분량</span>
-                <strong>{durationSeconds > 0 ? formatDurationKo(durationSeconds) : '—'}</strong>
-              </div>
-              <div className="quote-row">
-                <span>예상금액</span>
-                <strong>
-                  {estimatedAmount > 0
-                    ? `약 ${estimatedAmount.toLocaleString('ko-KR')}원`
-                    : '—'}
-                </strong>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="section">
-          <div className="section-head">
-            <span className="section-icon">
-              <IconCal />
-            </span>
-            <h2 className="section-title">납기 / 전달</h2>
-          </div>
-          <div className="panel">
-            <Field label="마감일시">
-              <div className="datetime-wrap">
-                <input
-                  className="field-control"
-                  type="datetime-local"
-                  value={form.deadline}
-                  onChange={(e) => patch('deadline', e.target.value)}
-                />
-                <span className="cal" aria-hidden>
-                  <IconCal />
-                </span>
-              </div>
-            </Field>
-
-            <Field label="전달방법">
-              <ChipGroup
-                ariaLabel="전달방법"
-                options={DELIVERY_METHOD_OPTIONS}
-                value={form.deliveryMethod}
-                onChange={(v) => patch('deliveryMethod', v)}
-                columns={2}
               />
             </Field>
           </div>

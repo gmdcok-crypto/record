@@ -75,6 +75,7 @@ import SegmentPlaybackText from "./SegmentPlaybackText";
 import { buildSegmentTimedWords, segmentContainsActiveWord } from "./playbackHighlight";
 import {
   enableWebPush,
+  fetchWebPushConfig,
   getNotificationPermissionState,
   hasRegisteredPushSubscription,
   postActiveMemberToServiceWorker,
@@ -90,12 +91,21 @@ import { isMobileLikeClient } from "./uploadEnvironment";
 import ClientBottomTabBar from "./ClientBottomTabBar";
 import ClientShellHeader from "./ClientShellHeader";
 import ClientTopTabNav, { type ClientTab } from "./ClientTopTabNav";
+import PushNotificationPrompt from "./PushNotificationPrompt";
+import {
+  clearPushPromptDismissal,
+  dismissPushPromptForSession,
+  isPushPromptDismissedThisSession,
+  pushNeedsSetup,
+  type PushPermissionState,
+} from "./pushNotificationPromptState";
+import { getKakaoInAppPlatform } from "./inAppBrowser";
+import "./styles/push-prompt.css";
 
 type Step = "idle" | "uploading" | "ready" | "error";
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 type UploadProjectMode = "existing" | "new";
 type EditableSegment = TranscriptSegment & { id: string };
-type PushPermissionState = NotificationPermission | "unsupported";
 type PendingLeaveAction =
   | { type: "tab"; tab: ClientTab }
   | { type: "openJob"; item: JobArchiveItem; projectTitle?: string };
@@ -357,6 +367,9 @@ export default function App() {
   const [memberProfile, setMemberProfile] = useState<MemberProfile | null>(null);
   const [pushPermission, setPushPermission] = useState<PushPermissionState>("default");
   const [pushRegistered, setPushRegistered] = useState(false);
+  const [pushStateReady, setPushStateReady] = useState(false);
+  const [webPushAvailable, setWebPushAvailable] = useState<boolean | null>(null);
+  const [pushPromptDismissed, setPushPromptDismissed] = useState(() => isPushPromptDismissedThisSession());
   const [enablingPush, setEnablingPush] = useState(false);
   const segmentEndRef = useRef<number | null>(null);
   const segmentRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -545,6 +558,8 @@ export default function App() {
     setLoadingWorkspace(true);
     setAuthStatus("authenticated");
     setActiveTab("upload");
+    setPushPromptDismissed(isPushPromptDismissedThisSession());
+    void refreshPushPermission();
     window.setTimeout(() => {
       void refreshWorkspace(true);
     }, 0);
@@ -676,6 +691,7 @@ export default function App() {
     const permission = await getNotificationPermissionState();
     setPushPermission(permission);
     setPushRegistered(await hasRegisteredPushSubscription());
+    setPushStateReady(true);
   }, []);
 
   const handleEnablePush = useCallback(async () => {
@@ -695,6 +711,8 @@ export default function App() {
       setPushPermission(permission);
       setPushRegistered(await hasRegisteredPushSubscription());
       if (result === "enabled") {
+        clearPushPromptDismissal();
+        setPushPromptDismissed(false);
         showNotice("success", "웹푸시 알림이 활성화되었습니다.");
       } else if (result === "denied") {
         showNotice("error", "브라우저 알림 권한이 차단되어 있습니다.");
@@ -709,6 +727,18 @@ export default function App() {
       setEnablingPush(false);
     }
   }, [memberProfile, showNotice]);
+
+  const handleDismissPushPrompt = useCallback(() => {
+    dismissPushPromptForSession();
+    setPushPromptDismissed(true);
+  }, []);
+
+  const showPushPrompt =
+    pushStateReady &&
+    webPushAvailable === true &&
+    !getKakaoInAppPlatform() &&
+    pushNeedsSetup(pushPermission, pushRegistered) &&
+    !pushPromptDismissed;
 
   useEffect(() => {
     checkHealth()
@@ -758,6 +788,45 @@ export default function App() {
       document.removeEventListener("visibilitychange", handleVisible);
     };
   }, [busy]);
+
+  useEffect(() => {
+    if (authStatus !== "authenticated") {
+      setWebPushAvailable(null);
+      return;
+    }
+
+    let cancelled = false;
+    void fetchWebPushConfig()
+      .then((config) => {
+        if (!cancelled) setWebPushAvailable(config.enabled);
+      })
+      .catch(() => {
+        if (!cancelled) setWebPushAvailable(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authStatus]);
+
+  useEffect(() => {
+    if (authStatus !== "authenticated" || !pushStateReady) return;
+
+    const handleReturnToApp = () => {
+      if (document.visibilityState && document.visibilityState !== "visible") return;
+      if (webPushAvailable !== true) return;
+      if (getKakaoInAppPlatform()) return;
+      if (!pushNeedsSetup(pushPermission, pushRegistered)) return;
+      setPushPromptDismissed(false);
+    };
+
+    document.addEventListener("visibilitychange", handleReturnToApp);
+    window.addEventListener("focus", handleReturnToApp);
+    return () => {
+      document.removeEventListener("visibilitychange", handleReturnToApp);
+      window.removeEventListener("focus", handleReturnToApp);
+    };
+  }, [authStatus, pushStateReady, webPushAvailable, pushPermission, pushRegistered]);
 
   useEffect(() => {
     if (!memberProfile) return;
@@ -2219,6 +2288,14 @@ export default function App() {
         />
 
         <ActionNoticeModal notice={actionNotice} onClose={() => setActionNotice(null)} />
+
+        <PushNotificationPrompt
+          open={showPushPrompt}
+          enabling={enablingPush}
+          permission={pushPermission}
+          onEnable={() => void handleEnablePush()}
+          onDismiss={handleDismissPushPrompt}
+        />
 
         <SpeakerSettingsModal
           open={speakerSettingsOpen}

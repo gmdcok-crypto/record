@@ -1,0 +1,115 @@
+.push-prompt {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+.push-prompt__backdrop {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--bp-page, #0b1b33) 72%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.push-prompt__card {
+  position: relative;
+  width: min(100%, 24rem);
+  padding: 20px;
+  border: 1px solid var(--bp-line);
+  border-radius: var(--bp-radius-shell, 18px);
+  background: var(--bp-surface, #fff);
+  box-shadow: var(--bp-shadow-strong);
+  animation: push-prompt-in 0.25s ease-out;
+}
+
+.push-prompt__eyebrow {
+  margin: 0;
+  color: var(--bp-accent);
+  font-size: var(--bp-text-micro-size);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.push-prompt__title {
+  margin: 6px 0 0;
+  color: var(--bp-ink);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.push-prompt__desc {
+  margin: 10px 0 0;
+  color: var(--bp-body);
+  font-size: var(--bp-text-caption-size);
+  line-height: 1.55;
+}
+
+.push-prompt__list {
+  margin: 12px 0 0;
+  padding-left: 1.1rem;
+  color: var(--bp-body);
+  font-size: var(--bp-text-caption-size);
+  line-height: 1.5;
+}
+
+.push-prompt__list li + li {
+  margin-top: 2px;
+}
+
+.push-prompt__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.push-prompt__btn {
+  flex: 1;
+  min-height: 42px;
+  border-radius: var(--bp-radius-button);
+  font-size: var(--bp-text-button-size);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.push-prompt__btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.push-prompt__btn--primary {
+  border: none;
+  background: var(--bp-ink);
+  color: #fff;
+}
+
+.push-prompt__btn--primary:hover:not(:disabled) {
+  background: var(--navy-soft);
+}
+
+.push-prompt__btn--ghost {
+  border: 1px solid var(--bp-line);
+  background: transparent;
+  color: var(--bp-body);
+}
+
+.push-prompt__btn--ghost:hover:not(:disabled) {
+  background: var(--bp-surface-muted);
+}
+
+@keyframes push-prompt-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
