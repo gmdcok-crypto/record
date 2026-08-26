@@ -293,7 +293,7 @@ def create_phone_consultation(
     memo: str | None = "",
     assignee: str = "",
     status: str = "completed",
-    auto_register_member: bool = True,
+    auto_register_member: bool = False,
 ) -> dict:
     _ensure_schema(db)
     normalized_phone = normalize_phone(phone) or re.sub(r"\D", "", (phone or "").strip())

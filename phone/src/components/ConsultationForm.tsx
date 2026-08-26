@@ -166,7 +166,7 @@ export function ConsultationForm({ onToast }: Props) {
 
       try {
         if (!editingId) {
-          const sync = await syncConsultationToServer({
+          await syncConsultationToServer({
             customer_name: payload.customerName,
             phone: payload.phone,
             inquiry_type: payload.inquiryType || '',
@@ -183,19 +183,9 @@ export function ConsultationForm({ onToast }: Props) {
             memo: payload.memo || '',
             assignee: payload.assignee || '',
             status,
-            auto_register_member: true,
+            auto_register_member: false,
           })
-          if (sync.member_created) {
-            onToast(
-              status === 'draft'
-                ? '임시 저장 · 회원 자동가입 완료'
-                : '상담 완료 · 회원 자동가입 완료',
-            )
-          } else if (sync.member) {
-            onToast(status === 'draft' ? '임시 저장했습니다. (기존 회원)' : '상담을 완료했습니다. (기존 회원)')
-          } else {
-            onToast(status === 'draft' ? '임시 저장했습니다.' : '상담을 완료했습니다.')
-          }
+          onToast(status === 'draft' ? '임시 저장했습니다.' : '상담을 완료했습니다.')
         } else {
           onToast(status === 'draft' ? '임시 저장했습니다.' : '상담을 완료했습니다.')
         }
@@ -203,8 +193,8 @@ export function ConsultationForm({ onToast }: Props) {
         console.error(syncError)
         onToast(
           status === 'draft'
-            ? '로컬 임시 저장됨 (서버/회원 연동 실패)'
-            : '로컬 저장됨 (서버/회원 연동 실패)',
+            ? '로컬 임시 저장됨 (서버 저장 실패)'
+            : '로컬 저장됨 (서버 저장 실패)',
         )
       }
       navigate('/list')

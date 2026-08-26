@@ -43,7 +43,7 @@ class PhoneConsultationCreateRequest(BaseModel):
     memo: str | None = Field(default="", max_length=500)
     assignee: str = Field(default="", max_length=100)
     status: str = Field(default="completed", max_length=20)
-    auto_register_member: bool = True
+    auto_register_member: bool = False
 
 
 @router.get("")
