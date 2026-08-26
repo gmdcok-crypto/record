@@ -11,9 +11,24 @@ function resolveApiBase(): string {
     host === 'bulpen.co.kr' ||
     host.endsWith('.bulpen.co.kr')
   ) {
+    // Same-origin so Netlify /api/* proxy is used.
     return window.location.origin
   }
   return RAILWAY_API_BASE
+}
+
+function apiUrl(path: string, query?: Record<string, string>): string {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  const base = resolveApiBase().replace(/\/$/, '')
+  const url = base
+    ? new URL(`${base}${normalizedPath}`)
+    : new URL(normalizedPath, typeof window !== 'undefined' ? window.location.origin : RAILWAY_API_BASE)
+  if (query) {
+    for (const [key, value] of Object.entries(query)) {
+      url.searchParams.set(key, value)
+    }
+  }
+  return url.toString()
 }
 
 export type SyncConsultationPayload = {
@@ -100,7 +115,7 @@ export type CustomerLookupResult = {
 export async function syncConsultationToServer(
   payload: SyncConsultationPayload,
 ): Promise<SyncConsultationResult> {
-  const res = await fetch(`${resolveApiBase()}/api/phone-consultations`, {
+  const res = await fetch(apiUrl('/api/phone-consultations'), {
     method: 'POST',
     headers: {
       Accept: 'application/json',
@@ -122,11 +137,12 @@ export async function syncConsultationToServer(
 }
 
 export async function lookupCustomerByPhone(phone: string): Promise<CustomerLookupResult> {
-  const url = new URL(`${resolveApiBase()}/api/phone-consultations/lookup`)
-  url.searchParams.set('phone', phone.replace(/\D/g, ''))
-  const res = await fetch(url.toString(), {
-    headers: { Accept: 'application/json' },
-  })
+  const res = await fetch(
+    apiUrl('/api/phone-consultations/lookup', { phone: phone.replace(/\D/g, '') }),
+    {
+      headers: { Accept: 'application/json' },
+    },
+  )
   if (!res.ok) {
     let detail = '고객 조회에 실패했습니다.'
     try {
