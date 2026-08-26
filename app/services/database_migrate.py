@@ -199,6 +199,9 @@ CREATE TABLE phone_consultations (
   memo VARCHAR(500) NULL,
   assignee VARCHAR(100) NOT NULL DEFAULT '',
   status VARCHAR(20) NOT NULL DEFAULT 'draft',
+  purpose VARCHAR(255) NOT NULL DEFAULT '',
+  priority VARCHAR(30) NOT NULL DEFAULT '',
+  region VARCHAR(100) NOT NULL DEFAULT '',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_phone_consultations_phone (phone),
@@ -228,6 +231,9 @@ _PHONE_CONSULTATION_COLUMNS: tuple[tuple[str, str], ...] = (
     ("memo", "VARCHAR(500) NULL"),
     ("assignee", "VARCHAR(100) NOT NULL DEFAULT ''"),
     ("status", "VARCHAR(20) NOT NULL DEFAULT 'draft'"),
+    ("purpose", "VARCHAR(255) NOT NULL DEFAULT ''"),
+    ("priority", "VARCHAR(30) NOT NULL DEFAULT ''"),
+    ("region", "VARCHAR(100) NOT NULL DEFAULT ''"),
     ("created_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"),
     ("updated_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
 )
@@ -239,16 +245,21 @@ def ensure_phone_consultations_table(engine: Engine) -> None:
         if not _table_exists(conn, "phone_consultations"):
             conn.execute(text(_PHONE_CONSULTATIONS_DDL))
             logger.info("Created phone_consultations table")
-            return
 
+    with engine.begin() as conn:
+        if not _table_exists(conn, "phone_consultations"):
+            return
         for column_name, column_ddl in _PHONE_CONSULTATION_COLUMNS:
             if _column_exists(conn, "phone_consultations", column_name):
                 continue
             conn.execute(text(f"ALTER TABLE phone_consultations ADD COLUMN {column_name} {column_ddl}"))
             logger.info("Added phone_consultations.%s", column_name)
 
-        # Older TelWork schemas had required columns (e.g. purpose) without defaults.
-        # Soften them so current ORM inserts that omit those fields can succeed.
+    # Older TelWork schemas had required columns (e.g. purpose) without defaults.
+    # Soften them one-by-one so a single failure does not roll back the rest.
+    with engine.connect() as conn:
+        if not _table_exists(conn, "phone_consultations"):
+            return
         legacy_rows = conn.execute(
             text(
                 """
@@ -260,37 +271,42 @@ def ensure_phone_consultations_table(engine: Engine) -> None:
             )
         ).mappings().all()
         current_columns = {name for name, _ddl in _PHONE_CONSULTATION_COLUMNS} | {"id"}
-        for row in legacy_rows:
-            column_name = str(row["COLUMN_NAME"])
-            if column_name in current_columns:
-                continue
-            if str(row["IS_NULLABLE"]).upper() == "YES":
-                continue
-            if row["COLUMN_DEFAULT"] is not None:
-                continue
-            extra = str(row["EXTRA"] or "").lower()
-            if "auto_increment" in extra:
-                continue
-            column_type = str(row["COLUMN_TYPE"] or "").lower()
-            if any(token in column_type for token in ("int", "decimal", "float", "double")):
-                default_sql = "DEFAULT 0"
-            elif "datetime" in column_type or "timestamp" in column_type:
-                default_sql = "NULL"
-                conn.execute(
-                    text(
-                        f"ALTER TABLE phone_consultations MODIFY COLUMN `{column_name}` {row['COLUMN_TYPE']} NULL"
+
+    for row in legacy_rows:
+        column_name = str(row["COLUMN_NAME"])
+        if column_name in current_columns:
+            continue
+        if str(row["IS_NULLABLE"]).upper() == "YES":
+            continue
+        if row["COLUMN_DEFAULT"] is not None:
+            continue
+        extra = str(row["EXTRA"] or "").lower()
+        if "auto_increment" in extra:
+            continue
+        column_type = str(row["COLUMN_TYPE"] or "").lower()
+        try:
+            with engine.begin() as conn:
+                if "datetime" in column_type or "timestamp" in column_type:
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE phone_consultations MODIFY COLUMN `{column_name}` {row['COLUMN_TYPE']} NULL"
+                        )
                     )
-                )
-                logger.info("Softened legacy phone_consultations.%s to NULL", column_name)
-                continue
-            else:
-                default_sql = "DEFAULT ''"
-            conn.execute(
-                text(
-                    f"ALTER TABLE phone_consultations MODIFY COLUMN `{column_name}` {row['COLUMN_TYPE']} NOT NULL {default_sql}"
-                )
-            )
-            logger.info("Softened legacy phone_consultations.%s with default", column_name)
+                elif any(token in column_type for token in ("int", "decimal", "float", "double")):
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE phone_consultations MODIFY COLUMN `{column_name}` {row['COLUMN_TYPE']} NOT NULL DEFAULT 0"
+                        )
+                    )
+                else:
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE phone_consultations MODIFY COLUMN `{column_name}` {row['COLUMN_TYPE']} NOT NULL DEFAULT ''"
+                        )
+                    )
+            logger.info("Softened legacy phone_consultations.%s", column_name)
+        except Exception:
+            logger.exception("Failed softening legacy phone_consultations.%s", column_name)
 
 
 def ensure_expense_tables_on_engine(engine: Engine) -> None:

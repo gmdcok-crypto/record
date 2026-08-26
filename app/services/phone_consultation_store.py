@@ -13,6 +13,20 @@ from app.models.admin_models import PhoneConsultation
 from app.services.member_auth import MemberAuthError, normalize_phone, register_or_login_member_with_phone, serialize_member
 
 logger = logging.getLogger(__name__)
+_schema_ready = False
+
+
+def _ensure_schema(db: Session) -> None:
+    global _schema_ready
+    if _schema_ready:
+        return
+    bind = db.get_bind()
+    if bind is None:
+        return
+    from app.services.database_migrate import ensure_phone_consultations_table
+
+    ensure_phone_consultations_table(bind)
+    _schema_ready = True
 
 
 def _normalize_ranges(ranges: list[dict[str, Any]] | None, *, range_start: str = "", range_end: str = "") -> list[dict[str, str]]:
@@ -281,6 +295,7 @@ def create_phone_consultation(
     status: str = "completed",
     auto_register_member: bool = True,
 ) -> dict:
+    _ensure_schema(db)
     normalized_phone = normalize_phone(phone) or re.sub(r"\D", "", (phone or "").strip())
     normalized_name = (customer_name or "").strip()
     if not normalized_name:
@@ -338,6 +353,9 @@ def create_phone_consultation(
             memo=((memo or "").strip()[:500] or None),
             assignee=(assignee or "").strip(),
             status=status_value,
+            purpose="",
+            priority="",
+            region="",
         )
         db.add(row)
         db.commit()
