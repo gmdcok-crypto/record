@@ -106,8 +106,15 @@ def _create_consultation_response(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
+        try:
+            db.rollback()
+        except Exception:
+            logger.exception("Failed to rollback after phone consultation create error")
         logger.exception("Failed to create phone consultation")
-        raise HTTPException(status_code=500, detail="전화상담 저장에 실패했습니다.") from exc
+        raise HTTPException(
+            status_code=500,
+            detail=f"전화상담 저장에 실패했습니다: {exc}",
+        ) from exc
 
 
 @intake_router.get("/lookup")

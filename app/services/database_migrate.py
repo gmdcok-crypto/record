@@ -176,6 +176,78 @@ def _create_expense_records_table(engine: Engine) -> None:
     logger.error("Could not create expense_records table after all fallbacks")
 
 
+def _column_exists(conn, table_name: str, column_name: str) -> bool:
+    return _get_column_type(conn, table_name, column_name) is not None
+
+
+_PHONE_CONSULTATIONS_DDL = """
+CREATE TABLE phone_consultations (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  customer_name VARCHAR(100) NOT NULL DEFAULT '',
+  phone VARCHAR(30) NOT NULL DEFAULT '',
+  inquiry_type VARCHAR(30) NOT NULL DEFAULT '',
+  order_type VARCHAR(20) NOT NULL DEFAULT '',
+  file_kind VARCHAR(20) NOT NULL DEFAULT '',
+  file_count VARCHAR(30) NOT NULL DEFAULT '',
+  range_start VARCHAR(16) NOT NULL DEFAULT '',
+  range_end VARCHAR(16) NOT NULL DEFAULT '',
+  ranges_json TEXT NULL,
+  duration_seconds INT NOT NULL DEFAULT 0,
+  estimated_amount INT NOT NULL DEFAULT 0,
+  deadline DATETIME NULL,
+  delivery_method VARCHAR(20) NOT NULL DEFAULT '',
+  memo VARCHAR(500) NULL,
+  assignee VARCHAR(100) NOT NULL DEFAULT '',
+  status VARCHAR(20) NOT NULL DEFAULT 'draft',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_phone_consultations_phone (phone),
+  KEY idx_phone_consultations_status (status),
+  KEY idx_phone_consultations_inquiry (inquiry_type),
+  KEY idx_phone_consultations_deadline (deadline),
+  KEY idx_phone_consultations_assignee (assignee),
+  KEY idx_phone_consultations_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+
+_PHONE_CONSULTATION_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("customer_name", "VARCHAR(100) NOT NULL DEFAULT ''"),
+    ("phone", "VARCHAR(30) NOT NULL DEFAULT ''"),
+    ("inquiry_type", "VARCHAR(30) NOT NULL DEFAULT ''"),
+    ("order_type", "VARCHAR(20) NOT NULL DEFAULT ''"),
+    ("file_kind", "VARCHAR(20) NOT NULL DEFAULT ''"),
+    ("file_count", "VARCHAR(30) NOT NULL DEFAULT ''"),
+    ("range_start", "VARCHAR(16) NOT NULL DEFAULT ''"),
+    ("range_end", "VARCHAR(16) NOT NULL DEFAULT ''"),
+    ("ranges_json", "TEXT NULL"),
+    ("duration_seconds", "INT NOT NULL DEFAULT 0"),
+    ("estimated_amount", "INT NOT NULL DEFAULT 0"),
+    ("deadline", "DATETIME NULL"),
+    ("delivery_method", "VARCHAR(20) NOT NULL DEFAULT ''"),
+    ("memo", "VARCHAR(500) NULL"),
+    ("assignee", "VARCHAR(100) NOT NULL DEFAULT ''"),
+    ("status", "VARCHAR(20) NOT NULL DEFAULT 'draft'"),
+    ("created_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"),
+    ("updated_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
+)
+
+
+def ensure_phone_consultations_table(engine: Engine) -> None:
+    """Idempotently create/upgrade phone_consultations for TelWork."""
+    with engine.begin() as conn:
+        if not _table_exists(conn, "phone_consultations"):
+            conn.execute(text(_PHONE_CONSULTATIONS_DDL))
+            logger.info("Created phone_consultations table")
+            return
+
+        for column_name, column_ddl in _PHONE_CONSULTATION_COLUMNS:
+            if _column_exists(conn, "phone_consultations", column_name):
+                continue
+            conn.execute(text(f"ALTER TABLE phone_consultations ADD COLUMN {column_name} {column_ddl}"))
+            logger.info("Added phone_consultations.%s", column_name)
+
+
 def ensure_expense_tables_on_engine(engine: Engine) -> None:
     try:
         with engine.begin() as conn:
@@ -635,6 +707,10 @@ def run_startup_migrations(engine: Engine) -> None:
             run_sql_migration(engine, sql_path)
         except Exception:
             logger.exception("Startup migration failed: %s", sql_path.name)
+    try:
+        ensure_phone_consultations_table(engine)
+    except Exception:
+        logger.exception("Failed to ensure phone_consultations table on startup")
     try:
         ensure_expense_tables_on_engine(engine)
     except Exception:

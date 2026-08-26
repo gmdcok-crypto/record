@@ -314,31 +314,37 @@ def create_phone_consultation(
                 normalized_phone,
                 member_error,
             )
+            db.rollback()
         except Exception:
             member_error = "회원 자동가입에 실패했습니다."
             logger.exception("phone consultation member auto-register failed phone=%s", normalized_phone)
+            db.rollback()
 
-    row = PhoneConsultation(
-        customer_name=normalized_name,
-        phone=normalized_phone,
-        inquiry_type=(inquiry_type or "").strip(),
-        order_type=(order_type or "").strip(),
-        file_kind=(file_kind or "").strip(),
-        file_count=(file_count or "").strip() or str(len(normalized_ranges)),
-        range_start=first["start"],
-        range_end=first["end"],
-        ranges_json=ranges_json,
-        duration_seconds=max(0, int(duration_seconds or 0)),
-        estimated_amount=max(0, int(estimated_amount or 0)),
-        deadline=_parse_deadline(deadline),
-        delivery_method=(delivery_method or "").strip(),
-        memo=((memo or "").strip()[:500] or None),
-        assignee=(assignee or "").strip(),
-        status=status_value,
-    )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
+    try:
+        row = PhoneConsultation(
+            customer_name=normalized_name,
+            phone=normalized_phone,
+            inquiry_type=(inquiry_type or "").strip(),
+            order_type=(order_type or "").strip(),
+            file_kind=(file_kind or "").strip(),
+            file_count=(file_count or "").strip() or str(len(normalized_ranges)),
+            range_start=first["start"],
+            range_end=first["end"],
+            ranges_json=ranges_json,
+            duration_seconds=max(0, int(duration_seconds or 0)),
+            estimated_amount=max(0, int(estimated_amount or 0)),
+            deadline=_parse_deadline(deadline),
+            delivery_method=(delivery_method or "").strip(),
+            memo=((memo or "").strip()[:500] or None),
+            assignee=(assignee or "").strip(),
+            status=status_value,
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+    except Exception:
+        db.rollback()
+        raise
 
     return {
         "consultation": _serialize(row),
