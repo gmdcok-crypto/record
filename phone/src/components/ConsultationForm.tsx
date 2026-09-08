@@ -256,27 +256,17 @@ export function ConsultationForm({ onToast }: Props) {
               required
               hint={phoneMode === '010' ? '기본 010 · 뒷번호만 입력' : '전체 번호를 직접 입력하세요'}
             >
-              <div className="phone-mode-row" role="group" aria-label="전화번호 입력 방식">
-                <button
-                  type="button"
-                  className={`phone-mode-btn ${phoneMode === '010' ? 'is-active' : ''}`}
-                  aria-pressed={phoneMode === '010'}
-                  onClick={() => setPhoneInputMode('010')}
-                >
-                  010
-                </button>
-                <button
-                  type="button"
-                  className={`phone-mode-btn ${phoneMode === 'manual' ? 'is-active' : ''}`}
-                  aria-pressed={phoneMode === 'manual'}
-                  onClick={() => setPhoneInputMode('manual')}
-                >
-                  직접입력
-                </button>
-              </div>
               {phoneMode === '010' ? (
                 <div className="phone-row phone-row-lookup">
-                  <input className="field-control phone-prefix" value="010" readOnly tabIndex={-1} />
+                  <select
+                    className="field-control phone-prefix-select"
+                    aria-label="전화번호 입력 방식"
+                    value={phoneMode}
+                    onChange={(e) => setPhoneInputMode(e.target.value as PhoneInputMode)}
+                  >
+                    <option value="010">010</option>
+                    <option value="manual">직접입력</option>
+                  </select>
                   <input
                     className="field-control phone-suffix"
                     type="tel"
@@ -296,6 +286,15 @@ export function ConsultationForm({ onToast }: Props) {
                 </div>
               ) : (
                 <div className="phone-row phone-row-manual">
+                  <select
+                    className="field-control phone-prefix-select"
+                    aria-label="전화번호 입력 방식"
+                    value={phoneMode}
+                    onChange={(e) => setPhoneInputMode(e.target.value as PhoneInputMode)}
+                  >
+                    <option value="010">010</option>
+                    <option value="manual">직접입력</option>
+                  </select>
                   <input
                     className="field-control"
                     type="tel"
