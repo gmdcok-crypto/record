@@ -7,16 +7,20 @@ import {
   INQUIRY_TYPE_OPTIONS,
   MEMO_MAX,
   ORDER_TYPE_OPTIONS,
+  detectPhoneInputMode,
   emptyConsultation,
   formatPhoneDisplay,
+  isPhoneComplete,
   labelOf,
   normalizeConsultationRanges,
+  normalizeManualPhone,
   parseFileCount,
   phoneFromSuffix,
   phoneSuffix,
   resizeRanges,
   type Consultation,
   type ConsultationStatus,
+  type PhoneInputMode,
 } from '../types'
 import { ChipGroup, Field } from './Field'
 
@@ -64,6 +68,7 @@ export function ConsultationForm({ onToast }: Props) {
   const [dealsModal, setDealsModal] = useState<NonNullable<CustomerLookupResult['deals']> | null>(
     null,
   )
+  const [phoneMode, setPhoneMode] = useState<PhoneInputMode>('010')
 
   useEffect(() => {
     if (!editingId) return
@@ -77,6 +82,7 @@ export function ConsultationForm({ onToast }: Props) {
         fileCount: rest.fileCount || String(ranges.length),
         ranges,
       })
+      setPhoneMode(detectPhoneInputMode(rest.phone || ''))
     })
   }, [editingId])
 
@@ -85,14 +91,27 @@ export function ConsultationForm({ onToast }: Props) {
     setError('')
   }
 
+  function setPhoneInputMode(mode: PhoneInputMode) {
+    setPhoneMode(mode)
+    setError('')
+    if (mode === '010') {
+      const digits = (form.phone || '').replace(/\D/g, '')
+      const suffix = digits.startsWith('010') ? digits.slice(3) : digits.replace(/^0+/, '').slice(0, 8)
+      patch('phone', phoneFromSuffix(suffix))
+      return
+    }
+    const digits = (form.phone || '').replace(/\D/g, '')
+    patch('phone', digits === '010' ? '' : digits)
+  }
+
   function validate(): string | null {
-    if (phoneSuffix(form.phone).length < 7) return '전화번호를 확인해 주세요.'
+    if (!isPhoneComplete(form.phone)) return '전화번호를 확인해 주세요.'
     if (!form.inquiryType) return '문의 유형을 선택해 주세요.'
     return null
   }
 
   async function lookupPhone() {
-    if (phoneSuffix(form.phone).length < 7) {
+    if (!isPhoneComplete(form.phone)) {
       setError('전화번호를 확인해 주세요.')
       return
     }
@@ -232,26 +251,69 @@ export function ConsultationForm({ onToast }: Props) {
             <h2 className="section-title">기본 정보</h2>
           </div>
           <div className="panel">
-            <Field label="전화번호" required hint="010은 자동 입력됩니다">
-              <div className="phone-row phone-row-lookup">
-                <input className="field-control phone-prefix" value="010" readOnly tabIndex={-1} />
-                <input
-                  className="field-control phone-suffix"
-                  type="tel"
-                  inputMode="numeric"
-                  placeholder="뒷번호만 입력"
-                  value={phoneSuffix(form.phone)}
-                  onChange={(e) => patch('phone', phoneFromSuffix(e.target.value))}
-                />
+            <Field
+              label="전화번호"
+              required
+              hint={phoneMode === '010' ? '기본 010 · 뒷번호만 입력' : '전체 번호를 직접 입력하세요'}
+            >
+              <div className="phone-mode-row" role="group" aria-label="전화번호 입력 방식">
                 <button
                   type="button"
-                  className="lookup-btn"
-                  disabled={lookingUp}
-                  onClick={() => void lookupPhone()}
+                  className={`phone-mode-btn ${phoneMode === '010' ? 'is-active' : ''}`}
+                  aria-pressed={phoneMode === '010'}
+                  onClick={() => setPhoneInputMode('010')}
                 >
-                  {lookingUp ? '조회중' : '조회'}
+                  010
+                </button>
+                <button
+                  type="button"
+                  className={`phone-mode-btn ${phoneMode === 'manual' ? 'is-active' : ''}`}
+                  aria-pressed={phoneMode === 'manual'}
+                  onClick={() => setPhoneInputMode('manual')}
+                >
+                  직접입력
                 </button>
               </div>
+              {phoneMode === '010' ? (
+                <div className="phone-row phone-row-lookup">
+                  <input className="field-control phone-prefix" value="010" readOnly tabIndex={-1} />
+                  <input
+                    className="field-control phone-suffix"
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder="뒷번호만 입력"
+                    value={phoneSuffix(form.phone)}
+                    onChange={(e) => patch('phone', phoneFromSuffix(e.target.value))}
+                  />
+                  <button
+                    type="button"
+                    className="lookup-btn"
+                    disabled={lookingUp}
+                    onClick={() => void lookupPhone()}
+                  >
+                    {lookingUp ? '조회중' : '조회'}
+                  </button>
+                </div>
+              ) : (
+                <div className="phone-row phone-row-manual">
+                  <input
+                    className="field-control"
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder="예: 0212345678"
+                    value={formatPhoneDisplay(form.phone)}
+                    onChange={(e) => patch('phone', normalizeManualPhone(e.target.value))}
+                  />
+                  <button
+                    type="button"
+                    className="lookup-btn"
+                    disabled={lookingUp}
+                    onClick={() => void lookupPhone()}
+                  >
+                    {lookingUp ? '조회중' : '조회'}
+                  </button>
+                </div>
+              )}
             </Field>
 
             <Field label="문의 유형">

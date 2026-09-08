@@ -278,6 +278,30 @@ select.field-control {
   padding-right: 36px;
 }
 
+.phone-mode-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.phone-mode-btn {
+  min-height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--line);
+  background: #fff;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.phone-mode-btn.is-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, #fff);
+  color: var(--accent);
+}
+
 .phone-row {
   display: grid;
   grid-template-columns: 72px 1fr;
@@ -286,6 +310,10 @@ select.field-control {
 
 .phone-row-lookup {
   grid-template-columns: 64px 1fr auto;
+}
+
+.phone-row-manual {
+  grid-template-columns: 1fr auto;
 }
 
 .lookup-btn {

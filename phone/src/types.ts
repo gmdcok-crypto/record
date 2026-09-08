@@ -160,6 +160,27 @@ export function formatPhoneDisplay(phone: string): string {
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`
 }
 
+export type PhoneInputMode = '010' | 'manual'
+
+export function detectPhoneInputMode(phone: string): PhoneInputMode {
+  const digits = phone.replace(/\D/g, '')
+  if (!digits || digits === '010' || digits.startsWith('010')) return '010'
+  return 'manual'
+}
+
+export function phoneDigits(phone: string): string {
+  return phone.replace(/\D/g, '').slice(0, 11)
+}
+
+export function isPhoneComplete(phone: string): boolean {
+  const digits = phoneDigits(phone)
+  // Mobile 010/011... : 10~11 digits, landline/other: at least 9 digits
+  if (digits.startsWith('010') || digits.startsWith('011') || digits.startsWith('016') || digits.startsWith('017') || digits.startsWith('018') || digits.startsWith('019')) {
+    return digits.length >= 10 && digits.length <= 11
+  }
+  return digits.length >= 9 && digits.length <= 11
+}
+
 export function phoneSuffix(phone: string): string {
   const digits = phone.replace(/\D/g, '')
   if (digits.startsWith('010')) return digits.slice(3)
@@ -169,6 +190,10 @@ export function phoneSuffix(phone: string): string {
 export function phoneFromSuffix(suffix: string): string {
   const rest = suffix.replace(/\D/g, '').slice(0, 8)
   return `010${rest}`
+}
+
+export function normalizeManualPhone(value: string): string {
+  return value.replace(/\D/g, '').slice(0, 11)
 }
 
 export function labelOf<T extends string>(
