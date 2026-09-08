@@ -251,11 +251,7 @@ export function ConsultationForm({ onToast }: Props) {
             <h2 className="section-title">기본 정보</h2>
           </div>
           <div className="panel">
-            <Field
-              label="전화번호"
-              required
-              hint={phoneMode === '010' ? '기본 010 · 뒷번호만 입력' : '전체 번호를 직접 입력하세요'}
-            >
+            <Field label="전화번호" required>
               {phoneMode === '010' ? (
                 <div className="phone-row phone-row-lookup">
                   <select
