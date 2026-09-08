@@ -50,4 +50,18 @@ db.version(3)
       }),
   )
 
+db.version(4)
+  .stores({
+    consultations:
+      '++id, customerName, phone, sex, status, inquiryType, orderType, deadline, assignee, createdAt, updatedAt',
+  })
+  .upgrade((tx) =>
+    tx
+      .table('consultations')
+      .toCollection()
+      .modify((row: Record<string, unknown>) => {
+        if (row.sex == null || row.sex === '') row.sex = 'unknown'
+      }),
+  )
+
 export { db }

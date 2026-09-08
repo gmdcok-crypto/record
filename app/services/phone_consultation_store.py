@@ -68,6 +68,7 @@ def _serialize(row: PhoneConsultation) -> dict:
         "id": row.id,
         "customer_name": row.customer_name or "",
         "phone": row.phone or "",
+        "sex": getattr(row, "sex", None) or "unknown",
         "inquiry_type": row.inquiry_type or "",
         "order_type": row.order_type or "",
         "file_kind": row.file_kind or "",
@@ -274,11 +275,21 @@ def lookup_customer_by_phone(db: Session, phone: str) -> dict:
     }
 
 
+def _normalize_sex(value: str | None) -> str:
+    raw = (value or "").strip().lower()
+    if raw in {"male", "m", "남", "남자"}:
+        return "male"
+    if raw in {"female", "f", "여", "여자"}:
+        return "female"
+    return "unknown"
+
+
 def create_phone_consultation(
     db: Session,
     *,
     customer_name: str,
     phone: str,
+    sex: str = "unknown",
     inquiry_type: str = "",
     order_type: str = "",
     file_kind: str = "",
@@ -306,6 +317,7 @@ def create_phone_consultation(
     status_value = (status or "completed").strip() or "completed"
     if status_value not in {"draft", "completed"}:
         status_value = "completed"
+    sex_value = _normalize_sex(sex)
 
     normalized_ranges = _normalize_ranges(ranges, range_start=range_start, range_end=range_end)
     first = normalized_ranges[0]
@@ -339,6 +351,7 @@ def create_phone_consultation(
         row = PhoneConsultation(
             customer_name=normalized_name,
             phone=normalized_phone,
+            sex=sex_value,
             inquiry_type=(inquiry_type or "").strip(),
             order_type=(order_type or "").strip(),
             file_kind=(file_kind or "").strip(),

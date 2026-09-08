@@ -30,6 +30,12 @@ const STATUS_LABELS: Record<string, string> = {
   completed: "완료",
 };
 
+const SEX_LABELS: Record<string, string> = {
+  male: "남",
+  female: "여",
+  unknown: "모름",
+};
+
 function labelOf(map: Record<string, string>, value: string): string {
   if (!value) return "—";
   return map[value] ?? value;
@@ -155,6 +161,7 @@ export default function PhoneConsultationManagement() {
                 <th className="px-3 py-2">등록일시</th>
                 <th className="px-3 py-2">의뢰인</th>
                 <th className="px-3 py-2">전화</th>
+                <th className="px-3 py-2">성별</th>
                 <th className="px-3 py-2">문의</th>
                 <th className="px-3 py-2">주문</th>
                 <th className="px-3 py-2">파일</th>
@@ -168,13 +175,13 @@ export default function PhoneConsultationManagement() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="px-3 py-8 text-center text-slate-400">
+                  <td colSpan={12} className="px-3 py-8 text-center text-slate-400">
                     불러오는 중…
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-3 py-8 text-center text-slate-400">
+                  <td colSpan={12} className="px-3 py-8 text-center text-slate-400">
                     표시할 상담 내역이 없습니다.
                   </td>
                 </tr>
@@ -188,6 +195,7 @@ export default function PhoneConsultationManagement() {
                     <td className="px-3 py-2 whitespace-nowrap">{formatDateTime(row.created_at)}</td>
                     <td className="px-3 py-2 font-medium text-slate-100">{row.customer_name || "—"}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{formatPhone(row.phone)}</td>
+                    <td className="px-3 py-2">{labelOf(SEX_LABELS, row.sex || "unknown")}</td>
                     <td className="px-3 py-2">{labelOf(INQUIRY_LABELS, row.inquiry_type)}</td>
                     <td className="px-3 py-2">{labelOf(ORDER_LABELS, row.order_type)}</td>
                     <td className="px-3 py-2">
@@ -241,6 +249,7 @@ export default function PhoneConsultationManagement() {
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2 text-sm">
+              <Detail label="성별" value={labelOf(SEX_LABELS, selected.sex || "unknown")} />
               <Detail label="문의 유형" value={labelOf(INQUIRY_LABELS, selected.inquiry_type)} />
               <Detail label="주문사항" value={labelOf(ORDER_LABELS, selected.order_type)} />
               <Detail label="파일 종류" value={labelOf(FILE_KIND_LABELS, selected.file_kind)} />

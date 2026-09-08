@@ -3,6 +3,7 @@ export type OrderType = 'reorder' | 'new' | 'company'
 export type FileKind = 'field' | 'call'
 export type DeliveryMethod = 'pdf' | 'registered'
 export type ConsultationStatus = 'draft' | 'completed'
+export type Sex = 'male' | 'female' | 'unknown'
 
 export type WorkRange = {
   start: string
@@ -14,6 +15,8 @@ export interface Consultation {
   customerName: string
   /** Full phone digits, e.g. 01012345678 */
   phone: string
+  /** Gender: male | female | unknown */
+  sex: Sex | ''
   inquiryType: InquiryType | ''
   orderType: OrderType | ''
   fileKind: FileKind | ''
@@ -32,6 +35,12 @@ export interface Consultation {
   createdAt: string
   updatedAt: string
 }
+
+export const SEX_OPTIONS: { value: Sex; label: string }[] = [
+  { value: 'male', label: '남' },
+  { value: 'female', label: '여' },
+  { value: 'unknown', label: '모름' },
+]
 
 export const INQUIRY_TYPE_OPTIONS: { value: InquiryType; label: string }[] = [
   { value: 'recording', label: '녹취' },
@@ -91,6 +100,7 @@ export function emptyConsultation(): Omit<Consultation, 'id'> {
   return {
     customerName: '',
     phone: '010',
+    sex: 'unknown',
     inquiryType: 'recording',
     orderType: 'new',
     fileKind: 'field',

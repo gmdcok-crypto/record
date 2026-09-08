@@ -7,6 +7,7 @@ import {
   INQUIRY_TYPE_OPTIONS,
   MEMO_MAX,
   ORDER_TYPE_OPTIONS,
+  SEX_OPTIONS,
   detectPhoneInputMode,
   emptyConsultation,
   formatPhoneDisplay,
@@ -21,6 +22,7 @@ import {
   type Consultation,
   type ConsultationStatus,
   type PhoneInputMode,
+  type Sex,
 } from '../types'
 import { ChipGroup, Field } from './Field'
 
@@ -188,6 +190,7 @@ export function ConsultationForm({ onToast }: Props) {
           await syncConsultationToServer({
             customer_name: payload.customerName,
             phone: payload.phone,
+            sex: payload.sex || 'unknown',
             inquiry_type: payload.inquiryType || '',
             order_type: payload.orderType || '',
             file_kind: payload.fileKind || '',
@@ -309,6 +312,21 @@ export function ConsultationForm({ onToast }: Props) {
                   </button>
                 </div>
               )}
+            </Field>
+
+            <Field label="성별">
+              <select
+                className="field-control"
+                aria-label="성별"
+                value={form.sex || 'unknown'}
+                onChange={(e) => patch('sex', e.target.value as Sex)}
+              >
+                {SEX_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </Field>
 
             <Field label="문의 유형">

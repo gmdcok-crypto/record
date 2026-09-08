@@ -29,6 +29,7 @@ PhoneConsultationsAdminAuth = Annotated[
 class PhoneConsultationCreateRequest(BaseModel):
     customer_name: str = Field(min_length=1, max_length=100)
     phone: str = Field(min_length=10, max_length=30)
+    sex: str = Field(default="unknown", max_length=20)
     inquiry_type: str = Field(default="", max_length=30)
     order_type: str = Field(default="", max_length=20)
     file_kind: str = Field(default="", max_length=20)
@@ -87,6 +88,7 @@ def _create_consultation_response(
             db,
             customer_name=body.customer_name,
             phone=body.phone,
+            sex=body.sex,
             inquiry_type=body.inquiry_type,
             order_type=body.order_type,
             file_kind=body.file_kind,

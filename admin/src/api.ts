@@ -427,6 +427,7 @@ export type PhoneConsultation = {
   id: number;
   customer_name: string;
   phone: string;
+  sex?: string;
   inquiry_type: string;
   order_type: string;
   file_kind: string;

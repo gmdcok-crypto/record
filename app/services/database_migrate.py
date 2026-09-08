@@ -40,6 +40,7 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_phone_consultations.sql",
     SCRIPTS_DIR / "migrate_phone_consultations_v2.sql",
     SCRIPTS_DIR / "migrate_phone_consultations_v3.sql",
+    SCRIPTS_DIR / "migrate_phone_consultations_v4.sql",
 ]
 
 
@@ -185,6 +186,7 @@ CREATE TABLE phone_consultations (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   customer_name VARCHAR(100) NOT NULL DEFAULT '',
   phone VARCHAR(30) NOT NULL DEFAULT '',
+  sex VARCHAR(20) NOT NULL DEFAULT 'unknown',
   inquiry_type VARCHAR(30) NOT NULL DEFAULT '',
   order_type VARCHAR(20) NOT NULL DEFAULT '',
   file_kind VARCHAR(20) NOT NULL DEFAULT '',
@@ -217,6 +219,7 @@ CREATE TABLE phone_consultations (
 _PHONE_CONSULTATION_COLUMNS: tuple[tuple[str, str], ...] = (
     ("customer_name", "VARCHAR(100) NOT NULL DEFAULT ''"),
     ("phone", "VARCHAR(30) NOT NULL DEFAULT ''"),
+    ("sex", "VARCHAR(20) NOT NULL DEFAULT 'unknown'"),
     ("inquiry_type", "VARCHAR(30) NOT NULL DEFAULT ''"),
     ("order_type", "VARCHAR(20) NOT NULL DEFAULT ''"),
     ("file_kind", "VARCHAR(20) NOT NULL DEFAULT ''"),

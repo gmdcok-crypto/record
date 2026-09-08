@@ -34,6 +34,7 @@ function apiUrl(path: string, query?: Record<string, string>): string {
 export type SyncConsultationPayload = {
   customer_name: string
   phone: string
+  sex?: string
   inquiry_type: string
   order_type: string
   file_kind: string

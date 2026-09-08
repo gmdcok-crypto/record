@@ -408,6 +408,7 @@ class PhoneConsultation(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     customer_name: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     phone: Mapped[str] = mapped_column(String(30), nullable=False, default="", index=True)
+    sex: Mapped[str] = mapped_column(String(20), nullable=False, default="unknown")
     inquiry_type: Mapped[str] = mapped_column(String(30), nullable=False, default="", index=True)
     order_type: Mapped[str] = mapped_column(String(20), nullable=False, default="")
     file_kind: Mapped[str] = mapped_column(String(20), nullable=False, default="")
