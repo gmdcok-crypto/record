@@ -1,0 +1,7 @@
+/health https://record-production.up.railway.app/health 200
+/api/* https://record-production.up.railway.app/api/:splat 200
+/robots.txt /robots.txt 200
+/sitemap.xml /sitemap.xml 200
+/images/* /images/:splat 200
+/manifest.json /manifest.json 200
+/* /index.html 200

@@ -1,7 +1,7 @@
 {
   "name": "불판녹취",
   "short_name": "불판녹취",
-  "description": "불판녹취 속기사무소 메인페이지",
+  "description": "경력 20년 이상의 전문 속기사가 음성파일과 통화녹음을 정확한 녹취록으로 작성합니다.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

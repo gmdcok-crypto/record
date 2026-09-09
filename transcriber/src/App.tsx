@@ -55,6 +55,7 @@ import {
   playSegmentAudio,
   resolveSegmentEndMs,
 } from "./segmentAudio";
+import MyWorkPage from "./MyWorkPage";
 import {
   enableWebPush,
   getNotificationPermissionState,
@@ -64,13 +65,16 @@ import {
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 type AuthScreen = "signup" | "login";
-type MenuKey = "work";
+type MenuKey = "myWork" | "work";
 type WorkTab = "projects" | "files" | "editor";
 type PushPermissionState = NotificationPermission | "unsupported";
 type EditableSegment = TranscriptSegment & { id: string };
 const FRONTEND_VERSION_POLL_MS = 60_000;
 
-const TRANSCRIBER_MENUS: { key: MenuKey; label: string }[] = [{ key: "work", label: "녹취 작업" }];
+const TRANSCRIBER_MENUS: { key: MenuKey; label: string }[] = [
+  { key: "myWork", label: "내 작업" },
+  { key: "work", label: "녹취 작업" },
+];
 
 const WORK_TABS: { key: WorkTab; label: string }[] = [
   { key: "projects", label: "프로젝트" },
@@ -302,7 +306,7 @@ export default function App() {
   const [pushRegistered, setPushRegistered] = useState(false);
   const [enablingPush, setEnablingPush] = useState(false);
   const [aiDraftConfirmOpen, setAiDraftConfirmOpen] = useState(false);
-  const [activeMenu, setActiveMenu] = useState<MenuKey>("work");
+  const [activeMenu, setActiveMenu] = useState<MenuKey>("myWork");
   const [workTab, setWorkTab] = useState<WorkTab>("projects");
 
   const showNotice = useCallback((kind: ActionNoticeKind, message: string, title?: string) => {
@@ -725,6 +729,16 @@ export default function App() {
     setWorkTab("editor");
   };
 
+  const openJobFromMyWork = (jobId: string, projectKeyValue: string) => {
+    const project = projects.find((item) => projectKey(item) === projectKeyValue);
+    if (project) {
+      setSelectedProjectKey(projectKeyValue);
+    }
+    setSelectedJobId(jobId);
+    setActiveMenu("work");
+    setWorkTab("editor");
+  };
+
   const onRunAiDraft = async () => {
     if (!job || aiRunning) return;
     if (segments.some((segment) => segment.text.trim())) {
@@ -856,7 +870,7 @@ export default function App() {
       <div className="esl-shell relative min-h-screen">
         <div className="esl-layout relative mx-auto grid min-h-screen max-w-[1880px] lg:grid-cols-[220px_minmax(0,1fr)]">
           <aside className="esl-sidebar" aria-label="주 메뉴">
-            <div className="esl-logo">불판속기사</div>
+            <div className="esl-logo">불판녹취 WORK</div>
 
             <nav className="esl-nav" aria-label="메뉴">
               <div className="esl-menu-group">
@@ -925,20 +939,8 @@ export default function App() {
 
           <main className="esl-main space-y-4">
             <section className="esl-topbar px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--esl-muted)]">Workspace</p>
-              <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="text-lg font-semibold">
-                    {activeMenu === "work" ? "녹취 작업" : "작업"}
-                  </h2>
-                  <p className="mt-1 text-sm text-[var(--esl-muted)]">
-                    {transcriberName ? `${transcriberName}님` : "속기사"}
-                    {currentProject && currentFile
-                      ? ` · ${currentProject.title} > ${currentFile.filename}`
-                      : ""}
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {activeMenu === "myWork" ? (
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   <span className="rounded-md border px-2.5 py-1 text-[11px] text-[var(--esl-muted)]">
                     {transcriberProfile?.code || "속기사"}
                   </span>
@@ -960,10 +962,57 @@ export default function App() {
                     </button>
                   ) : null}
                 </div>
-              </div>
+              ) : (
+                <>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--esl-muted)]">Workspace</p>
+                  <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-semibold">
+                        {activeMenu === "work" ? "녹취 작업" : "작업"}
+                      </h2>
+                      <p className="mt-1 text-sm text-[var(--esl-muted)]">
+                        {transcriberName ? `${transcriberName}님` : "속기사"}
+                        {currentProject && currentFile
+                          ? ` · ${currentProject.title} > ${currentFile.filename}`
+                          : ""}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      <span className="rounded-md border px-2.5 py-1 text-[11px] text-[var(--esl-muted)]">
+                        {transcriberProfile?.code || "속기사"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void openProfileSettings()}
+                        className="rounded-md border px-3 py-1.5 text-[11px] font-semibold transition hover:bg-[#f7f9fc]"
+                      >
+                        설정
+                      </button>
+                      {(!pushRegistered || pushPermission !== "granted") ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleEnablePush()}
+                          disabled={enablingPush}
+                          className="hidden rounded-md border px-3 py-1.5 text-[11px] font-semibold transition hover:bg-[#f7f9fc] disabled:opacity-50 lg:inline-flex"
+                        >
+                          {enablingPush ? "알림 설정 중..." : "알림 받기"}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </>
+              )}
             </section>
 
             <div className="esl-content">
+              {activeMenu === "myWork" ? (
+                <MyWorkPage
+                  projects={projects}
+                  loading={loadingProjects || loadingProjectsAfterLogin}
+                  onOpenJob={openJobFromMyWork}
+                />
+              ) : null}
+
               {activeMenu === "work" ? (
                 <>
                   <div className="esl-tabs" role="tablist" aria-label="녹취 작업 탭">
