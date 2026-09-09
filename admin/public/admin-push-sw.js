@@ -6,6 +6,11 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+// Required for Chrome/Android PWA installability (controlling fetch handler).
+self.addEventListener("fetch", (event) => {
+  event.respondWith(fetch(event.request));
+});
+
 self.addEventListener("push", (event) => {
   if (!event.data) return;
   let payload = {};

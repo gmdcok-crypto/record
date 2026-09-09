@@ -2,10 +2,15 @@
   "name": "불판관리자",
   "short_name": "불판관리자",
   "description": "불판 녹취 운영 관리",
+  "id": "https://admin.bulpen.co.kr/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "theme_color": "#0f172a",
-  "background_color": "#0f172a",
+  "display_override": ["standalone", "browser"],
+  "orientation": "any",
+  "theme_color": "#0b1b33",
+  "background_color": "#0b1b33",
+  "lang": "ko",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -17,7 +22,13 @@
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
