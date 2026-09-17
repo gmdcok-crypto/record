@@ -179,11 +179,11 @@ export function ConsultationForm({ onToast }: Props) {
     }
 
     try {
-      let localId = editingId
+      let localId: number | null = editingId
       if (editingId) {
         await db.consultations.update(editingId, payload)
       } else {
-        localId = await db.consultations.add(payload)
+        localId = (await db.consultations.add(payload)) ?? null
       }
 
       try {
