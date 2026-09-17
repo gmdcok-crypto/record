@@ -740,6 +740,67 @@ select.field-control {
   font-weight: 600;
 }
 
+.history-empty {
+  margin: 0;
+  padding: 18px 14px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.history-table-wrap {
+  overflow-x: auto;
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.history-table thead th {
+  padding: 10px 10px 8px;
+  background: #f5f8fc;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 720;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.history-date-row th {
+  padding: 8px 10px;
+  background: #eef5ff;
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 720;
+  text-align: left;
+  border-top: 1px solid var(--line);
+}
+
+.history-date-row span {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.74rem;
+}
+
+.history-item-row {
+  cursor: pointer;
+}
+
+.history-item-row td {
+  padding: 11px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.history-item-row:hover,
+.history-item-row:focus-visible {
+  background: #f5f8fc;
+  outline: none;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
