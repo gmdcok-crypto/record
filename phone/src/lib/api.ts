@@ -53,7 +53,12 @@ export type SyncConsultationPayload = {
 }
 
 export type SyncConsultationResult = {
-  consultation?: { id: number }
+  consultation?: {
+    id: number
+    completed_at?: string | null
+    completed_date?: string | null
+    completed_time?: string | null
+  }
   member?: { id: number; name: string; phone: string | null; email: string } | null
   member_created?: boolean
   member_error?: string | null
@@ -118,6 +123,31 @@ export async function syncConsultationToServer(
 ): Promise<SyncConsultationResult> {
   const res = await fetch(apiUrl('/api/phone-consultations'), {
     method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    let detail = '서버 저장에 실패했습니다.'
+    try {
+      const data = (await res.json()) as { detail?: unknown }
+      if (typeof data.detail === 'string' && data.detail.trim()) detail = data.detail
+    } catch {
+      // ignore
+    }
+    throw new Error(detail)
+  }
+  return (await res.json()) as SyncConsultationResult
+}
+
+export async function updateConsultationOnServer(
+  consultationId: number,
+  payload: SyncConsultationPayload,
+): Promise<SyncConsultationResult> {
+  const res = await fetch(apiUrl(`/api/phone-consultations/${consultationId}`), {
+    method: 'PATCH',
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',

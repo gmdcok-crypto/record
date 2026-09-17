@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, time, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import Select, or_, select
 from sqlalchemy.orm import Session
 
-from app.models.admin_models import PhoneConsultation
+from app.models.admin_models import PhoneConsultation, TelWork
 from app.services.member_auth import MemberAuthError, normalize_phone, register_or_login_member_with_phone, serialize_member
 
 logger = logging.getLogger(__name__)
@@ -23,9 +23,10 @@ def _ensure_schema(db: Session) -> None:
     bind = db.get_bind()
     if bind is None:
         return
-    from app.services.database_migrate import ensure_phone_consultations_table
+    from app.services.database_migrate import ensure_phone_consultations_table, ensure_tel_work_table
 
     ensure_phone_consultations_table(bind)
+    ensure_tel_work_table(bind)
     _schema_ready = True
 
 
@@ -60,10 +61,13 @@ def _parse_ranges_json(raw: str | None) -> list[dict[str, str]]:
     return _normalize_ranges(data)
 
 
-def _serialize(row: PhoneConsultation) -> dict:
+def _serialize(row: TelWork | PhoneConsultation) -> dict:
     ranges = _parse_ranges_json(row.ranges_json)
     if not ranges:
         ranges = _normalize_ranges(None, range_start=row.range_start or "", range_end=row.range_end or "")
+    completed_at = getattr(row, "completed_at", None)
+    completed_date = getattr(row, "completed_date", None)
+    completed_time = getattr(row, "completed_time", None)
     return {
         "id": row.id,
         "customer_name": row.customer_name or "",
@@ -83,6 +87,9 @@ def _serialize(row: PhoneConsultation) -> dict:
         "memo": row.memo or "",
         "assignee": row.assignee or "",
         "status": row.status or "draft",
+        "completed_at": completed_at.isoformat(sep=" ") if completed_at else None,
+        "completed_date": completed_date.isoformat() if completed_date else None,
+        "completed_time": _format_completed_time(completed_time),
         "created_at": row.created_at.isoformat(sep=" ") if row.created_at else None,
         "updated_at": row.updated_at.isoformat(sep=" ") if row.updated_at else None,
     }
@@ -109,6 +116,30 @@ def _parse_deadline(value: str | None) -> datetime | None:
     return None
 
 
+KST = timezone(timedelta(hours=9))
+
+
+def _format_completed_time(value: time | None) -> str | None:
+    if value is None:
+        return None
+    return value.strftime("%H:%M:%S")
+
+
+def _kst_now() -> datetime:
+    return datetime.now(KST).replace(tzinfo=None)
+
+
+def _stamp_completion(row: TelWork, status_value: str) -> None:
+    if status_value != "completed":
+        return
+    if getattr(row, "completed_at", None):
+        return
+    now = _kst_now()
+    row.completed_at = now
+    row.completed_date = now.date()
+    row.completed_time = now.time().replace(microsecond=0)
+
+
 def list_phone_consultations(
     db: Session,
     *,
@@ -116,21 +147,22 @@ def list_phone_consultations(
     q: str | None = None,
     limit: int = 200,
 ) -> list[dict]:
-    stmt: Select[tuple[PhoneConsultation]] = select(PhoneConsultation).order_by(
-        PhoneConsultation.created_at.desc(),
-        PhoneConsultation.id.desc(),
+    _ensure_schema(db)
+    stmt: Select[tuple[TelWork]] = select(TelWork).order_by(
+        TelWork.created_at.desc(),
+        TelWork.id.desc(),
     )
     if status:
-        stmt = stmt.where(PhoneConsultation.status == status.strip())
+        stmt = stmt.where(TelWork.status == status.strip())
     query = (q or "").strip()
     if query:
         like = f"%{query}%"
         stmt = stmt.where(
             or_(
-                PhoneConsultation.customer_name.like(like),
-                PhoneConsultation.phone.like(like),
-                PhoneConsultation.assignee.like(like),
-                PhoneConsultation.memo.like(like),
+                TelWork.customer_name.like(like),
+                TelWork.phone.like(like),
+                TelWork.assignee.like(like),
+                TelWork.memo.like(like),
             )
         )
     stmt = stmt.limit(max(1, min(limit, 500)))
@@ -139,7 +171,8 @@ def list_phone_consultations(
 
 
 def get_phone_consultation(db: Session, consultation_id: int) -> dict | None:
-    row = db.get(PhoneConsultation, consultation_id)
+    _ensure_schema(db)
+    row = db.get(TelWork, consultation_id)
     if row is None:
         return None
     return _serialize(row)
@@ -149,6 +182,8 @@ def lookup_customer_by_phone(db: Session, phone: str) -> dict:
     from app.models.admin_models import Client, Job, PaymentRecord
     from app.services.job_store import member_client_code
     from app.services.member_auth import get_member_by_phone, serialize_member
+
+    _ensure_schema(db)
 
     normalized = normalize_phone(phone)
     empty_deals = {"jobs": [], "payments": [], "consultations": [], "total_count": 0}
@@ -164,12 +199,20 @@ def lookup_customer_by_phone(db: Session, phone: str) -> dict:
 
     member = get_member_by_phone(db, normalized)
     stmt = (
-        select(PhoneConsultation)
-        .where(PhoneConsultation.phone == normalized)
-        .order_by(PhoneConsultation.created_at.desc(), PhoneConsultation.id.desc())
+        select(TelWork)
+        .where(TelWork.phone == normalized)
+        .order_by(TelWork.created_at.desc(), TelWork.id.desc())
         .limit(5)
     )
     recent = [_serialize(row) for row in db.scalars(stmt).all()]
+    if not recent:
+        legacy_stmt = (
+            select(PhoneConsultation)
+            .where(PhoneConsultation.phone == normalized)
+            .order_by(PhoneConsultation.created_at.desc(), PhoneConsultation.id.desc())
+            .limit(5)
+        )
+        recent = [_serialize(row) for row in db.scalars(legacy_stmt).all()]
 
     jobs: list[dict] = []
     payments: list[dict] = []
@@ -348,7 +391,7 @@ def create_phone_consultation(
             db.rollback()
 
     try:
-        row = PhoneConsultation(
+        row = TelWork(
             customer_name=normalized_name,
             phone=normalized_phone,
             sex=sex_value,
@@ -366,10 +409,8 @@ def create_phone_consultation(
             memo=((memo or "").strip()[:500] or None),
             assignee=(assignee or "").strip(),
             status=status_value,
-            purpose="",
-            priority="",
-            region="",
         )
+        _stamp_completion(row, status_value)
         db.add(row)
         db.commit()
         db.refresh(row)
@@ -383,3 +424,69 @@ def create_phone_consultation(
         "member_created": member_created,
         "member_error": member_error,
     }
+
+
+def update_phone_consultation(
+    db: Session,
+    consultation_id: int,
+    *,
+    customer_name: str,
+    phone: str,
+    sex: str = "unknown",
+    inquiry_type: str = "",
+    order_type: str = "",
+    file_kind: str = "",
+    file_count: str = "",
+    ranges: list[dict[str, Any]] | None = None,
+    range_start: str = "",
+    range_end: str = "",
+    duration_seconds: int = 0,
+    estimated_amount: int = 0,
+    deadline: str | None = None,
+    delivery_method: str = "",
+    memo: str | None = "",
+    assignee: str = "",
+    status: str = "completed",
+) -> dict:
+    _ensure_schema(db)
+    row = db.get(TelWork, consultation_id)
+    if row is None:
+        raise ValueError("전화상담 내역을 찾을 수 없습니다.")
+
+    normalized_phone = normalize_phone(phone) or re.sub(r"\D", "", (phone or "").strip())
+    normalized_name = (customer_name or "").strip()
+    if not normalized_name:
+        raise ValueError("의뢰인 이름을 입력해 주세요.")
+    if len(normalized_phone) < 10:
+        raise ValueError("전화번호를 확인해 주세요.")
+
+    status_value = (status or "completed").strip() or "completed"
+    if status_value not in {"draft", "completed"}:
+        status_value = "completed"
+
+    normalized_ranges = _normalize_ranges(ranges, range_start=range_start, range_end=range_end)
+    first = normalized_ranges[0]
+    ranges_json = json.dumps(normalized_ranges, ensure_ascii=False)
+
+    row.customer_name = normalized_name
+    row.phone = normalized_phone
+    row.sex = _normalize_sex(sex)
+    row.inquiry_type = (inquiry_type or "").strip()
+    row.order_type = (order_type or "").strip()
+    row.file_kind = (file_kind or "").strip()
+    row.file_count = (file_count or "").strip() or str(len(normalized_ranges))
+    row.range_start = first["start"]
+    row.range_end = first["end"]
+    row.ranges_json = ranges_json
+    row.duration_seconds = max(0, int(duration_seconds or 0))
+    row.estimated_amount = max(0, int(estimated_amount or 0))
+    row.deadline = _parse_deadline(deadline)
+    row.delivery_method = (delivery_method or "").strip()
+    row.memo = ((memo or "").strip()[:500] or None)
+    row.assignee = (assignee or "").strip()
+    row.status = status_value
+    _stamp_completion(row, status_value)
+    db.commit()
+    db.refresh(row)
+    return {"consultation": _serialize(row)}
+

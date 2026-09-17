@@ -444,6 +444,9 @@ export type PhoneConsultation = {
   status: string;
   created_at: string | null;
   updated_at: string | null;
+  completed_at?: string | null;
+  completed_date?: string | null;
+  completed_time?: string | null;
 };
 
 export async function fetchPhoneConsultations(params?: {

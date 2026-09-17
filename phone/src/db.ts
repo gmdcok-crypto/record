@@ -64,4 +64,18 @@ db.version(4)
       }),
   )
 
+db.version(5)
+  .stores({
+    consultations:
+      '++id, customerName, phone, sex, status, inquiryType, orderType, deadline, assignee, serverId, createdAt, updatedAt',
+  })
+  .upgrade((tx) =>
+    tx
+      .table('consultations')
+      .toCollection()
+      .modify((row: Record<string, unknown>) => {
+        if (row.serverId == null) row.serverId = undefined
+      }),
+  )
+
 export { db }

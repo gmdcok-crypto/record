@@ -41,6 +41,8 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_phone_consultations_v2.sql",
     SCRIPTS_DIR / "migrate_phone_consultations_v3.sql",
     SCRIPTS_DIR / "migrate_phone_consultations_v4.sql",
+    SCRIPTS_DIR / "migrate_tel_work.sql",
+    SCRIPTS_DIR / "migrate_tel_work_v2.sql",
 ]
 
 
@@ -240,6 +242,118 @@ _PHONE_CONSULTATION_COLUMNS: tuple[tuple[str, str], ...] = (
     ("created_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"),
     ("updated_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
 )
+
+
+_TEL_WORK_DDL = """
+CREATE TABLE tel_work (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  customer_name VARCHAR(100) NOT NULL DEFAULT '',
+  phone VARCHAR(30) NOT NULL DEFAULT '',
+  sex VARCHAR(20) NOT NULL DEFAULT 'unknown',
+  inquiry_type VARCHAR(30) NOT NULL DEFAULT '',
+  order_type VARCHAR(20) NOT NULL DEFAULT '',
+  file_kind VARCHAR(20) NOT NULL DEFAULT '',
+  file_count VARCHAR(30) NOT NULL DEFAULT '',
+  range_start VARCHAR(16) NOT NULL DEFAULT '',
+  range_end VARCHAR(16) NOT NULL DEFAULT '',
+  ranges_json TEXT NULL,
+  duration_seconds INT NOT NULL DEFAULT 0,
+  estimated_amount INT NOT NULL DEFAULT 0,
+  deadline DATETIME NULL,
+  delivery_method VARCHAR(20) NOT NULL DEFAULT '',
+  memo VARCHAR(500) NULL,
+  assignee VARCHAR(100) NOT NULL DEFAULT '',
+  status VARCHAR(20) NOT NULL DEFAULT 'draft',
+  completed_at DATETIME NULL,
+  completed_date DATE NULL,
+  completed_time TIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_tel_work_phone (phone),
+  KEY idx_tel_work_status (status),
+  KEY idx_tel_work_inquiry (inquiry_type),
+  KEY idx_tel_work_deadline (deadline),
+  KEY idx_tel_work_assignee (assignee),
+  KEY idx_tel_work_created_at (created_at),
+  KEY idx_tel_work_completed_at (completed_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+
+_TEL_WORK_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("customer_name", "VARCHAR(100) NOT NULL DEFAULT ''"),
+    ("phone", "VARCHAR(30) NOT NULL DEFAULT ''"),
+    ("sex", "VARCHAR(20) NOT NULL DEFAULT 'unknown'"),
+    ("inquiry_type", "VARCHAR(30) NOT NULL DEFAULT ''"),
+    ("order_type", "VARCHAR(20) NOT NULL DEFAULT ''"),
+    ("file_kind", "VARCHAR(20) NOT NULL DEFAULT ''"),
+    ("file_count", "VARCHAR(30) NOT NULL DEFAULT ''"),
+    ("range_start", "VARCHAR(16) NOT NULL DEFAULT ''"),
+    ("range_end", "VARCHAR(16) NOT NULL DEFAULT ''"),
+    ("ranges_json", "TEXT NULL"),
+    ("duration_seconds", "INT NOT NULL DEFAULT 0"),
+    ("estimated_amount", "INT NOT NULL DEFAULT 0"),
+    ("deadline", "DATETIME NULL"),
+    ("delivery_method", "VARCHAR(20) NOT NULL DEFAULT ''"),
+    ("memo", "VARCHAR(500) NULL"),
+    ("assignee", "VARCHAR(100) NOT NULL DEFAULT ''"),
+    ("status", "VARCHAR(20) NOT NULL DEFAULT 'draft'"),
+    ("completed_at", "DATETIME NULL"),
+    ("completed_date", "DATE NULL"),
+    ("completed_time", "TIME NULL"),
+    ("created_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"),
+    ("updated_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
+)
+
+
+def ensure_tel_work_table(engine: Engine) -> None:
+    """Idempotently create/upgrade tel_work for TelWork PWA."""
+    with engine.begin() as conn:
+        if not _table_exists(conn, "tel_work"):
+            conn.execute(text(_TEL_WORK_DDL))
+            logger.info("Created tel_work table")
+
+    with engine.begin() as conn:
+        if not _table_exists(conn, "tel_work"):
+            return
+        for column_name, column_ddl in _TEL_WORK_COLUMNS:
+            if _column_exists(conn, "tel_work", column_name):
+                continue
+            conn.execute(text(f"ALTER TABLE tel_work ADD COLUMN {column_name} {column_ddl}"))
+            logger.info("Added tel_work.%s", column_name)
+
+    # One-time copy of existing phone_consultations into empty tel_work.
+    try:
+        with engine.begin() as conn:
+            if not _table_exists(conn, "tel_work") or not _table_exists(conn, "phone_consultations"):
+                return
+            tel_count = conn.execute(text("SELECT COUNT(*) FROM tel_work")).scalar() or 0
+            if tel_count:
+                return
+            phone_count = conn.execute(text("SELECT COUNT(*) FROM phone_consultations")).scalar() or 0
+            if not phone_count:
+                return
+            has_sex = _column_exists(conn, "phone_consultations", "sex")
+            sex_expr = "IFNULL(sex, 'unknown')" if has_sex else "'unknown'"
+            conn.execute(
+                text(
+                    f"""
+                    INSERT INTO tel_work (
+                      customer_name, phone, sex, inquiry_type, order_type, file_kind, file_count,
+                      range_start, range_end, ranges_json, duration_seconds, estimated_amount,
+                      deadline, delivery_method, memo, assignee, status, created_at, updated_at
+                    )
+                    SELECT
+                      customer_name, phone, {sex_expr}, inquiry_type, order_type, file_kind, file_count,
+                      range_start, range_end, ranges_json, duration_seconds, estimated_amount,
+                      deadline, delivery_method, memo, assignee, status, created_at, updated_at
+                    FROM phone_consultations
+                    """
+                )
+            )
+            logger.info("Copied %s phone_consultations rows into tel_work", phone_count)
+    except Exception:
+        logger.exception("Failed copying phone_consultations into tel_work")
 
 
 def ensure_phone_consultations_table(engine: Engine) -> None:
@@ -775,6 +889,10 @@ def run_startup_migrations(engine: Engine) -> None:
         ensure_phone_consultations_table(engine)
     except Exception:
         logger.exception("Failed to ensure phone_consultations table on startup")
+    try:
+        ensure_tel_work_table(engine)
+    except Exception:
+        logger.exception("Failed to ensure tel_work table on startup")
     try:
         ensure_expense_tables_on_engine(engine)
     except Exception:

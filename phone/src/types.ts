@@ -17,6 +17,8 @@ export interface Consultation {
   phone: string
   /** Gender: male | female | unknown */
   sex: Sex | ''
+  /** Server tel_work.id after first sync */
+  serverId?: number
   inquiryType: InquiryType | ''
   orderType: OrderType | ''
   fileKind: FileKind | ''
@@ -113,6 +115,7 @@ export function emptyConsultation(): Omit<Consultation, 'id'> {
     memo: '',
     assignee: '',
     status: 'draft',
+    serverId: undefined,
     createdAt: now,
     updatedAt: now,
   }

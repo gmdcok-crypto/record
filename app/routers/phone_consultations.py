@@ -13,6 +13,7 @@ from app.services.phone_consultation_store import (
     get_phone_consultation,
     list_phone_consultations,
     lookup_customer_by_phone,
+    update_phone_consultation,
 )
 from app.services.member_auth import normalize_phone
 
@@ -141,6 +142,51 @@ def intake_phone_consultation(
 ) -> dict:
     """TelWork PWA intake: save consultation and auto-register member by phone."""
     return _create_consultation_response(db, body)
+
+
+@intake_router.patch("/{consultation_id}")
+def intake_update_phone_consultation(
+    consultation_id: int,
+    body: PhoneConsultationCreateRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    try:
+        return update_phone_consultation(
+            db,
+            consultation_id,
+            customer_name=body.customer_name,
+            phone=body.phone,
+            sex=body.sex,
+            inquiry_type=body.inquiry_type,
+            order_type=body.order_type,
+            file_kind=body.file_kind,
+            file_count=body.file_count,
+            ranges=body.ranges,
+            range_start=body.range_start,
+            range_end=body.range_end,
+            duration_seconds=body.duration_seconds,
+            estimated_amount=body.estimated_amount,
+            deadline=body.deadline,
+            delivery_method=body.delivery_method,
+            memo=body.memo,
+            assignee=body.assignee,
+            status=body.status,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if "찾을 수 없습니다" in message:
+            raise HTTPException(status_code=404, detail=message) from exc
+        raise HTTPException(status_code=400, detail=message) from exc
+    except Exception as exc:
+        try:
+            db.rollback()
+        except Exception:
+            logger.exception("Failed to rollback after phone consultation update error")
+        logger.exception("Failed to update phone consultation %s", consultation_id)
+        raise HTTPException(
+            status_code=500,
+            detail=f"전화상담 저장에 실패했습니다: {exc}",
+        ) from exc
 
 
 @router.post("")

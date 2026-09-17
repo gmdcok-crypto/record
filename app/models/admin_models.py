@@ -1,6 +1,6 @@
-from datetime import datetime, date
+from datetime import datetime, date, time
 
-from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, func
+from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, Time, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -397,6 +397,36 @@ class SalesMonthlyTarget(Base):
     month_key: Mapped[str] = mapped_column(String(7), primary_key=True)
     target_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     updated_by_admin_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class TelWork(Base):
+    """TelWork PWA consultation records."""
+
+    __tablename__ = "tel_work"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    customer_name: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    phone: Mapped[str] = mapped_column(String(30), nullable=False, default="", index=True)
+    sex: Mapped[str] = mapped_column(String(20), nullable=False, default="unknown")
+    inquiry_type: Mapped[str] = mapped_column(String(30), nullable=False, default="", index=True)
+    order_type: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    file_kind: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    file_count: Mapped[str] = mapped_column(String(30), nullable=False, default="")
+    range_start: Mapped[str] = mapped_column(String(16), nullable=False, default="")
+    range_end: Mapped[str] = mapped_column(String(16), nullable=False, default="")
+    ranges_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    estimated_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    deadline: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    delivery_method: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    memo: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    assignee: Mapped[str] = mapped_column(String(100), nullable=False, default="", index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft", index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    completed_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    completed_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 

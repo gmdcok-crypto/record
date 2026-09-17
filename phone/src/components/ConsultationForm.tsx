@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { db } from '../db'
-import { lookupCustomerByPhone, syncConsultationToServer, type CustomerLookupResult } from '../lib/api'
+import { lookupCustomerByPhone, syncConsultationToServer, updateConsultationOnServer, type CustomerLookupResult } from '../lib/api'
 import {
   ASSIGNEE_OPTIONS,
   INQUIRY_TYPE_OPTIONS,
@@ -173,20 +173,23 @@ export function ConsultationForm({ onToast }: Props) {
       deliveryMethod: '',
       memo: form.memo.slice(0, MEMO_MAX),
       status,
+      serverId: form.serverId,
       updatedAt: now,
       createdAt: form.createdAt || now,
     }
 
     try {
+      let localId = editingId
       if (editingId) {
         await db.consultations.update(editingId, payload)
       } else {
-        await db.consultations.add(payload)
+        localId = await db.consultations.add(payload)
       }
 
       try {
-        if (!editingId) {
-          await syncConsultationToServer({
+        const shouldSync = status === 'completed' || !editingId
+        if (shouldSync) {
+          const syncBody = {
             customer_name: payload.customerName,
             phone: payload.phone,
             sex: payload.sex || 'unknown',
@@ -205,11 +208,17 @@ export function ConsultationForm({ onToast }: Props) {
             assignee: payload.assignee || '',
             status,
             auto_register_member: false,
-          })
-          onToast(status === 'draft' ? '임시 저장했습니다.' : '상담을 완료했습니다.')
-        } else {
-          onToast(status === 'draft' ? '임시 저장했습니다.' : '상담을 완료했습니다.')
+          }
+          const result =
+            payload.serverId && status === 'completed'
+              ? await updateConsultationOnServer(payload.serverId, syncBody)
+              : await syncConsultationToServer(syncBody)
+          const serverId = result.consultation?.id || payload.serverId
+          if (localId && serverId) {
+            await db.consultations.update(localId, { serverId })
+          }
         }
+        onToast(status === 'draft' ? '임시 저장했습니다.' : '상담을 완료했습니다.')
       } catch (syncError) {
         console.error(syncError)
         onToast(

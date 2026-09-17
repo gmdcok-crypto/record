@@ -78,6 +78,15 @@ function formatDateTime(value: string | null): string {
   }).format(d);
 }
 
+function formatCompleted(row: PhoneConsultation): string {
+  if (row.completed_date || row.completed_time) {
+    const date = (row.completed_date || "").replace(/-/g, ".");
+    const time = (row.completed_time || "").slice(0, 5);
+    return [date, time].filter(Boolean).join(" ") || "—";
+  }
+  return formatDateTime(row.completed_at || null);
+}
+
 type StatusFilter = "all" | "draft" | "completed";
 
 export default function PhoneConsultationManagement() {
@@ -159,6 +168,7 @@ export default function PhoneConsultationManagement() {
             <thead>
               <tr className="border-b border-slate-800 bg-slate-950 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 <th className="px-3 py-2">등록일시</th>
+                <th className="px-3 py-2">상담완료</th>
                 <th className="px-3 py-2">의뢰인</th>
                 <th className="px-3 py-2">전화</th>
                 <th className="px-3 py-2">성별</th>
@@ -175,13 +185,13 @@ export default function PhoneConsultationManagement() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={12} className="px-3 py-8 text-center text-slate-400">
+                  <td colSpan={13} className="px-3 py-8 text-center text-slate-400">
                     불러오는 중…
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-3 py-8 text-center text-slate-400">
+                  <td colSpan={13} className="px-3 py-8 text-center text-slate-400">
                     표시할 상담 내역이 없습니다.
                   </td>
                 </tr>
@@ -193,6 +203,7 @@ export default function PhoneConsultationManagement() {
                     onClick={() => setSelected(row)}
                   >
                     <td className="px-3 py-2 whitespace-nowrap">{formatDateTime(row.created_at)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{formatCompleted(row)}</td>
                     <td className="px-3 py-2 font-medium text-slate-100">{row.customer_name || "—"}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{formatPhone(row.phone)}</td>
                     <td className="px-3 py-2">{labelOf(SEX_LABELS, row.sex || "unknown")}</td>
@@ -276,6 +287,8 @@ export default function PhoneConsultationManagement() {
               <Detail label="마감일시" value={formatDateTime(selected.deadline)} />
               <Detail label="담당자" value={selected.assignee || "—"} />
               <Detail label="상태" value={labelOf(STATUS_LABELS, selected.status)} />
+              <Detail label="상담완료일" value={selected.completed_date?.replace(/-/g, ".") || "—"} />
+              <Detail label="상담완료시간" value={(selected.completed_time || "").slice(0, 5) || "—"} />
               <Detail label="등록일시" value={formatDateTime(selected.created_at)} />
             </div>
 
