@@ -33,6 +33,10 @@ type HistoryDetail =
   | { kind: 'job'; row: LookupJob }
   | { kind: 'payment'; row: LookupPayment }
 
+type Props = {
+  onToast: (message: string) => void
+}
+
 function dateKeyOf(value?: string | null): string {
   if (!value) return ''
   const match = value.match(/(\d{4}-\d{2}-\d{2})/)
@@ -173,7 +177,7 @@ export function ConsultationForm({ onToast }: Props) {
     onToast('기존 고객 정보를 불러왔습니다.')
   }
 
-  const historyConsultations = lookupModal?.recent_consultations || lookupModal?.deals?.consultations || []
+  const historyConsultations = lookupModal?.recent_consultations || []
   const historyJobs = lookupModal?.deals?.jobs || []
   const historyPayments = lookupModal?.deals?.payments || []
 
