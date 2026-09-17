@@ -22,7 +22,6 @@ import {
   type Consultation,
   type ConsultationStatus,
   type PhoneInputMode,
-  type Sex,
 } from '../types'
 import { ChipGroup, Field } from './Field'
 
@@ -315,18 +314,13 @@ export function ConsultationForm({ onToast }: Props) {
             </Field>
 
             <Field label="성별">
-              <select
-                className="field-control"
-                aria-label="성별"
-                value={form.sex || 'unknown'}
-                onChange={(e) => patch('sex', e.target.value as Sex)}
-              >
-                {SEX_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+              <ChipGroup
+                ariaLabel="성별"
+                options={SEX_OPTIONS}
+                value={form.sex}
+                onChange={(v) => patch('sex', v)}
+                columns={3}
+              />
             </Field>
 
             <Field label="문의 유형">
