@@ -202,7 +202,7 @@ def lookup_customer_by_phone(db: Session, phone: str) -> dict:
         select(TelWork)
         .where(TelWork.phone == normalized)
         .order_by(TelWork.created_at.desc(), TelWork.id.desc())
-        .limit(5)
+        .limit(50)
     )
     recent = [_serialize(row) for row in db.scalars(stmt).all()]
     if not recent:
@@ -210,7 +210,7 @@ def lookup_customer_by_phone(db: Session, phone: str) -> dict:
             select(PhoneConsultation)
             .where(PhoneConsultation.phone == normalized)
             .order_by(PhoneConsultation.created_at.desc(), PhoneConsultation.id.desc())
-            .limit(5)
+            .limit(50)
         )
         recent = [_serialize(row) for row in db.scalars(legacy_stmt).all()]
 
@@ -223,7 +223,7 @@ def lookup_customer_by_phone(db: Session, phone: str) -> dict:
                 select(Job)
                 .where(Job.client_id == client.id)
                 .order_by(Job.updated_at.desc(), Job.job_id.desc())
-                .limit(10)
+                .limit(30)
             ).all()
             for job in job_rows:
                 jobs.append(
@@ -241,7 +241,7 @@ def lookup_customer_by_phone(db: Session, phone: str) -> dict:
             select(PaymentRecord)
             .where(PaymentRecord.member_id == member.id)
             .order_by(PaymentRecord.paid_at.desc(), PaymentRecord.id.desc())
-            .limit(10)
+            .limit(30)
         ).all()
         for row in payment_rows:
             payments.append(
@@ -265,6 +265,13 @@ def lookup_customer_by_phone(db: Session, phone: str) -> dict:
             "status": row.get("status") or "",
             "estimated_amount": int(row.get("estimated_amount") or 0),
             "created_at": row.get("created_at"),
+            "memo": row.get("memo") or "",
+            "sex": row.get("sex") or "unknown",
+            "completed_at": row.get("completed_at"),
+            "completed_date": row.get("completed_date"),
+            "completed_time": row.get("completed_time"),
+            "file_kind": row.get("file_kind") or "",
+            "assignee": row.get("assignee") or "",
         }
         for row in recent
     ]

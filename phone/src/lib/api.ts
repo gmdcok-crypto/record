@@ -84,6 +84,13 @@ export type CustomerLookupResult = {
     status: string
     created_at: string | null
     estimated_amount: number
+    memo?: string
+    sex?: string
+    completed_at?: string | null
+    completed_date?: string | null
+    completed_time?: string | null
+    file_kind?: string
+    assignee?: string
   }>
   has_deals?: boolean
   deals?: {
@@ -113,6 +120,13 @@ export type CustomerLookupResult = {
       status: string
       estimated_amount: number
       created_at: string | null
+      memo?: string
+      sex?: string
+      completed_at?: string | null
+      completed_date?: string | null
+      completed_time?: string | null
+      file_kind?: string
+      assignee?: string
     }>
     total_count: number
   }

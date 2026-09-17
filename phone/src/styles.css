@@ -844,6 +844,88 @@ select.field-control {
   overflow-y: auto;
 }
 
+.modal-backdrop-front {
+  z-index: 50;
+}
+
+.modal-date-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  font-size: 0.86rem;
+}
+
+.modal-date-filter span {
+  color: var(--muted);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.modal-date-filter select {
+  flex: 1;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 0 10px;
+}
+
+.modal-date-chips {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.modal-date-chip {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.modal-date-chip.is-active {
+  border-color: var(--accent);
+  background: #eef5ff;
+  color: var(--accent);
+}
+
+.modal-history-item.is-button {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.modal-history-item.is-button:hover {
+  background: #f5f8fc;
+}
+
+.modal-memo-block {
+  margin-top: 14px;
+}
+
+.modal-memo-text {
+  margin: 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f5f8fc;
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .modal-actions {
   margin-top: 16px;
   display: grid;

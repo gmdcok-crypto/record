@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { db } from '../db'
 import { lookupCustomerByPhone, syncConsultationToServer, updateConsultationOnServer, type CustomerLookupResult } from '../lib/api'
@@ -25,8 +25,35 @@ import {
 } from '../types'
 import { ChipGroup, Field } from './Field'
 
-type Props = {
-  onToast: (message: string) => void
+type LookupConsultation = NonNullable<CustomerLookupResult['recent_consultations']>[number]
+type LookupJob = NonNullable<NonNullable<CustomerLookupResult['deals']>['jobs']>[number]
+type LookupPayment = NonNullable<NonNullable<CustomerLookupResult['deals']>['payments']>[number]
+type HistoryDetail =
+  | { kind: 'consultation'; row: LookupConsultation }
+  | { kind: 'job'; row: LookupJob }
+  | { kind: 'payment'; row: LookupPayment }
+
+function dateKeyOf(value?: string | null): string {
+  if (!value) return ''
+  const match = value.match(/(\d{4}-\d{2}-\d{2})/)
+  return match?.[1] || ''
+}
+
+function consultationDateKey(row: LookupConsultation): string {
+  return dateKeyOf(row.completed_date) || dateKeyOf(row.completed_at) || dateKeyOf(row.created_at)
+}
+
+function formatDateLabel(key: string): string {
+  if (!key) return '—'
+  const [y, m, d] = key.split('-')
+  if (!y || !m || !d) return key
+  return `${y}.${m}.${d}`
+}
+
+function formatTimeLabel(value?: string | null): string {
+  if (!value) return ''
+  const match = value.match(/(\d{2}:\d{2})/)
+  return match?.[1] || ''
 }
 
 function IconPerson() {
@@ -66,9 +93,8 @@ export function ConsultationForm({ onToast }: Props) {
   const [saving, setSaving] = useState(false)
   const [lookingUp, setLookingUp] = useState(false)
   const [lookupModal, setLookupModal] = useState<CustomerLookupResult | null>(null)
-  const [dealsModal, setDealsModal] = useState<NonNullable<CustomerLookupResult['deals']> | null>(
-    null,
-  )
+  const [historyDate, setHistoryDate] = useState('')
+  const [historyDetail, setHistoryDetail] = useState<HistoryDetail | null>(null)
   const [phoneMode, setPhoneMode] = useState<PhoneInputMode>('010')
 
   useEffect(() => {
@@ -121,11 +147,8 @@ export function ConsultationForm({ onToast }: Props) {
     try {
       const result = await lookupCustomerByPhone(form.phone)
       setLookupModal(result)
-      if (result.found && result.has_deals && result.deals && result.deals.total_count > 0) {
-        setDealsModal(result.deals)
-      } else {
-        setDealsModal(null)
-      }
+      setHistoryDate('')
+      setHistoryDetail(null)
     } catch (err) {
       console.error(err)
       setError(err instanceof Error ? err.message : '고객 조회에 실패했습니다.')
@@ -146,8 +169,44 @@ export function ConsultationForm({ onToast }: Props) {
       orderType: prev.orderType === 'new' ? 'reorder' : prev.orderType || 'reorder',
     }))
     setLookupModal(null)
+    setHistoryDetail(null)
     onToast('기존 고객 정보를 불러왔습니다.')
   }
+
+  const historyConsultations = lookupModal?.recent_consultations || lookupModal?.deals?.consultations || []
+  const historyJobs = lookupModal?.deals?.jobs || []
+  const historyPayments = lookupModal?.deals?.payments || []
+
+  const historyDates = useMemo(() => {
+    const keys = new Set<string>()
+    for (const row of historyConsultations) {
+      const key = consultationDateKey(row)
+      if (key) keys.add(key)
+    }
+    for (const job of historyJobs) {
+      const key = dateKeyOf(job.updated_at)
+      if (key) keys.add(key)
+    }
+    for (const pay of historyPayments) {
+      const key = dateKeyOf(pay.paid_at)
+      if (key) keys.add(key)
+    }
+    return [...keys].sort((a, b) => (a < b ? 1 : -1))
+  }, [historyConsultations, historyJobs, historyPayments])
+
+  const filteredConsultations = useMemo(
+    () =>
+      historyConsultations.filter((row) => !historyDate || consultationDateKey(row) === historyDate),
+    [historyConsultations, historyDate],
+  )
+  const filteredJobs = useMemo(
+    () => historyJobs.filter((row) => !historyDate || dateKeyOf(row.updated_at) === historyDate),
+    [historyJobs, historyDate],
+  )
+  const filteredPayments = useMemo(
+    () => historyPayments.filter((row) => !historyDate || dateKeyOf(row.paid_at) === historyDate),
+    [historyPayments, historyDate],
+  )
 
   async function persist(status: ConsultationStatus) {
     const message = validate()
@@ -426,9 +485,12 @@ export function ConsultationForm({ onToast }: Props) {
       </div>
 
       {lookupModal ? (
-        <div className="modal-backdrop" onClick={() => setLookupModal(null)}>
+        <div className="modal-backdrop" onClick={() => {
+          setLookupModal(null)
+          setHistoryDetail(null)
+        }}>
           <div
-            className="modal-card"
+            className="modal-card modal-card-wide"
             role="dialog"
             aria-modal="true"
             onClick={(e) => e.stopPropagation()}
@@ -468,72 +530,147 @@ export function ConsultationForm({ onToast }: Props) {
               </>
             ) : (
               <>
-                <p className="modal-eyebrow">기존 고객</p>
+                <p className="modal-eyebrow">고객 조회</p>
                 <h3 className="modal-title">{lookupModal.member?.name || '이름 없음'}</h3>
                 <div className="modal-info">
                   <div>
                     <span>전화</span>
-                    <strong>
-                      {formatPhoneDisplay(lookupModal.member?.phone || form.phone)}
-                    </strong>
+                    <strong>{formatPhoneDisplay(lookupModal.member?.phone || form.phone)}</strong>
                   </div>
-                  {lookupModal.member?.email ? (
-                    <div>
-                      <span>이메일</span>
-                      <strong>{lookupModal.member.email}</strong>
-                    </div>
-                  ) : null}
                   <div>
                     <span>구분</span>
                     <strong>
-                      {lookupModal.member?.from_consultation
-                        ? '상담 이력 고객'
-                        : '회원 등록 고객'}
+                      {lookupModal.member?.from_consultation ? '상담 이력 고객' : '회원 등록 고객'}
                     </strong>
                   </div>
-                  {lookupModal.has_deals ? (
-                    <div>
-                      <span>거래</span>
-                      <strong>{lookupModal.deals?.total_count ?? 0}건</strong>
-                    </div>
-                  ) : null}
                 </div>
-                {lookupModal.recent_consultations.length > 0 ? (
-                  <div className="modal-history">
-                    <p className="modal-history-title">최근 상담</p>
-                    {lookupModal.recent_consultations.slice(0, 3).map((row) => (
-                      <div key={row.id} className="modal-history-item">
+
+                <label className="modal-date-filter">
+                  <span>날짜 선택</span>
+                  <select
+                    value={historyDate}
+                    onChange={(e) => setHistoryDate(e.target.value)}
+                    aria-label="상담·거래 날짜"
+                  >
+                    <option value="">전체 날짜</option>
+                    {historyDates.map((key) => (
+                      <option key={key} value={key}>
+                        {formatDateLabel(key)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {historyDates.length > 0 ? (
+                  <div className="modal-date-chips" role="list">
+                    <button
+                      type="button"
+                      className={`modal-date-chip${historyDate === '' ? ' is-active' : ''}`}
+                      onClick={() => setHistoryDate('')}
+                    >
+                      전체
+                    </button>
+                    {historyDates.slice(0, 8).map((key) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className={`modal-date-chip${historyDate === key ? ' is-active' : ''}`}
+                        onClick={() => setHistoryDate(key)}
+                      >
+                        {formatDateLabel(key).slice(5)}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="modal-history">
+                  <p className="modal-history-title">과거 상담 ({filteredConsultations.length})</p>
+                  {filteredConsultations.length === 0 ? (
+                    <p className="modal-desc">해당 날짜의 상담 이력이 없습니다.</p>
+                  ) : (
+                    filteredConsultations.map((row) => (
+                      <button
+                        key={row.id}
+                        type="button"
+                        className="modal-history-item is-button"
+                        onClick={() => setHistoryDetail({ kind: 'consultation', row })}
+                      >
                         <strong>
                           {labelOf(INQUIRY_TYPE_OPTIONS, row.inquiry_type as never) ||
                             row.inquiry_type ||
                             '상담'}
+                          {row.order_type
+                            ? ` · ${labelOf(ORDER_TYPE_OPTIONS, row.order_type as never) || row.order_type}`
+                            : ''}
                         </strong>
                         <span>
-                          {row.created_at || '—'} ·{' '}
+                          {formatDateLabel(consultationDateKey(row))}
+                          {formatTimeLabel(row.completed_time || row.completed_at || row.created_at)
+                            ? ` ${formatTimeLabel(row.completed_time || row.completed_at || row.created_at)}`
+                            : ''}
+                          {' · '}
                           {row.status === 'draft' ? '임시저장' : '완료'}
+                          {row.memo ? ' · 메모 있음' : ''}
                         </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                <div className="modal-actions">
-                  {lookupModal.has_deals ? (
-                    <button
-                      type="button"
-                      className="btn btn-outline"
-                      onClick={() => setDealsModal(lookupModal.deals ?? null)}
-                    >
-                      거래정보
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="btn btn-outline"
-                      onClick={() => setLookupModal(null)}
-                    >
-                      닫기
-                    </button>
+                      </button>
+                    ))
                   )}
+                </div>
+
+                <div className="modal-history">
+                  <p className="modal-history-title">
+                    거래건 ({filteredJobs.length + filteredPayments.length})
+                  </p>
+                  {filteredJobs.length === 0 && filteredPayments.length === 0 ? (
+                    <p className="modal-desc">해당 날짜의 거래 건이 없습니다.</p>
+                  ) : (
+                    <>
+                      {filteredJobs.map((job) => (
+                        <button
+                          key={job.job_id}
+                          type="button"
+                          className="modal-history-item is-button"
+                          onClick={() => setHistoryDetail({ kind: 'job', row: job })}
+                        >
+                          <strong>{job.title || job.filename || job.job_id}</strong>
+                          <span>
+                            {formatDateLabel(dateKeyOf(job.updated_at))}
+                            {formatTimeLabel(job.updated_at) ? ` ${formatTimeLabel(job.updated_at)}` : ''}
+                            {' · 의뢰 · '}
+                            {job.status}
+                          </span>
+                        </button>
+                      ))}
+                      {filteredPayments.map((pay) => (
+                        <button
+                          key={pay.id}
+                          type="button"
+                          className="modal-history-item is-button"
+                          onClick={() => setHistoryDetail({ kind: 'payment', row: pay })}
+                        >
+                          <strong>{pay.order_name || pay.payment_id}</strong>
+                          <span>
+                            {formatDateLabel(dateKeyOf(pay.paid_at))}
+                            {formatTimeLabel(pay.paid_at) ? ` ${formatTimeLabel(pay.paid_at)}` : ''}
+                            {' · 결제 · '}
+                            {Math.round(pay.amount).toLocaleString('ko-KR')}원
+                          </span>
+                        </button>
+                      ))}
+                    </>
+                  )}
+                </div>
+
+                <div className="modal-actions">
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => {
+                      setLookupModal(null)
+                      setHistoryDetail(null)
+                    }}
+                  >
+                    닫기
+                  </button>
                   <button type="button" className="btn btn-solid" onClick={applyExistingCustomer}>
                     정보 불러오기
                   </button>
@@ -544,77 +681,124 @@ export function ConsultationForm({ onToast }: Props) {
         </div>
       ) : null}
 
-      {dealsModal ? (
-        <div className="modal-backdrop" onClick={() => setDealsModal(null)}>
+      {historyDetail ? (
+        <div className="modal-backdrop modal-backdrop-front" onClick={() => setHistoryDetail(null)}>
           <div
-            className="modal-card modal-card-wide"
+            className="modal-card"
             role="dialog"
             aria-modal="true"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="modal-eyebrow">거래정보</p>
-            <h3 className="modal-title">거래 {dealsModal.total_count}건</h3>
-            <p className="modal-desc">의뢰·결제·전화상담 이력을 확인하세요.</p>
-
-            {dealsModal.jobs.length > 0 ? (
-              <div className="modal-history">
-                <p className="modal-history-title">의뢰 건 ({dealsModal.jobs.length})</p>
-                {dealsModal.jobs.map((job) => (
-                  <div key={job.job_id} className="modal-history-item">
-                    <strong>{job.title || job.filename || job.job_id}</strong>
-                    <span>
-                      {job.updated_at || '—'} · {job.status}
-                      {job.final_bill_amount > 0
-                        ? ` · ${Math.round(job.final_bill_amount).toLocaleString('ko-KR')}원`
-                        : ''}
-                      {job.payment_status ? ` · ${job.payment_status}` : ''}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            {dealsModal.payments.length > 0 ? (
-              <div className="modal-history">
-                <p className="modal-history-title">결제 건 ({dealsModal.payments.length})</p>
-                {dealsModal.payments.map((pay) => (
-                  <div key={pay.id} className="modal-history-item">
-                    <strong>{pay.order_name || pay.payment_id}</strong>
-                    <span>
-                      {pay.paid_at || '—'} · {Math.round(pay.amount).toLocaleString('ko-KR')}원
-                      {pay.pay_method ? ` · ${pay.pay_method}` : ''}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            {dealsModal.consultations.length > 0 ? (
-              <div className="modal-history">
-                <p className="modal-history-title">
-                  전화상담 ({dealsModal.consultations.length})
-                </p>
-                {dealsModal.consultations.map((row) => (
-                  <div key={row.id} className="modal-history-item">
+            {historyDetail.kind === 'consultation' ? (
+              <>
+                <p className="modal-eyebrow">상담 상세</p>
+                <h3 className="modal-title">
+                  {labelOf(INQUIRY_TYPE_OPTIONS, historyDetail.row.inquiry_type as never) ||
+                    historyDetail.row.inquiry_type ||
+                    '전화상담'}
+                </h3>
+                <div className="modal-info">
+                  <div>
+                    <span>날짜</span>
                     <strong>
-                      {labelOf(INQUIRY_TYPE_OPTIONS, row.inquiry_type as never) ||
-                        row.inquiry_type ||
-                        '상담'}
-                    </strong>
-                    <span>
-                      {row.created_at || '—'} · {row.status === 'draft' ? '임시저장' : '완료'}
-                      {row.estimated_amount > 0
-                        ? ` · ${row.estimated_amount.toLocaleString('ko-KR')}원`
+                      {formatDateLabel(consultationDateKey(historyDetail.row))}
+                      {formatTimeLabel(
+                        historyDetail.row.completed_time ||
+                          historyDetail.row.completed_at ||
+                          historyDetail.row.created_at,
+                      )
+                        ? ` ${formatTimeLabel(
+                            historyDetail.row.completed_time ||
+                              historyDetail.row.completed_at ||
+                              historyDetail.row.created_at,
+                          )}`
                         : ''}
-                    </span>
+                    </strong>
                   </div>
-                ))}
-              </div>
+                  <div>
+                    <span>성별</span>
+                    <strong>
+                      {labelOf(SEX_OPTIONS, (historyDetail.row.sex || 'unknown') as never) || '모름'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>주문</span>
+                    <strong>
+                      {labelOf(ORDER_TYPE_OPTIONS, historyDetail.row.order_type as never) ||
+                        historyDetail.row.order_type ||
+                        '—'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>상태</span>
+                    <strong>{historyDetail.row.status === 'draft' ? '임시저장' : '완료'}</strong>
+                  </div>
+                </div>
+                <div className="modal-memo-block">
+                  <p className="modal-history-title">상담 메모</p>
+                  <p className="modal-memo-text">{historyDetail.row.memo?.trim() || '메모 없음'}</p>
+                </div>
+              </>
             ) : null}
-
+            {historyDetail.kind === 'job' ? (
+              <>
+                <p className="modal-eyebrow">거래 상세</p>
+                <h3 className="modal-title">{historyDetail.row.title || historyDetail.row.filename}</h3>
+                <div className="modal-info">
+                  <div>
+                    <span>날짜</span>
+                    <strong>
+                      {formatDateLabel(dateKeyOf(historyDetail.row.updated_at))}{' '}
+                      {formatTimeLabel(historyDetail.row.updated_at)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>상태</span>
+                    <strong>{historyDetail.row.status || '—'}</strong>
+                  </div>
+                  <div>
+                    <span>결제</span>
+                    <strong>{historyDetail.row.payment_status || '—'}</strong>
+                  </div>
+                  <div>
+                    <span>금액</span>
+                    <strong>
+                      {historyDetail.row.final_bill_amount > 0
+                        ? `${Math.round(historyDetail.row.final_bill_amount).toLocaleString('ko-KR')}원`
+                        : '—'}
+                    </strong>
+                  </div>
+                </div>
+              </>
+            ) : null}
+            {historyDetail.kind === 'payment' ? (
+              <>
+                <p className="modal-eyebrow">결제 상세</p>
+                <h3 className="modal-title">
+                  {historyDetail.row.order_name || historyDetail.row.payment_id}
+                </h3>
+                <div className="modal-info">
+                  <div>
+                    <span>날짜</span>
+                    <strong>
+                      {formatDateLabel(dateKeyOf(historyDetail.row.paid_at))}{' '}
+                      {formatTimeLabel(historyDetail.row.paid_at)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>금액</span>
+                    <strong>{Math.round(historyDetail.row.amount).toLocaleString('ko-KR')}원</strong>
+                  </div>
+                  <div>
+                    <span>방법</span>
+                    <strong>{historyDetail.row.pay_method || '—'}</strong>
+                  </div>
+                </div>
+              </>
+            ) : null}
             <div className="modal-actions single">
-              <button type="button" className="btn btn-solid" onClick={() => setDealsModal(null)}>
-                확인
+              <button type="button" className="btn btn-solid" onClick={() => setHistoryDetail(null)}>
+                닫기
               </button>
             </div>
           </div>
