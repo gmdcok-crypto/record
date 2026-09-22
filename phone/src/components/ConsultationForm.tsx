@@ -4,6 +4,7 @@ import { db } from '../db'
 import { lookupCustomerByPhone, syncConsultationToServer, updateConsultationOnServer, type CustomerLookupResult } from '../lib/api'
 import {
   ASSIGNEE_OPTIONS,
+  INQUIRY_TYPE_LABELS,
   INQUIRY_TYPE_OPTIONS,
   MEMO_MAX,
   ORDER_TYPE_OPTIONS,
@@ -54,6 +55,25 @@ function formatTimeLabel(value?: string | null): string {
   if (!value) return ''
   const match = value.match(/(\d{2}:\d{2})/)
   return match?.[1] || ''
+}
+
+function formatAmountLabel(amount?: number | null): string {
+  const value = Number(amount || 0)
+  if (!Number.isFinite(value) || value <= 0) return '—'
+  return `${Math.round(value).toLocaleString('ko-KR')}`
+}
+
+function formatMinutesLabel(durationSeconds?: number | null): string {
+  const seconds = Number(durationSeconds || 0)
+  if (!Number.isFinite(seconds) || seconds <= 0) return '—'
+  const minutes = seconds / 60
+  if (Number.isInteger(minutes)) return String(minutes)
+  return minutes.toFixed(1).replace(/\.0$/, '')
+}
+
+function inquiryLabel(value?: string | null): string {
+  if (!value) return '상담'
+  return INQUIRY_TYPE_LABELS[value] || labelOf(INQUIRY_TYPE_OPTIONS, value as never) || value
 }
 
 function IconPerson() {
@@ -390,7 +410,7 @@ export function ConsultationForm({ onToast }: Props) {
                 options={INQUIRY_TYPE_OPTIONS}
                 value={form.inquiryType}
                 onChange={(v) => patch('inquiryType', v)}
-                columns={4}
+                columns={3}
               />
             </Field>
 
@@ -447,21 +467,16 @@ export function ConsultationForm({ onToast }: Props) {
                   <table className="history-table">
                     <thead>
                       <tr>
-                        <th>시간</th>
+                        <th>날짜</th>
                         <th>문의</th>
-                        <th>주문</th>
+                        <th>금액</th>
+                        <th>분수</th>
                         <th>상태</th>
                       </tr>
                     </thead>
                     <tbody>
                       {historyByDate.map(([dateKey, rows]) => (
                         <Fragment key={dateKey}>
-                          <tr className="history-date-row">
-                            <th colSpan={4}>
-                              {dateKey === 'unknown' ? '날짜 없음' : formatDateLabel(dateKey)}
-                              <span> {rows.length}건</span>
-                            </th>
-                          </tr>
                           {rows.map((row) => (
                             <tr
                               key={row.id}
@@ -478,19 +493,11 @@ export function ConsultationForm({ onToast }: Props) {
                               }}
                             >
                               <td>
-                                {formatTimeLabel(row.completed_time || row.completed_at || row.created_at) ||
-                                  '—'}
+                                {dateKey === 'unknown' ? '—' : formatDateLabel(dateKey)}
                               </td>
-                              <td>
-                                {labelOf(INQUIRY_TYPE_OPTIONS, row.inquiry_type as never) ||
-                                  row.inquiry_type ||
-                                  '상담'}
-                              </td>
-                              <td>
-                                {labelOf(ORDER_TYPE_OPTIONS, row.order_type as never) ||
-                                  row.order_type ||
-                                  '—'}
-                              </td>
+                              <td>{inquiryLabel(row.inquiry_type)}</td>
+                              <td>{formatAmountLabel(row.estimated_amount)}</td>
+                              <td>{formatMinutesLabel(row.duration_seconds)}</td>
                               <td>{row.status === 'draft' ? '임시저장' : '완료'}</td>
                             </tr>
                           ))}
@@ -559,11 +566,7 @@ export function ConsultationForm({ onToast }: Props) {
             onClick={(e) => e.stopPropagation()}
           >
             <p className="modal-eyebrow">상담 상세</p>
-            <h3 className="modal-title">
-              {labelOf(INQUIRY_TYPE_OPTIONS, historyDetail.inquiry_type as never) ||
-                historyDetail.inquiry_type ||
-                '전화상담'}
-            </h3>
+            <h3 className="modal-title">{inquiryLabel(historyDetail.inquiry_type)}</h3>
             <div className="modal-info">
               <div>
                 <span>날짜</span>

@@ -4,7 +4,7 @@ import { liveQuery } from 'dexie'
 import { db } from '../db'
 import { formatPhone, relativeShort } from '../lib/format'
 import {
-  INQUIRY_TYPE_OPTIONS,
+  INQUIRY_TYPE_LABELS,
   ORDER_TYPE_OPTIONS,
   labelOf,
   type Consultation,
@@ -20,7 +20,7 @@ const statusLabel: Record<ConsultationStatus, string> = {
 
 function metaLine(row: Consultation): string[] {
   const bits: string[] = []
-  const inquiry = labelOf(INQUIRY_TYPE_OPTIONS, row.inquiryType)
+  const inquiry = row.inquiryType ? INQUIRY_TYPE_LABELS[row.inquiryType] || row.inquiryType : ''
   if (inquiry) bits.push(inquiry)
   const order = labelOf(ORDER_TYPE_OPTIONS, row.orderType)
   if (order) bits.push(order)

@@ -48,8 +48,15 @@ export const INQUIRY_TYPE_OPTIONS: { value: InquiryType; label: string }[] = [
   { value: 'recording', label: '녹취' },
   { value: 'onsite', label: '출장' },
   { value: 'foreign', label: '외국어' },
-  { value: 'phone_restore', label: '폰복원' },
 ]
+
+/** Labels for past records that may still use removed inquiry types */
+export const INQUIRY_TYPE_LABELS: Record<string, string> = {
+  recording: '녹취',
+  onsite: '출장',
+  foreign: '외국어',
+  phone_restore: '폰복원',
+}
 
 export const ORDER_TYPE_OPTIONS: { value: OrderType; label: string }[] = [
   { value: 'reorder', label: '재주문' },

@@ -84,6 +84,7 @@ export type CustomerLookupResult = {
     status: string
     created_at: string | null
     estimated_amount: number
+    duration_seconds?: number
     memo?: string
     sex?: string
     completed_at?: string | null
