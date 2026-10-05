@@ -6,6 +6,7 @@ const INQUIRY_LABELS: Record<string, string> = {
   recording: "녹취",
   onsite: "출장",
   foreign: "외국어",
+  other: "기타",
   phone_restore: "폰복원",
 };
 

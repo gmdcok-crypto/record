@@ -1,4 +1,4 @@
-export type InquiryType = 'recording' | 'onsite' | 'foreign' | 'phone_restore'
+export type InquiryType = 'recording' | 'onsite' | 'foreign' | 'other' | 'phone_restore'
 export type OrderType = 'reorder' | 'new' | 'company'
 export type FileKind = 'field' | 'call'
 export type DeliveryMethod = 'pdf' | 'registered'
@@ -48,6 +48,7 @@ export const INQUIRY_TYPE_OPTIONS: { value: InquiryType; label: string }[] = [
   { value: 'recording', label: '녹취' },
   { value: 'onsite', label: '출장' },
   { value: 'foreign', label: '외국어' },
+  { value: 'other', label: '기타' },
 ]
 
 /** Labels for past records that may still use removed inquiry types */
@@ -55,6 +56,7 @@ export const INQUIRY_TYPE_LABELS: Record<string, string> = {
   recording: '녹취',
   onsite: '출장',
   foreign: '외국어',
+  other: '기타',
   phone_restore: '폰복원',
 }
 
@@ -74,8 +76,15 @@ export const DELIVERY_METHOD_OPTIONS: { value: DeliveryMethod; label: string }[]
   { value: 'registered', label: '등기' },
 ]
 
-/** Placeholder assignees until staff API is wired */
+/** Fallback assignees; logged-in staff name is prepended at runtime */
 export const ASSIGNEE_OPTIONS = ['권혁균', '운영팀', '상담팀'] as const
+
+export function assigneeOptionsFor(staffName?: string | null): string[] {
+  const name = (staffName || '').trim()
+  const base = [...ASSIGNEE_OPTIONS]
+  if (!name) return base
+  return [name, ...base.filter((item) => item !== name)]
+}
 
 /** 분당 5,000원 (디자인 견적: 18분 30초 → 92,500원) */
 export const RATE_PER_MINUTE = 5000

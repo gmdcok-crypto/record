@@ -17,7 +17,7 @@ function resolveApiBase(): string {
   return RAILWAY_API_BASE
 }
 
-function apiUrl(path: string, query?: Record<string, string>): string {
+export function apiUrl(path: string, query?: Record<string, string>): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
   const base = resolveApiBase().replace(/\/$/, '')
   const url = base

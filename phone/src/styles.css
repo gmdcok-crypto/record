@@ -65,7 +65,7 @@ a {
 
 .form-header {
   display: grid;
-  grid-template-columns: 44px 1fr;
+  grid-template-columns: 44px 1fr auto;
   align-items: start;
   gap: 4px;
   padding: 10px 16px 6px;
@@ -80,9 +80,21 @@ a {
   color: var(--ink);
 }
 
+.header-logout {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  border-radius: 10px;
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
 .form-header-text {
   text-align: center;
-  padding-right: 40px;
 }
 
 .form-header-text h1 {
@@ -104,6 +116,12 @@ a {
   justify-content: space-between;
   gap: 12px;
   padding: 14px 18px 8px;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .brand {
@@ -738,6 +756,67 @@ select.field-control {
   color: var(--danger);
   font-size: 0.8rem;
   font-weight: 600;
+}
+
+.login-shell {
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+
+.login-card {
+  width: min(100%, 380px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding: 24px 20px 20px;
+}
+
+.login-eyebrow {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.74rem;
+  font-weight: 720;
+  letter-spacing: 0.04em;
+}
+
+.login-title {
+  margin: 6px 0 0;
+  font-size: 1.35rem;
+  letter-spacing: -0.03em;
+}
+
+.login-desc {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.login-form {
+  margin-top: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.login-field {
+  display: grid;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--ink-soft);
+}
+
+.login-error {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(217, 45, 32, 0.08);
+}
+
+.login-submit {
+  margin-top: 4px;
+  width: 100%;
 }
 
 .history-empty {

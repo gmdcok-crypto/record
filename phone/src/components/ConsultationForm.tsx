@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { db } from '../db'
 import { lookupCustomerByPhone, syncConsultationToServer, updateConsultationOnServer, type CustomerLookupResult } from '../lib/api'
 import {
-  ASSIGNEE_OPTIONS,
+  assigneeOptionsFor,
   INQUIRY_TYPE_LABELS,
   INQUIRY_TYPE_OPTIONS,
   MEMO_MAX,
@@ -25,6 +25,7 @@ import {
   type PhoneInputMode,
   type Sex,
 } from '../types'
+import type { StaffProfile } from '../lib/auth'
 import { ChipGroup, Field } from './Field'
 
 type LookupConsultation = NonNullable<CustomerLookupResult['recent_consultations']>[number]
@@ -32,6 +33,8 @@ type HistoryDetail = LookupConsultation
 
 type Props = {
   onToast: (message: string) => void
+  staff: StaffProfile
+  onLogout: () => void
 }
 
 function dateKeyOf(value?: string | null): string {
@@ -104,11 +107,16 @@ function IconMemo() {
   )
 }
 
-export function ConsultationForm({ onToast }: Props) {
+export function ConsultationForm({ onToast, staff, onLogout }: Props) {
   const { id } = useParams()
   const navigate = useNavigate()
   const editingId = id ? Number(id) : null
-  const [form, setForm] = useState(() => emptyConsultation())
+  const staffName = staff.name.trim()
+  const assigneeOptions = useMemo(() => assigneeOptionsFor(staffName), [staffName])
+  const [form, setForm] = useState(() => {
+    const base = emptyConsultation()
+    return { ...base, assignee: staffName || base.assignee }
+  })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [lookingUp, setLookingUp] = useState(false)
@@ -117,7 +125,14 @@ export function ConsultationForm({ onToast }: Props) {
   const [phoneMode, setPhoneMode] = useState<PhoneInputMode>('010')
 
   useEffect(() => {
-    if (!editingId) return
+    if (!editingId) {
+      const base = emptyConsultation()
+      setForm({ ...base, assignee: staffName || base.assignee })
+      setPhoneMode('010')
+      setLookupResult(null)
+      setHistoryDetail(null)
+      return
+    }
     void db.consultations.get(editingId).then((row) => {
       if (!row) return
       const { id: _id, ...rest } = row
@@ -127,10 +142,11 @@ export function ConsultationForm({ onToast }: Props) {
         ...rest,
         fileCount: rest.fileCount || String(ranges.length),
         ranges,
+        assignee: rest.assignee || staffName || '',
       })
       setPhoneMode(detectPhoneInputMode(rest.phone || ''))
     })
-  }, [editingId])
+  }, [editingId, staffName])
 
   useEffect(() => {
     setLookupResult(null)
@@ -321,8 +337,14 @@ export function ConsultationForm({ onToast }: Props) {
         </Link>
         <div className="form-header-text">
           <h1>{editingId ? '상담 수정' : '상담 등록'}</h1>
-          <p>전화 상담 내용을 빠르게 기록하세요</p>
+          <p>
+            {staffName ? `${staffName} · ` : ''}
+            전화 상담 내용을 빠르게 기록하세요
+          </p>
         </div>
+        <button type="button" className="header-logout" onClick={onLogout}>
+          로그아웃
+        </button>
       </header>
 
       <main className="page">
@@ -410,7 +432,7 @@ export function ConsultationForm({ onToast }: Props) {
                 options={INQUIRY_TYPE_OPTIONS}
                 value={form.inquiryType}
                 onChange={(v) => patch('inquiryType', v)}
-                columns={3}
+                columns={4}
               />
             </Field>
 
@@ -526,7 +548,7 @@ export function ConsultationForm({ onToast }: Props) {
                 onChange={(e) => patch('assignee', e.target.value)}
               >
                 <option value="">담당자를 선택하세요</option>
-                {ASSIGNEE_OPTIONS.map((name) => (
+                {assigneeOptions.map((name) => (
                   <option key={name} value={name}>
                     {name}
                   </option>

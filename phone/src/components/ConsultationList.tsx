@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { liveQuery } from 'dexie'
 import { db } from '../db'
 import { formatPhone, relativeShort } from '../lib/format'
+import type { StaffProfile } from '../lib/auth'
 import {
   INQUIRY_TYPE_LABELS,
   ORDER_TYPE_OPTIONS,
@@ -12,6 +13,11 @@ import {
 } from '../types'
 
 type Filter = 'all' | 'draft' | 'completed'
+
+type Props = {
+  staff: StaffProfile
+  onLogout: () => void
+}
 
 const statusLabel: Record<ConsultationStatus, string> = {
   draft: '임시저장',
@@ -28,7 +34,7 @@ function metaLine(row: Consultation): string[] {
   return bits
 }
 
-export function ConsultationList() {
+export function ConsultationList({ staff, onLogout }: Props) {
   const [rows, setRows] = useState<Consultation[] | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
 
@@ -65,18 +71,23 @@ export function ConsultationList() {
           <div className="brand-mark">
             Tel<span>Work</span>
           </div>
-          <div className="brand-sub">상담 목록</div>
+          <div className="brand-sub">{staff.name.trim() || '상담 목록'}</div>
         </div>
-        <Link to="/" className="icon-btn" aria-label="상담 등록">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path
-              d="M12 5v14M5 12h14"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-            />
-          </svg>
-        </Link>
+        <div className="topbar-actions">
+          <button type="button" className="header-logout" onClick={onLogout}>
+            로그아웃
+          </button>
+          <Link to="/" className="icon-btn" aria-label="상담 등록">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path
+                d="M12 5v14M5 12h14"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+              />
+            </svg>
+          </Link>
+        </div>
       </header>
 
       <main className="page page-tight">
