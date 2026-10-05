@@ -157,7 +157,10 @@ export default function PhoneConsultationManagement() {
 
   async function handleCreateAssignee() {
     const name = newAssigneeName.trim();
-    if (!name) return;
+    if (!name) {
+      setAssigneeError("담당자 이름을 입력한 뒤 추가를 눌러 주세요.");
+      return;
+    }
     setAssigneeBusyId(-1);
     setAssigneeError(null);
     try {
@@ -249,8 +252,11 @@ export default function PhoneConsultationManagement() {
             <div className="flex flex-wrap items-center gap-2">
               <input
                 value={newAssigneeName}
-                onChange={(e) => setNewAssigneeName(e.target.value)}
-                placeholder="담당자 이름"
+                onChange={(e) => {
+                  setNewAssigneeName(e.target.value);
+                  if (assigneeError) setAssigneeError(null);
+                }}
+                placeholder="담당자 이름 입력"
                 className="min-h-10 min-w-[180px] rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none focus:border-cyan-500/50"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -261,11 +267,11 @@ export default function PhoneConsultationManagement() {
               />
               <button
                 type="button"
-                disabled={!newAssigneeName.trim() || assigneeBusyId === -1}
+                disabled={assigneeBusyId === -1}
                 onClick={() => void handleCreateAssignee()}
-                className="min-h-10 rounded-xl bg-cyan-500 px-3 text-sm font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
+                className="min-h-10 rounded-xl bg-cyan-500 px-3 text-sm font-semibold text-slate-950 hover:bg-cyan-400 disabled:cursor-wait disabled:opacity-60"
               >
-                추가
+                {assigneeBusyId === -1 ? "추가 중..." : "추가"}
               </button>
               <button
                 type="button"
