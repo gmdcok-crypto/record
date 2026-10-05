@@ -182,6 +182,36 @@ export async function updateConsultationOnServer(
   return (await res.json()) as SyncConsultationResult
 }
 
+export type TelWorkAssignee = {
+  id: number
+  name: string
+  sort_order: number
+  is_active: boolean
+}
+
+export async function fetchTelWorkAssignees(token: string): Promise<string[]> {
+  const res = await fetch(apiUrl('/api/phone-consultations/assignees'), {
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  })
+  if (!res.ok) {
+    let detail = '담당자 목록을 불러올 수 없습니다.'
+    try {
+      const data = (await res.json()) as { detail?: unknown }
+      if (typeof data.detail === 'string' && data.detail.trim()) detail = data.detail
+    } catch {
+      // ignore
+    }
+    throw new Error(detail)
+  }
+  const data = (await res.json()) as { assignees?: TelWorkAssignee[] }
+  return (data.assignees ?? [])
+    .map((row) => (row.name || '').trim())
+    .filter(Boolean)
+}
+
 export async function lookupCustomerByPhone(phone: string): Promise<CustomerLookupResult> {
   const res = await fetch(
     apiUrl('/api/phone-consultations/lookup', { phone: phone.replace(/\D/g, '') }),

@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.dependencies.admin_auth import require_admin_permission
+from app.dependencies.admin_auth import AdminAuth, require_admin_permission
 from app.models.admin_models import AdminUser
 from app.services.phone_consultation_store import (
     create_phone_consultation,
@@ -14,6 +14,12 @@ from app.services.phone_consultation_store import (
     list_phone_consultations,
     lookup_customer_by_phone,
     update_phone_consultation,
+)
+from app.services.tel_work_assignee_store import (
+    create_assignee,
+    delete_assignee,
+    list_assignees,
+    update_assignee,
 )
 from app.services.member_auth import normalize_phone
 
@@ -25,6 +31,17 @@ intake_router = APIRouter(prefix="/api/phone-consultations", tags=["phone-consul
 PhoneConsultationsAdminAuth = Annotated[
     AdminUser, Depends(require_admin_permission("menu:phone_consultations"))
 ]
+
+
+class TelWorkAssigneeCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    sort_order: int | None = Field(default=None, ge=0, le=9999)
+
+
+class TelWorkAssigneeUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    is_active: bool | None = None
+    sort_order: int | None = Field(default=None, ge=0, le=9999)
 
 
 class PhoneConsultationCreateRequest(BaseModel):
@@ -62,6 +79,79 @@ def get_phone_consultations(
         logger.exception("Failed to load phone consultations")
         raise HTTPException(status_code=500, detail="전화상담 내역을 불러올 수 없습니다.") from exc
     return {"consultations": consultations, "total": len(consultations)}
+
+
+@router.get("/assignees")
+def admin_list_tel_work_assignees(
+    db: Annotated[Session, Depends(get_db)],
+    _admin: PhoneConsultationsAdminAuth,
+    active_only: bool = Query(default=False),
+) -> dict:
+    try:
+        assignees = list_assignees(db, active_only=active_only)
+    except Exception as exc:
+        logger.exception("Failed to list tel work assignees")
+        raise HTTPException(status_code=500, detail="담당자 목록을 불러올 수 없습니다.") from exc
+    return {"assignees": assignees, "total": len(assignees)}
+
+
+@router.post("/assignees")
+def admin_create_tel_work_assignee(
+    body: TelWorkAssigneeCreateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    _admin: PhoneConsultationsAdminAuth,
+) -> dict:
+    try:
+        return {"assignee": create_assignee(db, name=body.name, sort_order=body.sort_order)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Failed to create tel work assignee")
+        raise HTTPException(status_code=500, detail="담당자 등록에 실패했습니다.") from exc
+
+
+@router.patch("/assignees/{assignee_id}")
+def admin_update_tel_work_assignee(
+    assignee_id: int,
+    body: TelWorkAssigneeUpdateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    _admin: PhoneConsultationsAdminAuth,
+) -> dict:
+    try:
+        return {
+            "assignee": update_assignee(
+                db,
+                assignee_id,
+                name=body.name,
+                is_active=body.is_active,
+                sort_order=body.sort_order,
+            )
+        }
+    except ValueError as exc:
+        message = str(exc)
+        status = 404 if "찾을 수 없습니다" in message else 400
+        raise HTTPException(status_code=status, detail=message) from exc
+    except Exception as exc:
+        logger.exception("Failed to update tel work assignee %s", assignee_id)
+        raise HTTPException(status_code=500, detail="담당자 수정에 실패했습니다.") from exc
+
+
+@router.delete("/assignees/{assignee_id}")
+def admin_delete_tel_work_assignee(
+    assignee_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    _admin: PhoneConsultationsAdminAuth,
+) -> dict:
+    try:
+        delete_assignee(db, assignee_id)
+    except ValueError as exc:
+        message = str(exc)
+        status = 404 if "찾을 수 없습니다" in message else 400
+        raise HTTPException(status_code=status, detail=message) from exc
+    except Exception as exc:
+        logger.exception("Failed to delete tel work assignee %s", assignee_id)
+        raise HTTPException(status_code=500, detail="담당자 삭제에 실패했습니다.") from exc
+    return {"deleted": True, "id": assignee_id}
 
 
 @router.get("/{consultation_id}")
@@ -118,6 +208,20 @@ def _create_consultation_response(
             status_code=500,
             detail=f"전화상담 저장에 실패했습니다: {exc}",
         ) from exc
+
+
+@intake_router.get("/assignees")
+def intake_list_tel_work_assignees(
+    db: Annotated[Session, Depends(get_db)],
+    _admin: AdminAuth,
+) -> dict:
+    """TelWork staff login: active assignee names for the select list."""
+    try:
+        assignees = list_assignees(db, active_only=True)
+    except Exception as exc:
+        logger.exception("Failed to list tel work assignees for intake")
+        raise HTTPException(status_code=500, detail="담당자 목록을 불러올 수 없습니다.") from exc
+    return {"assignees": assignees, "total": len(assignees)}
 
 
 @intake_router.get("/lookup")

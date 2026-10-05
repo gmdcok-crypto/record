@@ -43,6 +43,7 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_phone_consultations_v4.sql",
     SCRIPTS_DIR / "migrate_tel_work.sql",
     SCRIPTS_DIR / "migrate_tel_work_v2.sql",
+    SCRIPTS_DIR / "migrate_tel_work_assignees.sql",
 ]
 
 
@@ -304,6 +305,43 @@ _TEL_WORK_COLUMNS: tuple[tuple[str, str], ...] = (
     ("created_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"),
     ("updated_at", "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
 )
+
+
+_TEL_WORK_ASSIGNEES_DDL = """
+CREATE TABLE IF NOT EXISTS tel_work_assignees (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  is_active TINYINT NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_tel_work_assignees_name (name),
+  KEY idx_tel_work_assignees_active_sort (is_active, sort_order, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+
+def ensure_tel_work_assignees_table(engine: Engine) -> None:
+    """Idempotently create tel_work_assignees and seed defaults when empty."""
+    with engine.begin() as conn:
+        if not _table_exists(conn, "tel_work_assignees"):
+            conn.execute(text(_TEL_WORK_ASSIGNEES_DDL))
+            logger.info("Created tel_work_assignees table")
+        if not _table_exists(conn, "tel_work_assignees"):
+            return
+        count = conn.execute(text("SELECT COUNT(*) FROM tel_work_assignees")).scalar() or 0
+        if int(count) > 0:
+            return
+        defaults = [("권혁균", 0), ("운영팀", 1), ("상담팀", 2)]
+        for name, sort_order in defaults:
+            conn.execute(
+                text(
+                    "INSERT INTO tel_work_assignees (name, sort_order, is_active) "
+                    "VALUES (:name, :sort_order, 1)"
+                ),
+                {"name": name, "sort_order": sort_order},
+            )
+        logger.info("Seeded default tel_work_assignees")
 
 
 def ensure_tel_work_table(engine: Engine) -> None:
@@ -893,6 +931,10 @@ def run_startup_migrations(engine: Engine) -> None:
         ensure_tel_work_table(engine)
     except Exception:
         logger.exception("Failed to ensure tel_work table on startup")
+    try:
+        ensure_tel_work_assignees_table(engine)
+    except Exception:
+        logger.exception("Failed to ensure tel_work_assignees table on startup")
     try:
         ensure_expense_tables_on_engine(engine)
     except Exception:

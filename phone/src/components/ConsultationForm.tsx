@@ -1,7 +1,14 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { db } from '../db'
-import { lookupCustomerByPhone, syncConsultationToServer, updateConsultationOnServer, type CustomerLookupResult } from '../lib/api'
+import {
+  fetchTelWorkAssignees,
+  lookupCustomerByPhone,
+  syncConsultationToServer,
+  updateConsultationOnServer,
+  type CustomerLookupResult,
+} from '../lib/api'
+import { getStaffToken } from '../lib/auth'
 import {
   assigneeOptionsFor,
   INQUIRY_TYPE_LABELS,
@@ -112,7 +119,11 @@ export function ConsultationForm({ onToast, staff, onLogout }: Props) {
   const navigate = useNavigate()
   const editingId = id ? Number(id) : null
   const staffName = staff.name.trim()
-  const assigneeOptions = useMemo(() => assigneeOptionsFor(staffName), [staffName])
+  const [managedAssignees, setManagedAssignees] = useState<string[]>([])
+  const assigneeOptions = useMemo(
+    () => assigneeOptionsFor(staffName, managedAssignees),
+    [staffName, managedAssignees],
+  )
   const [form, setForm] = useState(() => {
     const base = emptyConsultation()
     return { ...base, assignee: staffName || base.assignee }
@@ -123,6 +134,23 @@ export function ConsultationForm({ onToast, staff, onLogout }: Props) {
   const [lookupResult, setLookupResult] = useState<CustomerLookupResult | null>(null)
   const [historyDetail, setHistoryDetail] = useState<HistoryDetail | null>(null)
   const [phoneMode, setPhoneMode] = useState<PhoneInputMode>('010')
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const token = getStaffToken()
+      if (!token) return
+      try {
+        const names = await fetchTelWorkAssignees(token)
+        if (!cancelled) setManagedAssignees(names)
+      } catch (err) {
+        console.error(err)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (!editingId) {

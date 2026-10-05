@@ -76,13 +76,19 @@ export const DELIVERY_METHOD_OPTIONS: { value: DeliveryMethod; label: string }[]
   { value: 'registered', label: '등기' },
 ]
 
-/** Fallback assignees; logged-in staff name is prepended at runtime */
+/** Offline/local fallback until admin-managed list is loaded */
 export const ASSIGNEE_OPTIONS = ['권혁균', '운영팀', '상담팀'] as const
 
-export function assigneeOptionsFor(staffName?: string | null): string[] {
+export function assigneeOptionsFor(
+  staffName?: string | null,
+  managedNames?: string[] | null,
+): string[] {
   const name = (staffName || '').trim()
-  const base = [...ASSIGNEE_OPTIONS]
-  if (!name) return base
+  const managed = (managedNames || [])
+    .map((item) => item.trim())
+    .filter(Boolean)
+  const base = managed.length > 0 ? managed : [...ASSIGNEE_OPTIONS]
+  if (!name) return [...new Set(base)]
   return [name, ...base.filter((item) => item !== name)]
 }
 

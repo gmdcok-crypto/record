@@ -464,6 +464,62 @@ export async function fetchPhoneConsultations(params?: {
   return data.consultations ?? [];
 }
 
+export type TelWorkAssignee = {
+  id: number;
+  name: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export async function fetchTelWorkAssignees(params?: {
+  activeOnly?: boolean;
+}): Promise<TelWorkAssignee[]> {
+  const url = new URL(`${apiBase()}/api/admin/phone-consultations/assignees`);
+  if (params?.activeOnly) url.searchParams.set("active_only", "true");
+  const res = await adminFetch(url.toString());
+  if (!res.ok) throw await parseApiError(res, "담당자 목록을 불러올 수 없습니다");
+  const data = (await res.json()) as { assignees?: TelWorkAssignee[] };
+  return data.assignees ?? [];
+}
+
+export async function createTelWorkAssignee(payload: {
+  name: string;
+  sort_order?: number;
+}): Promise<TelWorkAssignee> {
+  const res = await adminFetch(`${apiBase()}/api/admin/phone-consultations/assignees`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw await parseApiError(res, "담당자 등록에 실패했습니다");
+  const data = (await res.json()) as { assignee: TelWorkAssignee };
+  return data.assignee;
+}
+
+export async function updateTelWorkAssignee(
+  assigneeId: number,
+  payload: { name?: string; is_active?: boolean; sort_order?: number },
+): Promise<TelWorkAssignee> {
+  const res = await adminFetch(`${apiBase()}/api/admin/phone-consultations/assignees/${assigneeId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw await parseApiError(res, "담당자 수정에 실패했습니다");
+  const data = (await res.json()) as { assignee: TelWorkAssignee };
+  return data.assignee;
+}
+
+export async function deleteTelWorkAssignee(assigneeId: number): Promise<void> {
+  const res = await adminFetch(`${apiBase()}/api/admin/phone-consultations/assignees/${assigneeId}`, {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) throw await parseApiError(res, "담당자 삭제에 실패했습니다");
+}
+
 export type ProxyUploadMember = {
   id: number;
   email: string;

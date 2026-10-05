@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { fetchPhoneConsultations, type PhoneConsultation } from "./api";
+import {
+  createTelWorkAssignee,
+  deleteTelWorkAssignee,
+  fetchPhoneConsultations,
+  fetchTelWorkAssignees,
+  updateTelWorkAssignee,
+  type PhoneConsultation,
+  type TelWorkAssignee,
+} from "./api";
 
 const INQUIRY_LABELS: Record<string, string> = {
   recording: "녹취",
@@ -89,14 +97,22 @@ function formatCompleted(row: PhoneConsultation): string {
 }
 
 type StatusFilter = "all" | "draft" | "completed";
+type TabKey = "consultations" | "assignees";
 
 export default function PhoneConsultationManagement() {
+  const [tab, setTab] = useState<TabKey>("consultations");
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<PhoneConsultation[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selected, setSelected] = useState<PhoneConsultation | null>(null);
+
+  const [assignees, setAssignees] = useState<TelWorkAssignee[]>([]);
+  const [assigneeLoading, setAssigneeLoading] = useState(false);
+  const [assigneeError, setAssigneeError] = useState<string | null>(null);
+  const [newAssigneeName, setNewAssigneeName] = useState("");
+  const [assigneeBusyId, setAssigneeBusyId] = useState<number | null>(null);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -117,125 +133,345 @@ export default function PhoneConsultationManagement() {
     }
   }, [query, statusFilter]);
 
+  const loadAssignees = useCallback(async () => {
+    setAssigneeLoading(true);
+    setAssigneeError(null);
+    try {
+      setAssignees(await fetchTelWorkAssignees());
+    } catch (err) {
+      console.error(err);
+      setAssignees([]);
+      setAssigneeError(err instanceof Error ? err.message : "담당자 목록을 불러올 수 없습니다.");
+    } finally {
+      setAssigneeLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    void loadRows();
-  }, [loadRows]);
+    if (tab === "consultations") void loadRows();
+  }, [tab, loadRows]);
+
+  useEffect(() => {
+    if (tab === "assignees") void loadAssignees();
+  }, [tab, loadAssignees]);
+
+  async function handleCreateAssignee() {
+    const name = newAssigneeName.trim();
+    if (!name) return;
+    setAssigneeBusyId(-1);
+    setAssigneeError(null);
+    try {
+      await createTelWorkAssignee({ name });
+      setNewAssigneeName("");
+      await loadAssignees();
+    } catch (err) {
+      setAssigneeError(err instanceof Error ? err.message : "담당자 등록에 실패했습니다.");
+    } finally {
+      setAssigneeBusyId(null);
+    }
+  }
+
+  async function handleToggleAssignee(row: TelWorkAssignee) {
+    setAssigneeBusyId(row.id);
+    setAssigneeError(null);
+    try {
+      await updateTelWorkAssignee(row.id, { is_active: !row.is_active });
+      await loadAssignees();
+    } catch (err) {
+      setAssigneeError(err instanceof Error ? err.message : "담당자 수정에 실패했습니다.");
+    } finally {
+      setAssigneeBusyId(null);
+    }
+  }
+
+  async function handleRenameAssignee(row: TelWorkAssignee) {
+    const next = window.prompt("담당자 이름", row.name)?.trim();
+    if (!next || next === row.name) return;
+    setAssigneeBusyId(row.id);
+    setAssigneeError(null);
+    try {
+      await updateTelWorkAssignee(row.id, { name: next });
+      await loadAssignees();
+    } catch (err) {
+      setAssigneeError(err instanceof Error ? err.message : "담당자 수정에 실패했습니다.");
+    } finally {
+      setAssigneeBusyId(null);
+    }
+  }
+
+  async function handleDeleteAssignee(row: TelWorkAssignee) {
+    if (!window.confirm(`'${row.name}' 담당자를 삭제할까요?`)) return;
+    setAssigneeBusyId(row.id);
+    setAssigneeError(null);
+    try {
+      await deleteTelWorkAssignee(row.id);
+      await loadAssignees();
+    } catch (err) {
+      setAssigneeError(err instanceof Error ? err.message : "담당자 삭제에 실패했습니다.");
+    } finally {
+      setAssigneeBusyId(null);
+    }
+  }
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-white">상담 내역</h3>
-            <p className="mt-1 text-[12px] text-slate-400">
-              TelWork 전화상담 등록 건을 확인하고 상세 메모를 조회합니다.
+      <div className="flex flex-wrap gap-2">
+        {(
+          [
+            ["consultations", "상담 내역"],
+            ["assignees", "담당자 관리"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setTab(key)}
+            className={`rounded-xl px-3 py-2 text-sm font-semibold ${
+              tab === key
+                ? "border border-cyan-500/40 bg-cyan-500/15 text-cyan-100"
+                : "border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "assignees" ? (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-white">TelWork 담당자</h3>
+              <p className="mt-1 text-[12px] text-slate-400">
+                여기서 등록한 활성 담당자가 TelWork 상담 등록 화면의 담당자 목록에 표시됩니다.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={newAssigneeName}
+                onChange={(e) => setNewAssigneeName(e.target.value)}
+                placeholder="담당자 이름"
+                className="min-h-10 min-w-[180px] rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none focus:border-cyan-500/50"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void handleCreateAssignee();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                disabled={!newAssigneeName.trim() || assigneeBusyId === -1}
+                onClick={() => void handleCreateAssignee()}
+                className="min-h-10 rounded-xl bg-cyan-500 px-3 text-sm font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
+              >
+                추가
+              </button>
+              <button
+                type="button"
+                onClick={() => void loadAssignees()}
+                className="min-h-10 rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm font-semibold text-slate-100 hover:bg-slate-700"
+              >
+                새로고침
+              </button>
+            </div>
+          </div>
+
+          {assigneeError ? (
+            <p className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+              {assigneeError}
             </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="이름 · 전화 · 담당자 검색"
-              className="min-h-10 min-w-[200px] rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none focus:border-cyan-500/50"
-            />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-              className="min-h-10 rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none"
-            >
-              <option value="all">전체 상태</option>
-              <option value="draft">임시저장</option>
-              <option value="completed">완료</option>
-            </select>
-            <button
-              type="button"
-              onClick={() => void loadRows()}
-              className="min-h-10 rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm font-semibold text-slate-100 hover:bg-slate-700"
-            >
-              새로고침
-            </button>
-          </div>
-        </div>
+          ) : null}
 
-        {error ? (
-          <p className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
-            {error}
-          </p>
-        ) : null}
-
-        <div className="mt-4 overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/70">
-          <table className="w-full min-w-[1180px] border-collapse text-[13px]">
-            <thead>
-              <tr className="border-b border-slate-800 bg-slate-950 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                <th className="px-3 py-2">등록일시</th>
-                <th className="px-3 py-2">상담완료</th>
-                <th className="px-3 py-2">의뢰인</th>
-                <th className="px-3 py-2">전화</th>
-                <th className="px-3 py-2">성별</th>
-                <th className="px-3 py-2">문의</th>
-                <th className="px-3 py-2">주문</th>
-                <th className="px-3 py-2">파일</th>
-                <th className="px-3 py-2">분량</th>
-                <th className="px-3 py-2">예상금액</th>
-                <th className="px-3 py-2">마감</th>
-                <th className="px-3 py-2">담당</th>
-                <th className="px-3 py-2">상태</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={13} className="px-3 py-8 text-center text-slate-400">
-                    불러오는 중…
-                  </td>
+          <div className="mt-4 overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/70">
+            <table className="w-full min-w-[640px] border-collapse text-[13px]">
+              <thead>
+                <tr className="border-b border-slate-800 bg-slate-950 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  <th className="px-3 py-2">순서</th>
+                  <th className="px-3 py-2">이름</th>
+                  <th className="px-3 py-2">상태</th>
+                  <th className="px-3 py-2">동작</th>
                 </tr>
-              ) : rows.length === 0 ? (
-                <tr>
-                  <td colSpan={13} className="px-3 py-8 text-center text-slate-400">
-                    표시할 상담 내역이 없습니다.
-                  </td>
-                </tr>
-              ) : (
-                rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="cursor-pointer border-t border-slate-800 bg-slate-950/40 text-slate-300 hover:bg-slate-900/60"
-                    onClick={() => setSelected(row)}
-                  >
-                    <td className="px-3 py-2 whitespace-nowrap">{formatDateTime(row.created_at)}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{formatCompleted(row)}</td>
-                    <td className="px-3 py-2 font-medium text-slate-100">{row.customer_name || "—"}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{formatPhone(row.phone)}</td>
-                    <td className="px-3 py-2">{labelOf(SEX_LABELS, row.sex || "unknown")}</td>
-                    <td className="px-3 py-2">{labelOf(INQUIRY_LABELS, row.inquiry_type)}</td>
-                    <td className="px-3 py-2">{labelOf(ORDER_LABELS, row.order_type)}</td>
-                    <td className="px-3 py-2">
-                      {labelOf(FILE_KIND_LABELS, row.file_kind)}
-                      {row.file_count ? ` · ${row.file_count}` : ""}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap">{formatDuration(row.duration_seconds)}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{formatAmount(row.estimated_amount)}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{formatDateTime(row.deadline)}</td>
-                    <td className="px-3 py-2">{row.assignee || "—"}</td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={`inline-flex rounded-lg px-2 py-1 text-[11px] font-semibold ${
-                          row.status === "completed"
-                            ? "bg-cyan-500/15 text-cyan-200"
-                            : "bg-amber-500/15 text-amber-200"
-                        }`}
-                      >
-                        {labelOf(STATUS_LABELS, row.status)}
-                      </span>
+              </thead>
+              <tbody>
+                {assigneeLoading ? (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-8 text-center text-slate-400">
+                      불러오는 중…
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : assignees.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-8 text-center text-slate-400">
+                      등록된 담당자가 없습니다.
+                    </td>
+                  </tr>
+                ) : (
+                  assignees.map((row) => (
+                    <tr key={row.id} className="border-t border-slate-800 bg-slate-950/40 text-slate-300">
+                      <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{row.sort_order}</td>
+                      <td className="px-3 py-2 font-medium text-white">{row.name}</td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={`inline-flex rounded-lg px-2 py-1 text-[11px] font-semibold ${
+                            row.is_active
+                              ? "bg-emerald-500/15 text-emerald-200"
+                              : "bg-slate-500/15 text-slate-400"
+                          }`}
+                        >
+                          {row.is_active ? "활성" : "비활성"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={assigneeBusyId === row.id}
+                            onClick={() => void handleRenameAssignee(row)}
+                            className="rounded-md border border-slate-700 px-2.5 py-1 text-[11px] font-medium text-slate-200 disabled:opacity-50"
+                          >
+                            이름 변경
+                          </button>
+                          <button
+                            type="button"
+                            disabled={assigneeBusyId === row.id}
+                            onClick={() => void handleToggleAssignee(row)}
+                            className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-200 disabled:opacity-50"
+                          >
+                            {row.is_active ? "비활성화" : "활성화"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={assigneeBusyId === row.id}
+                            onClick={() => void handleDeleteAssignee(row)}
+                            className="rounded-md border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-medium text-rose-200 disabled:opacity-50"
+                          >
+                            삭제
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-white">상담 내역</h3>
+              <p className="mt-1 text-[12px] text-slate-400">
+                TelWork 전화상담 등록 건을 확인하고 상세 메모를 조회합니다.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="이름 · 전화 · 담당자 검색"
+                className="min-h-10 min-w-[200px] rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none focus:border-cyan-500/50"
+              />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+                className="min-h-10 rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none"
+              >
+                <option value="all">전체 상태</option>
+                <option value="draft">임시저장</option>
+                <option value="completed">완료</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => void loadRows()}
+                className="min-h-10 rounded-xl border border-slate-600 bg-slate-800 px-3 text-sm font-semibold text-slate-100 hover:bg-slate-700"
+              >
+                새로고침
+              </button>
+            </div>
+          </div>
+
+          {error ? (
+            <p className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+              {error}
+            </p>
+          ) : null}
+
+          <div className="mt-4 overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/70">
+            <table className="w-full min-w-[1180px] border-collapse text-[13px]">
+              <thead>
+                <tr className="border-b border-slate-800 bg-slate-950 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  <th className="px-3 py-2">등록일시</th>
+                  <th className="px-3 py-2">상담완료</th>
+                  <th className="px-3 py-2">의뢰인</th>
+                  <th className="px-3 py-2">전화</th>
+                  <th className="px-3 py-2">성별</th>
+                  <th className="px-3 py-2">문의</th>
+                  <th className="px-3 py-2">주문</th>
+                  <th className="px-3 py-2">파일</th>
+                  <th className="px-3 py-2">분량</th>
+                  <th className="px-3 py-2">예상금액</th>
+                  <th className="px-3 py-2">마감</th>
+                  <th className="px-3 py-2">담당</th>
+                  <th className="px-3 py-2">상태</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={13} className="px-3 py-8 text-center text-slate-400">
+                      불러오는 중…
+                    </td>
+                  </tr>
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={13} className="px-3 py-8 text-center text-slate-400">
+                      표시할 상담 내역이 없습니다.
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((row) => (
+                    <tr
+                      key={row.id}
+                      className="cursor-pointer border-t border-slate-800 bg-slate-950/40 text-slate-300 hover:bg-slate-900/60"
+                      onClick={() => setSelected(row)}
+                    >
+                      <td className="px-3 py-2 whitespace-nowrap">{formatDateTime(row.created_at)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{formatCompleted(row)}</td>
+                      <td className="px-3 py-2 font-medium text-slate-100">{row.customer_name || "—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{formatPhone(row.phone)}</td>
+                      <td className="px-3 py-2">{labelOf(SEX_LABELS, row.sex || "unknown")}</td>
+                      <td className="px-3 py-2">{labelOf(INQUIRY_LABELS, row.inquiry_type)}</td>
+                      <td className="px-3 py-2">{labelOf(ORDER_LABELS, row.order_type)}</td>
+                      <td className="px-3 py-2">
+                        {labelOf(FILE_KIND_LABELS, row.file_kind)}
+                        {row.file_count ? ` · ${row.file_count}` : ""}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">{formatDuration(row.duration_seconds)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{formatAmount(row.estimated_amount)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{formatDateTime(row.deadline)}</td>
+                      <td className="px-3 py-2">{row.assignee || "—"}</td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={`inline-flex rounded-lg px-2 py-1 text-[11px] font-semibold ${
+                            row.status === "completed"
+                              ? "bg-cyan-500/15 text-cyan-200"
+                              : "bg-amber-500/15 text-amber-200"
+                          }`}
+                        >
+                          {labelOf(STATUS_LABELS, row.status)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {selected ? (
         <div
