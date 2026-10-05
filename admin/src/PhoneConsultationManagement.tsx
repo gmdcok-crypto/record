@@ -218,6 +218,12 @@ export default function PhoneConsultationManagement() {
   }
 
   async function handleResetAssigneePassword(row: TelWorkAssignee) {
+    if (!row.has_password) {
+      window.alert(
+        `'${row.name}' 비밀번호는 아직 미설정입니다.\nTelWork에서 해당 이름으로 로그인하면 본인이 직접 생성합니다.`,
+      );
+      return;
+    }
     if (
       !window.confirm(
         `'${row.name}' 비밀번호를 초기화할까요?\n다음 TelWork 로그인 시 본인이 다시 생성합니다.`,
@@ -373,9 +379,9 @@ export default function PhoneConsultationManagement() {
                           </button>
                           <button
                             type="button"
-                            disabled={assigneeBusyId === row.id || !row.has_password}
+                            disabled={assigneeBusyId === row.id}
                             onClick={() => void handleResetAssigneePassword(row)}
-                            className="rounded-md border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-200 disabled:opacity-50"
+                            className="rounded-md border border-violet-500/40 bg-violet-500/15 px-2.5 py-1 text-[11px] font-semibold text-violet-100 hover:bg-violet-500/25 disabled:opacity-50"
                           >
                             비밀번호 초기화
                           </button>
