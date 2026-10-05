@@ -8,10 +8,25 @@ from app.services.member_auth import MemberAuthError, validate_password
 from app.services.passwords import hash_password, verify_password
 
 DEFAULT_ASSIGNEES = ("권혁균", "운영팀", "상담팀")
+_schema_ready = False
 
 
 class TelWorkAssigneeAuthError(ValueError):
     pass
+
+
+def _ensure_schema(db: Session) -> None:
+    """Ensure password_hash exists before ORM reads tel_work_assignees."""
+    global _schema_ready
+    if _schema_ready:
+        return
+    bind = db.get_bind()
+    if bind is None:
+        return
+    from app.services.database_migrate import ensure_tel_work_assignees_table
+
+    ensure_tel_work_assignees_table(bind)
+    _schema_ready = True
 
 
 def _serialize(row: TelWorkAssignee) -> dict:
@@ -36,6 +51,7 @@ def _serialize_staff(row: TelWorkAssignee) -> dict:
 
 
 def ensure_default_assignees(db: Session) -> None:
+    _ensure_schema(db)
     count = int(db.scalar(select(func.count()).select_from(TelWorkAssignee)) or 0)
     if count > 0:
         return
@@ -45,6 +61,7 @@ def ensure_default_assignees(db: Session) -> None:
 
 
 def list_assignees(db: Session, *, active_only: bool = False) -> list[dict]:
+    _ensure_schema(db)
     ensure_default_assignees(db)
     stmt = select(TelWorkAssignee).order_by(
         TelWorkAssignee.sort_order.asc(),
@@ -56,10 +73,12 @@ def list_assignees(db: Session, *, active_only: bool = False) -> list[dict]:
 
 
 def get_assignee_by_id(db: Session, assignee_id: int) -> TelWorkAssignee | None:
+    _ensure_schema(db)
     return db.get(TelWorkAssignee, assignee_id)
 
 
 def get_active_assignee_by_name(db: Session, name: str) -> TelWorkAssignee | None:
+    _ensure_schema(db)
     cleaned = (name or "").strip()
     if not cleaned:
         return None
@@ -72,6 +91,7 @@ def get_active_assignee_by_name(db: Session, name: str) -> TelWorkAssignee | Non
 
 
 def check_assignee_auth(db: Session, *, name: str) -> dict:
+    _ensure_schema(db)
     row = get_active_assignee_by_name(db, name)
     if row is None:
         return {"found": False, "has_password": False, "name": (name or "").strip()}
@@ -84,6 +104,7 @@ def check_assignee_auth(db: Session, *, name: str) -> dict:
 
 
 def register_assignee_password(db: Session, *, name: str, password: str) -> TelWorkAssignee:
+    _ensure_schema(db)
     row = get_active_assignee_by_name(db, name)
     if row is None:
         raise TelWorkAssigneeAuthError("등록되지 않은 담당자 이름입니다. 관리자에게 문의해 주세요.")
@@ -100,6 +121,7 @@ def register_assignee_password(db: Session, *, name: str, password: str) -> TelW
 
 
 def authenticate_assignee(db: Session, *, name: str, password: str) -> TelWorkAssignee:
+    _ensure_schema(db)
     row = get_active_assignee_by_name(db, name)
     if row is None:
         raise TelWorkAssigneeAuthError("이름 또는 비밀번호가 올바르지 않습니다.")
@@ -115,6 +137,7 @@ def authenticate_assignee(db: Session, *, name: str, password: str) -> TelWorkAs
 
 
 def reset_assignee_password(db: Session, assignee_id: int) -> dict:
+    _ensure_schema(db)
     row = get_assignee_by_id(db, assignee_id)
     if row is None:
         raise ValueError("담당자를 찾을 수 없습니다.")
@@ -125,6 +148,7 @@ def reset_assignee_password(db: Session, assignee_id: int) -> dict:
 
 
 def create_assignee(db: Session, *, name: str, sort_order: int | None = None) -> dict:
+    _ensure_schema(db)
     cleaned = (name or "").strip()
     if not cleaned:
         raise ValueError("담당자 이름을 입력해 주세요.")
@@ -149,6 +173,7 @@ def update_assignee(
     is_active: bool | None = None,
     sort_order: int | None = None,
 ) -> dict:
+    _ensure_schema(db)
     row = db.get(TelWorkAssignee, assignee_id)
     if row is None:
         raise ValueError("담당자를 찾을 수 없습니다.")
@@ -175,6 +200,7 @@ def update_assignee(
 
 
 def delete_assignee(db: Session, assignee_id: int) -> None:
+    _ensure_schema(db)
     row = db.get(TelWorkAssignee, assignee_id)
     if row is None:
         raise ValueError("담당자를 찾을 수 없습니다.")

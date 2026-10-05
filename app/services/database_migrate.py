@@ -314,6 +314,7 @@ CREATE TABLE IF NOT EXISTS tel_work_assignees (
   name VARCHAR(100) NOT NULL,
   sort_order INT NOT NULL DEFAULT 0,
   is_active TINYINT NOT NULL DEFAULT 1,
+  password_hash VARCHAR(255) NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_tel_work_assignees_name (name),
@@ -323,16 +324,27 @@ CREATE TABLE IF NOT EXISTS tel_work_assignees (
 
 
 def ensure_tel_work_assignees_table(engine: Engine) -> None:
-    """Idempotently create tel_work_assignees and seed defaults when empty."""
+    """Idempotently create tel_work_assignees, add password_hash, and seed defaults when empty."""
     with engine.begin() as conn:
-        if not _table_exists(conn, "tel_work_assignees"):
-            conn.execute(text(_TEL_WORK_ASSIGNEES_DDL))
-            logger.info("Created tel_work_assignees table")
-        if not _table_exists(conn, "tel_work_assignees"):
-            return
-        if not _column_exists(conn, "tel_work_assignees", "password_hash"):
-            conn.execute(text("ALTER TABLE tel_work_assignees ADD COLUMN password_hash VARCHAR(255) NULL"))
-            logger.info("Added tel_work_assignees.password_hash")
+        conn.execute(text(_TEL_WORK_ASSIGNEES_DDL))
+        # Always attempt ADD COLUMN; ignore if already present. Avoid relying only on
+        # information_schema checks which can miss columns in some MySQL setups.
+        needs_password_hash = True
+        try:
+            needs_password_hash = not _column_exists(conn, "tel_work_assignees", "password_hash")
+        except Exception:
+            logger.exception("Could not inspect tel_work_assignees.password_hash; will try ALTER")
+            needs_password_hash = True
+        if needs_password_hash:
+            try:
+                conn.execute(text("ALTER TABLE tel_work_assignees ADD COLUMN password_hash VARCHAR(255) NULL"))
+                logger.info("Added tel_work_assignees.password_hash")
+            except (ProgrammingError, OperationalError) as exc:
+                message = str(exc).lower()
+                if "duplicate column" in message or "already exists" in message:
+                    logger.info("tel_work_assignees.password_hash already present")
+                else:
+                    raise
         count = conn.execute(text("SELECT COUNT(*) FROM tel_work_assignees")).scalar() or 0
         if int(count) > 0:
             return
