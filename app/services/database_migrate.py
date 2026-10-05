@@ -44,6 +44,7 @@ STARTUP_MIGRATIONS = [
     SCRIPTS_DIR / "migrate_tel_work.sql",
     SCRIPTS_DIR / "migrate_tel_work_v2.sql",
     SCRIPTS_DIR / "migrate_tel_work_assignees.sql",
+    SCRIPTS_DIR / "migrate_tel_work_assignees_v2.sql",
 ]
 
 
@@ -329,6 +330,9 @@ def ensure_tel_work_assignees_table(engine: Engine) -> None:
             logger.info("Created tel_work_assignees table")
         if not _table_exists(conn, "tel_work_assignees"):
             return
+        if not _column_exists(conn, "tel_work_assignees", "password_hash"):
+            conn.execute(text("ALTER TABLE tel_work_assignees ADD COLUMN password_hash VARCHAR(255) NULL"))
+            logger.info("Added tel_work_assignees.password_hash")
         count = conn.execute(text("SELECT COUNT(*) FROM tel_work_assignees")).scalar() or 0
         if int(count) > 0:
             return

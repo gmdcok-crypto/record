@@ -106,6 +106,33 @@ def create_admin_access_token(*, admin_id: int, email: str, role: str) -> str:
     return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)
 
 
+def create_telwork_access_token(*, assignee_id: int, name: str) -> str:
+    """Long-lived JWT for TelWork assignee sessions (no exp claim)."""
+    if not settings.jwt_configured:
+        raise RuntimeError("JWT is not configured")
+
+    now = datetime.now(timezone.utc)
+    payload: dict[str, Any] = {
+        "sub": str(assignee_id),
+        "name": name,
+        "token_role": "telwork",
+        "scope": "telwork",
+        "iat": now,
+        # Intentionally omit exp so TelWork sessions remain valid until logout/revoke.
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)
+
+
+def decode_telwork_access_token(token: str) -> dict[str, Any]:
+    if not settings.jwt_configured:
+        raise RuntimeError("JWT is not configured")
+
+    payload = jwt.decode(token, settings.jwt_secret, algorithms=[ALGORITHM])
+    if payload.get("token_role") != "telwork":
+        raise jwt.InvalidTokenError("Invalid token role")
+    return payload
+
+
 def decode_admin_access_token(token: str) -> dict[str, Any]:
     if not settings.jwt_configured:
         raise RuntimeError("JWT is not configured")

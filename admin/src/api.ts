@@ -469,6 +469,7 @@ export type TelWorkAssignee = {
   name: string;
   sort_order: number;
   is_active: boolean;
+  has_password?: boolean;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -518,6 +519,19 @@ export async function deleteTelWorkAssignee(assigneeId: number): Promise<void> {
     headers: { Accept: "application/json" },
   });
   if (!res.ok) throw await parseApiError(res, "담당자 삭제에 실패했습니다");
+}
+
+export async function resetTelWorkAssigneePassword(assigneeId: number): Promise<TelWorkAssignee> {
+  const res = await adminFetch(
+    `${apiBase()}/api/admin/phone-consultations/assignees/${assigneeId}/reset-password`,
+    {
+      method: "POST",
+      headers: { Accept: "application/json" },
+    },
+  );
+  if (!res.ok) throw await parseApiError(res, "비밀번호 초기화에 실패했습니다");
+  const data = (await res.json()) as { assignee: TelWorkAssignee };
+  return data.assignee;
 }
 
 export type ProxyUploadMember = {

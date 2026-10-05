@@ -61,6 +61,20 @@ def get_admin_by_id(db: Session, admin_id: int) -> AdminUser | None:
     return db.get(AdminUser, admin_id)
 
 
+def get_admins_by_name(db: Session, name: str) -> list[AdminUser]:
+    cleaned = (name or "").strip()
+    if not cleaned:
+        return []
+    return list(
+        db.scalars(
+            select(AdminUser).where(
+                AdminUser.name == cleaned,
+                AdminUser.is_active == 1,
+            )
+        ).all()
+    )
+
+
 def serialize_admin(admin: AdminUser) -> dict:
     role = admin.role
     return {
@@ -75,6 +89,24 @@ def serialize_admin(admin: AdminUser) -> dict:
         "permissions": permissions_for_role(role),
         "last_login_at": admin.last_login_at.isoformat() if admin.last_login_at else None,
     }
+
+
+def _finalize_admin_login(db: Session, admin: AdminUser, *, cleaned_password: str) -> AdminUser:
+    if not admin.password_hash:
+        if _is_default_admin_email(admin.email):
+            admin = _prepare_default_admin(db) or admin
+        if not admin.password_hash:
+            raise AdminAuthError("관리자 비밀번호가 아직 설정되지 않았습니다. ADMIN_BOOTSTRAP_PASSWORD를 확인하세요.")
+    if not verify_password(cleaned_password, admin.password_hash):
+        if not _sync_default_admin_password_if_needed(db, admin, cleaned_password):
+            raise AdminAuthError("이름 또는 비밀번호가 올바르지 않습니다.")
+        if not verify_password(cleaned_password, admin.password_hash):
+            raise AdminAuthError("이름 또는 비밀번호가 올바르지 않습니다.")
+
+    admin.last_login_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.commit()
+    db.refresh(admin)
+    return admin
 
 
 def authenticate_admin(db: Session, *, email: str, password: str) -> AdminUser:
@@ -95,21 +127,38 @@ def authenticate_admin(db: Session, *, email: str, password: str) -> AdminUser:
                 "기본 관리자 계정을 만들 수 없습니다. ADMIN_BOOTSTRAP_PASSWORD(영문·숫자·특수문자 #?!@$%^&*- 포함, 8~16자)를 확인하세요."
             )
         raise AdminAuthError("이메일 또는 비밀번호가 올바르지 않습니다.")
-    if not admin.password_hash:
-        if _is_default_admin_email(normalized_email):
-            admin = _prepare_default_admin(db) or admin
-        if not admin.password_hash:
-            raise AdminAuthError("관리자 비밀번호가 아직 설정되지 않았습니다. ADMIN_BOOTSTRAP_PASSWORD를 확인하세요.")
-    if not verify_password(cleaned_password, admin.password_hash):
-        if not _sync_default_admin_password_if_needed(db, admin, cleaned_password):
-            raise AdminAuthError("이메일 또는 비밀번호가 올바르지 않습니다.")
-        if not verify_password(cleaned_password, admin.password_hash):
-            raise AdminAuthError("이메일 또는 비밀번호가 올바르지 않습니다.")
+    try:
+        return _finalize_admin_login(db, admin, cleaned_password=cleaned_password)
+    except AdminAuthError as exc:
+        # Keep email-login wording for the admin console path.
+        message = str(exc)
+        if "이름 또는 비밀번호" in message:
+            raise AdminAuthError("이메일 또는 비밀번호가 올바르지 않습니다.") from exc
+        raise
 
-    admin.last_login_at = datetime.now(timezone.utc).replace(tzinfo=None)
-    db.commit()
-    db.refresh(admin)
-    return admin
+
+def authenticate_admin_by_name(db: Session, *, name: str, password: str) -> AdminUser:
+    cleaned_name = (name or "").strip()
+    cleaned_password = password.strip()
+    if not cleaned_name:
+        raise AdminAuthError("이름을 입력해 주세요.")
+    try:
+        validate_password(cleaned_password)
+    except MemberAuthError as exc:
+        raise AdminAuthError(str(exc)) from exc
+
+    matches = get_admins_by_name(db, cleaned_name)
+    if not matches:
+        # Allow default admin login by display name as well.
+        if cleaned_name == DEFAULT_ADMIN_NAME:
+            prepared = _prepare_default_admin(db)
+            if prepared is not None:
+                matches = [prepared]
+    if not matches:
+        raise AdminAuthError("이름 또는 비밀번호가 올바르지 않습니다.")
+    if len(matches) > 1:
+        raise AdminAuthError("같은 이름의 계정이 여러 개입니다. 관리자에게 문의해 주세요.")
+    return _finalize_admin_login(db, matches[0], cleaned_password=cleaned_password)
 
 
 def ensure_admin_bootstrap_password(db: Session) -> None:

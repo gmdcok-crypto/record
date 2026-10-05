@@ -5,9 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db import get_db
-from app.dependencies.admin_auth import AdminAuth, require_admin_permission
+from app.dependencies.admin_auth import require_admin_permission
+from app.dependencies.telwork_auth import TelWorkAuth
 from app.models.admin_models import AdminUser
+from app.services.jwt_tokens import create_telwork_access_token
+from app.services.member_auth import normalize_phone
 from app.services.phone_consultation_store import (
     create_phone_consultation,
     get_phone_consultation,
@@ -16,12 +20,17 @@ from app.services.phone_consultation_store import (
     update_phone_consultation,
 )
 from app.services.tel_work_assignee_store import (
+    TelWorkAssigneeAuthError,
+    authenticate_assignee,
+    check_assignee_auth,
     create_assignee,
     delete_assignee,
     list_assignees,
+    register_assignee_password,
+    reset_assignee_password,
     update_assignee,
+    _serialize_staff,
 )
-from app.services.member_auth import normalize_phone
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +40,15 @@ intake_router = APIRouter(prefix="/api/phone-consultations", tags=["phone-consul
 PhoneConsultationsAdminAuth = Annotated[
     AdminUser, Depends(require_admin_permission("menu:phone_consultations"))
 ]
+
+
+class TelWorkStaffNameRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+
+
+class TelWorkStaffLoginRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=8, max_length=16)
 
 
 class TelWorkAssigneeCreateRequest(BaseModel):
@@ -154,6 +172,22 @@ def admin_delete_tel_work_assignee(
     return {"deleted": True, "id": assignee_id}
 
 
+@router.post("/assignees/{assignee_id}/reset-password")
+def admin_reset_tel_work_assignee_password(
+    assignee_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    _admin: PhoneConsultationsAdminAuth,
+) -> dict:
+    """Clear assignee password so they can set a new one on next TelWork login."""
+    try:
+        return {"assignee": reset_assignee_password(db, assignee_id)}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Failed to reset tel work assignee password %s", assignee_id)
+        raise HTTPException(status_code=500, detail="비밀번호 초기화에 실패했습니다.") from exc
+
+
 @router.get("/{consultation_id}")
 def get_phone_consultation_detail(
     consultation_id: int,
@@ -210,12 +244,68 @@ def _create_consultation_response(
         ) from exc
 
 
+@intake_router.post("/auth/check")
+def intake_staff_auth_check(
+    body: TelWorkStaffNameRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    """Check whether an assignee exists and already has a self-set password."""
+    return check_assignee_auth(db, name=body.name)
+
+
+@intake_router.post("/auth/register")
+def intake_staff_register(
+    body: TelWorkStaffLoginRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    """First-time password setup by the assignee themselves (admin only registers the name)."""
+    if not settings.jwt_configured:
+        raise HTTPException(status_code=503, detail="JWT is not configured")
+    try:
+        staff = register_assignee_password(db, name=body.name, password=body.password)
+    except TelWorkAssigneeAuthError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    access_token = create_telwork_access_token(assignee_id=staff.id, name=staff.name or "")
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": None,
+        "staff": _serialize_staff(staff),
+    }
+
+
+@intake_router.post("/login")
+def intake_staff_login(
+    body: TelWorkStaffLoginRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    """TelWork assignee login by name + self-created password (permanent JWT)."""
+    if not settings.jwt_configured:
+        raise HTTPException(status_code=503, detail="JWT is not configured")
+    try:
+        staff = authenticate_assignee(db, name=body.name, password=body.password)
+    except TelWorkAssigneeAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    access_token = create_telwork_access_token(assignee_id=staff.id, name=staff.name or "")
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": None,
+        "staff": _serialize_staff(staff),
+    }
+
+
+@intake_router.get("/auth/me")
+def intake_staff_me(staff: TelWorkAuth) -> dict:
+    return {"staff": _serialize_staff(staff)}
+
+
 @intake_router.get("/assignees")
 def intake_list_tel_work_assignees(
     db: Annotated[Session, Depends(get_db)],
-    _admin: AdminAuth,
+    _staff: TelWorkAuth,
 ) -> dict:
-    """TelWork staff login: active assignee names for the select list."""
+    """TelWork: active assignee names for the select list."""
     try:
         assignees = list_assignees(db, active_only=True)
     except Exception as exc:
